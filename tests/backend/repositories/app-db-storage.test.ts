@@ -100,12 +100,29 @@ describe("AppDbStorage", () => {
     expect(attentionItemsIndexes.some((idx) => idx.name === "idx_project_attention_items_sprint_run_status_updated")).toBe(true);
     expect(attentionItemsIndexes.some((idx) => idx.name === "idx_project_attention_items_project_status_updated_opened")).toBe(true);
     expect(attentionItemsIndexes.some((idx) => idx.name === "idx_project_attention_items_sprint_run_status_updated_opened")).toBe(true);
+    expect(getIndexColumns(db, "idx_project_attention_items_workflow_projection")).toEqual([
+      "project_id",
+      "owner_type",
+      "status",
+      "assigned_worker_endpoint_id",
+      "sprint_id",
+      "updated_at",
+      "opened_at",
+      "id",
+    ]);
     expect(getIndexColumns(db, "idx_project_attention_items_project_status_updated_opened")).toEqual(["project_id", "status", "updated_at", "opened_at", "id"]);
     expect(getIndexColumns(db, "idx_project_attention_items_sprint_run_status_updated_opened")).toEqual(["sprint_run_id", "status", "updated_at", "opened_at", "id"]);
 
     const executionInvocationIndexes = db.prepare("PRAGMA index_list('execution_invocations')").all() as Array<{ name: string }>;
     expect(executionInvocationIndexes.some((idx) => idx.name === "idx_execution_invocations_status_started")).toBe(true);
     expect(getIndexColumns(db, "idx_execution_invocations_status_started")).toEqual(["status", "started_at"]);
+    expect(getIndexColumns(db, "idx_execution_invocations_project_type_sprint_started_created")).toEqual([
+      "project_id",
+      "type",
+      "sprint_id",
+      "started_at",
+      "created_at",
+    ]);
 
     const providerInvocationIndexes = db.prepare("PRAGMA index_list('provider_invocations')").all() as Array<{ name: string }>;
     expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_sprint_started")).toBe(true);

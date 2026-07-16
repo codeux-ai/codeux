@@ -31,7 +31,7 @@ import {
 } from "./SprintAttentionIndicator.js";
 import { DropdownMenu } from "../ui/DropdownMenu.js";
 import { LinkedIssueTag } from "../sprint/LinkedIssueTag.js";
-import type { Sprint, SprintStatus } from "../../types.js";
+import type { ExecutionAttentionItemSummary, Sprint, SprintStatus } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import { formatSprintKey } from "../../lib/sprint-ledger-state.js";
 import { SprintControls } from "./SprintControls.js";
@@ -80,14 +80,35 @@ const PROGRESS_TONES: Record<SprintStatus, string> = {
 const shortenId = (value: string): string => value.slice(0, 8);
 
 const isSprintActionable = (status: SprintStatus): boolean => status === "running" || status === "paused";
+
+function toHumanInterventionSummary(
+  intervention: ExecutionAttentionItemSummary | null,
+): ExecutionHumanInterventionSummary | null {
+  if (!intervention) return null;
+  const payloadInstructions = intervention.payload?.instructions;
+  const reason = intervention.summaryMarkdown.trim() || intervention.title;
+  return {
+    title: intervention.title,
+    reason,
+    instructions: typeof payloadInstructions === "string" && payloadInstructions.trim()
+      ? payloadInstructions.trim()
+      : reason,
+    attentionType: intervention.attentionType,
+    severity: intervention.severity,
+    ownerType: intervention.ownerType,
+  };
+}
+
 export interface SprintLedgerRowProps {
   sprint: Sprint;
   isSelected: boolean;
   isEven: boolean;
   activeRun: { id: string; status: string } | undefined;
   pauseResumeRun: { id: string; status: string } | undefined;
-  humanIntervention: ExecutionHumanInterventionSummary | null;
+  humanIntervention?: ExecutionHumanInterventionSummary | null;
   ciStatus?: CiStatusPresentation | null;
+  planningStatus?: string | null;
+  workflowHumanIntervention?: ExecutionAttentionItemSummary | null;
   sprintKeyPrefix?: string;
   pendingActionIds: Set<string>;
   isAnyBulkPending?: boolean;
@@ -115,8 +136,9 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   isEven,
   activeRun,
   pauseResumeRun,
-  humanIntervention,
   ciStatus = null,
+  planningStatus = null,
+  workflowHumanIntervention = null,
   sprintKeyPrefix = "SPR",
   pendingActionIds,
   isAnyBulkPending,
@@ -143,6 +165,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const isReducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const prevSelected = useRef(isSelected);
+  const humanIntervention = toHumanInterventionSummary(workflowHumanIntervention);
 
   useEffect(() => {
     if (isReducedMotion || !checkIconRef.current) {
@@ -435,9 +458,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             scope="sprint"
             status={sprint.status}
             completion={sprint.completion}
+            tasksCount={sprint.tasksCount}
+            planningStatus={planningStatus}
             review={sprint.latestReview}
             ciPresentation={ciStatus}
-            humanIntervention={humanIntervention}
+            humanIntervention={workflowHumanIntervention}
             compact
             align="left"
           />

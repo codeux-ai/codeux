@@ -41,6 +41,29 @@ describe("GuardrailRepository", () => {
     expect(repo.getCount(taskId, "ci_fix")).toBe(3);
   });
 
+  it("records a durable provider attempt exactly once across replay", async () => {
+    const { repo, projectId, taskId } = await createFixture();
+
+    expect(repo.recordOnce({
+      projectId,
+      taskId,
+      purpose: "ci_fix",
+      sourceKey: "ci-fix-attempt:attempt-1",
+    })).toEqual({ applied: true, count: 1 });
+    expect(repo.recordOnce({
+      projectId,
+      taskId,
+      purpose: "ci_fix",
+      sourceKey: "ci-fix-attempt:attempt-1",
+    })).toEqual({ applied: false, count: 1 });
+    expect(repo.recordOnce({
+      projectId,
+      taskId,
+      purpose: "ci_fix",
+      sourceKey: "ci-fix-attempt:attempt-2",
+    })).toEqual({ applied: true, count: 2 });
+  });
+
   it("tracks each purpose independently and reports getCounts + getTotal", async () => {
     const { repo, projectId, taskId } = await createFixture();
 
@@ -119,5 +142,23 @@ describe("GuardrailRepository", () => {
     expect(() => repo.record({ projectId, taskId: syntheticKey, purpose: "ci_fix" })).not.toThrow();
     expect(repo.record({ projectId, taskId: syntheticKey, purpose: "ci_fix" })).toBe(2);
     expect(repo.getCount(syntheticKey, "ci_fix")).toBe(2);
+  });
+
+  it("records a taskless sprint-level provider attempt exactly once", async () => {
+    const { repo, projectId } = await createFixture();
+    const syntheticKey = "main-merge-ci-fix:sprint-run-1";
+
+    expect(repo.recordOnce({
+      projectId,
+      taskId: syntheticKey,
+      purpose: "ci_fix",
+      sourceKey: "ci-fix-attempt:sprint-attempt-1",
+    })).toEqual({ applied: true, count: 1 });
+    expect(repo.recordOnce({
+      projectId,
+      taskId: syntheticKey,
+      purpose: "ci_fix",
+      sourceKey: "ci-fix-attempt:sprint-attempt-1",
+    })).toEqual({ applied: false, count: 1 });
   });
 });

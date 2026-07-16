@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import type { CommandResult } from "../../../services/cli-process-runner.js";
+import { isRuntimeShutdownInProgress } from "../../../services/shutdown-state.js";
 import {
   DOCKER_NETWORK_NONE_ARGS,
   DOCKER_NO_NEW_PRIVILEGES_ARGS,
@@ -191,8 +192,16 @@ export class WorkspaceVolumeHelperPool {
       let attempt: WorkspaceExecAttempt;
       try {
         attempt = await runViaExec();
-      } catch {
-        return this.fallbackRun(volumeName, commandArgs, runtimeVolumeName, commandDockerArgs, runnerOptions);
+      } catch (error) {
+        return this.fallbackRun(
+          volumeName,
+          commandArgs,
+          runtimeVolumeName,
+          commandDockerArgs,
+          runnerOptions,
+          options,
+          error,
+        );
       }
       if (attempt.kind === "runner-error") {
         throw attempt.error;
@@ -204,15 +213,31 @@ export class WorkspaceVolumeHelperPool {
         this.pool.invalidate(key, attempt.containerId);
         try {
           attempt = await runViaExec();
-        } catch {
-          return this.fallbackRun(volumeName, commandArgs, runtimeVolumeName, commandDockerArgs, runnerOptions);
+        } catch (error) {
+          return this.fallbackRun(
+            volumeName,
+            commandArgs,
+            runtimeVolumeName,
+            commandDockerArgs,
+            runnerOptions,
+            options,
+            error,
+          );
         }
         if (attempt.kind === "runner-error") {
           throw attempt.error;
         }
         if (!attempt.result.ok && this.pool.isContainerGone(attempt.result)) {
           this.pool.invalidate(key, attempt.containerId);
-          return this.fallbackRun(volumeName, commandArgs, runtimeVolumeName, commandDockerArgs, runnerOptions);
+          return this.fallbackRun(
+            volumeName,
+            commandArgs,
+            runtimeVolumeName,
+            commandDockerArgs,
+            runnerOptions,
+            options,
+            new Error(attempt.result.stderr.trim() || "Workspace helper replacement stopped before command execution."),
+          );
         }
       }
       return attempt.result;
@@ -337,7 +362,10 @@ export class WorkspaceVolumeHelperPool {
     runtimeVolumeName: string | undefined,
     commandDockerArgs: string[],
     runnerOptions: HelperRunnerOptions,
+    options: WorkspaceSidecarExecOptions,
+    fallbackCause: unknown,
   ): Promise<CommandResult> {
+    this.assertFallbackAllowed(options, fallbackCause);
     const args = [
       "run",
       "--rm",
@@ -369,6 +397,19 @@ export class WorkspaceVolumeHelperPool {
       ...commandArgs.slice(1),
     );
     return this.runner("docker", args, runnerOptions);
+  }
+
+  private assertFallbackAllowed(options: WorkspaceSidecarExecOptions, fallbackCause: unknown): void {
+    if (options.signal?.aborted) {
+      options.signal.throwIfAborted();
+    }
+    if (!this.shuttingDown && !isRuntimeShutdownInProgress()) {
+      return;
+    }
+    if (fallbackCause instanceof Error) {
+      throw fallbackCause;
+    }
+    throw new Error("Workspace sidecar fallback is unavailable while the runtime is shutting down.");
   }
 
   private buildCommandDockerArgs(

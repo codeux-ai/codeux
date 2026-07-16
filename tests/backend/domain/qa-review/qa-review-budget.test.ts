@@ -79,6 +79,14 @@ describe("QA Review Budget", () => {
       }))).toBe(true);
     });
 
+    it("keeps an accepted hosted continuation pending for reconciliation", () => {
+      expect(isPendingQaContinuation(changesRequestedRun({
+        continuationStatus: "awaiting_provider",
+        continuationMode: "jules",
+        continued: true,
+      }))).toBe(true);
+    });
+
     it("does not retry a failed continuation after the infrastructure grace ceiling", () => {
       expect(isPendingQaContinuation(changesRequestedRun({
         continuationStatus: "failed",

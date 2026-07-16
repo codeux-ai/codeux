@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { registerMcpRequestHandlers } from "../../../src/server/mcp-request-router.js";
-import { ToolRegistry } from "../../../src/api/mcp/tool-registry.js";
 import { isToolEnabled } from "../../../src/mcp/mcp-tool-availability.js";
-import { validateToolArguments } from "../../../src/api/mcp/validators/tool-validators.js";
 import { runWithMcpAgentContext } from "../../../src/server/mcp-agent-context.js";
+
+const dispatchMock = vi.hoisted(() => vi.fn().mockResolvedValue({ content: [] }));
 
 vi.mock("../../../src/mcp/mcp-tool-availability.js", () => ({
   isToolEnabled: vi.fn().mockReturnValue(true),
@@ -19,14 +18,13 @@ vi.mock("../../../src/api/mcp/validators/tool-validators.js", () => ({
 vi.mock("../../../src/api/mcp/tool-registry.js", () => {
   const MockToolRegistry = vi.fn();
   MockToolRegistry.prototype.register = vi.fn().mockReturnThis();
-  MockToolRegistry.prototype.dispatch = vi.fn().mockResolvedValue({ content: [] });
+  MockToolRegistry.prototype.dispatch = dispatchMock;
   return {
     ToolRegistry: MockToolRegistry,
   };
 });
 
 describe("McpRequestRouter", () => {
-  let executionRepository: any;
   let server: any;
   let handlers: Record<string, any>;
 
@@ -37,9 +35,7 @@ describe("McpRequestRouter", () => {
         handlers[schema.method] = handler;
       }),
     };
-    executionRepository = {
-      createProviderInvocationUsage: vi.fn(),
-    };
+    dispatchMock.mockClear();
 
     registerMcpRequestHandlers({
       server: server as any,
@@ -49,52 +45,45 @@ describe("McpRequestRouter", () => {
       getDashboardSettings: () => ({ mcpTools: [{ name: "google_web_search", enabled: true }, { name: "read_file", enabled: true }, { name: "manage_code_ux", enabled: true }] }) as any,
       getRuntimeRole: () => "project_manager",
       formatError: () => ({ content: [], isError: true }),
-      executionRepository: executionRepository as any,
     });
   });
 
-  it("should log invocation as EXTERNAL_API for google_web_search tool", async () => {
+  it("dispatches external tools without synthesizing provider telemetry in the generic router", async () => {
     const handler = handlers[CallToolRequestSchema.method];
+    const toolArgs = {
+      projectId: "proj-1",
+      sessionId: "sess-1",
+      provider: "claude",
+      purpose: "task_coding",
+    };
 
     await handler({
       params: {
         name: "google_web_search",
-        arguments: {
-          projectId: "proj-1",
-          sessionId: "sess-1",
-          provider: "claude",
-          purpose: "task_coding",
-        },
+        arguments: toolArgs,
       },
     }, {} as any);
 
-    expect(executionRepository.createProviderInvocationUsage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        invocationSource: "EXTERNAL_API",
-      })
-    );
+    expect(dispatchMock).toHaveBeenCalledWith("google_web_search", toolArgs);
   });
 
-  it("should log invocation as internal for read_file tool", async () => {
+  it("dispatches internal tools through the same provider-agnostic path", async () => {
     const handler = handlers[CallToolRequestSchema.method];
+    const toolArgs = {
+      projectId: "proj-1",
+      sessionId: "sess-1",
+      provider: "claude",
+      purpose: "task_coding",
+    };
 
     await handler({
       params: {
         name: "read_file",
-        arguments: {
-          projectId: "proj-1",
-          sessionId: "sess-1",
-          provider: "claude",
-          purpose: "task_coding",
-        },
+        arguments: toolArgs,
       },
     }, {} as any);
 
-    expect(executionRepository.createProviderInvocationUsage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        invocationSource: "internal",
-      })
-    );
+    expect(dispatchMock).toHaveBeenCalledWith("read_file", toolArgs);
   });
 
   it("resolves per-agent code_ux toggles from the request agent context", async () => {
@@ -112,7 +101,6 @@ describe("McpRequestRouter", () => {
       getRuntimeRole: () => "project_manager",
       resolveAgentMcpToolToggles: (agentId: string) => (agentId === "agent-1" ? agentToggles : null),
       formatError: () => ({ content: [], isError: true }),
-      executionRepository: executionRepository as any,
     });
     const handler = localHandlers[CallToolRequestSchema.method];
 

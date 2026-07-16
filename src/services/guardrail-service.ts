@@ -117,6 +117,31 @@ export class GuardrailService {
     return count;
   }
 
+  /** Records one durable provider attempt exactly once across scheduler/restart replay. */
+  recordOnce(
+    scope: GuardrailScope,
+    taskId: string,
+    purpose: GuardrailLedgerPurpose,
+    sourceKey: string,
+    reason?: string,
+  ): number {
+    const result = this.repo.recordOnce({
+      projectId: scope.projectId,
+      taskId,
+      purpose,
+      sourceKey,
+      reason,
+    });
+    this.logger?.debug?.("Guardrail invocation recorded once", {
+      taskId,
+      purpose,
+      sourceKey,
+      applied: result.applied,
+      count: result.count,
+    });
+    return result.count;
+  }
+
   /** Refunds an operationally interrupted invocation without erasing genuine failures. */
   refund(
     scope: GuardrailScope,

@@ -15,8 +15,7 @@ describe("JulesUsageService", () => {
   let listExecMock: ReturnType<typeof vi.fn>;
   let createExecMock: ReturnType<typeof vi.fn>;
   let updateExecMock: ReturnType<typeof vi.fn>;
-  let clearMessagesMock: ReturnType<typeof vi.fn>;
-  let appendMessageMock: ReturnType<typeof vi.fn>;
+  let syncMessagesMock: ReturnType<typeof vi.fn>;
 
   let loggerInfoMock: ReturnType<typeof vi.fn>;
   let loggerErrorMock: ReturnType<typeof vi.fn>;
@@ -37,8 +36,12 @@ describe("JulesUsageService", () => {
     listExecMock = vi.fn().mockReturnValue([]);
     createExecMock = vi.fn().mockReturnValue({ id: "mock-exec-id" });
     updateExecMock = vi.fn();
-    clearMessagesMock = vi.fn();
-    appendMessageMock = vi.fn();
+    syncMessagesMock = vi.fn().mockReturnValue({
+      inserted: 0,
+      updated: 0,
+      deleted: 0,
+      unchanged: 0,
+    });
 
     loggerInfoMock = vi.fn();
     loggerErrorMock = vi.fn();
@@ -56,8 +59,7 @@ describe("JulesUsageService", () => {
       listExecutionInvocationsByProviderInvocationId: listExecMock,
       createExecutionInvocation: createExecMock,
       updateExecutionInvocation: updateExecMock,
-      clearExecutionInvocationMessages: clearMessagesMock,
-      appendExecutionInvocationMessage: appendMessageMock,
+      syncExecutionInvocationMessages: syncMessagesMock,
     } as unknown as ExecutionRepository;
 
     logger = {
@@ -114,13 +116,15 @@ describe("JulesUsageService", () => {
       expect(payload.toolCallCount).toBe(1);
       expect(payload.rawUsageJson.estimator).toBe("turn-accumulation-v1");
 
-      // Transcript rebuilt: prompt + 3 activity messages.
-      expect(clearMessagesMock).toHaveBeenCalledWith("mock-exec-id");
-      expect(appendMessageMock).toHaveBeenCalledTimes(4);
-      const roles = appendMessageMock.mock.calls.map((c) => c[1].role);
+      // Transcript reconciled atomically: prompt + 3 activity messages.
+      expect(syncMessagesMock).toHaveBeenCalledTimes(1);
+      const [invocationId, messages] = syncMessagesMock.mock.calls[0];
+      expect(invocationId).toBe("mock-exec-id");
+      expect(messages).toHaveLength(4);
+      const roles = messages.map((message: { role: string }) => message.role);
       expect(roles).toEqual(["user", "user", "assistant", "tool"]);
       // Progress updates carry the tool_call chat indicator.
-      const progressMsg = appendMessageMock.mock.calls[3][1];
+      const progressMsg = messages[3];
       expect(progressMsg.metadata.kind).toBe("tool_call");
     });
 
@@ -151,9 +155,12 @@ describe("JulesUsageService", () => {
 
       await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1", "Initial prompt for testing");
 
-      const toolMsg = appendMessageMock.mock.calls.find((c) => c[1].metadata?.kind === "tool_result");
+      const messages = syncMessagesMock.mock.calls[0][1];
+      const toolMsg = messages.find((message: { metadata?: { kind?: string } }) =>
+        message.metadata?.kind === "tool_result"
+      );
       expect(toolMsg).toBeDefined();
-      expect(toolMsg![1].metadata.toolName).toBe("apply_patch");
+      expect(toolMsg!.metadata.toolName).toBe("apply_patch");
     });
 
     it("handles API failure gracefully and logs an error", async () => {
@@ -227,6 +234,7 @@ describe("JulesUsageService", () => {
     it("updates the dispatch-created execution invocation instead of creating a duplicate", async () => {
       getLatestMock.mockReturnValue({
         id: "provider-record-1",
+        provider: "jules",
         createdAt: "2026-05-21T07:29:52.209Z",
       });
       listExecMock.mockReturnValue([{ id: "exec-existing" }]);
@@ -243,11 +251,13 @@ describe("JulesUsageService", () => {
         taskId: "task-1",
         finishedAt: null,
       }));
-      expect(clearMessagesMock).toHaveBeenCalledWith("exec-existing");
-      expect(appendMessageMock).toHaveBeenCalledWith("exec-existing", expect.objectContaining({
-        role: "user",
-        contentMarkdown: "Build it",
-      }));
+      expect(syncMessagesMock).toHaveBeenCalledWith(
+        "exec-existing",
+        expect.arrayContaining([expect.objectContaining({
+          role: "user",
+          contentMarkdown: "Build it",
+        })]),
+      );
     });
 
     it("does not throttle distinct sessions", async () => {

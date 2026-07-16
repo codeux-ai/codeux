@@ -110,7 +110,7 @@ describe("SprintsPage Status Regression", () => {
     setEditingSprint: vi.fn(),
   };
 
-  it("shows exactly one intervention badge for a manually paused sprint", () => {
+  it("does not promote an ambiguous sprint-run pause summary to human-needed", () => {
     const activeRunsBySprintId = new Map();
     activeRunsBySprintId.set("sprint-1", createSprintRunFixture({
       status: "paused",
@@ -128,9 +128,8 @@ describe("SprintsPage Status Regression", () => {
 
     renderWithI18n(<SprintsPage />);
 
-    // Check for "Needs you" badge - should only be one per sprint cell
-    const badges = screen.getAllByText("Needs you");
-    expect(badges).toHaveLength(1);
+    expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Human needed/i })).not.toBeInTheDocument();
   });
 
   it("hides intervention badge for a system stopped sprint", () => {
@@ -184,7 +183,7 @@ describe("SprintsPage Status Regression", () => {
 
     const { container } = renderWithI18n(<SprintsPage />);
 
-    expect(screen.getAllByRole("button", { name: /CI status: Coding in progress.*Show workflow details/i })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /Workflow status: Coding in progress.*Show workflow details/i })).toHaveLength(2);
     expect(container.querySelectorAll('[data-ci-icon="failure"]')).toHaveLength(0);
     const reviewTriggers = screen.getAllByRole("button", { name: "QA review details" });
     expect(reviewTriggers).toHaveLength(2);
@@ -192,5 +191,45 @@ describe("SprintsPage Status Regression", () => {
       expect(trigger).toHaveAccessibleDescription(/QA changes requested/i);
       expect(trigger).toHaveClass("text-blue-700");
     }
+  });
+
+  it("raises a real human-owned task intervention on the sprint workflow badges", () => {
+    const sprint = {
+      ...basePageData.sortedSprints[0],
+      status: "running",
+      tasksCount: 2,
+      completion: 50,
+      projectId: "proj-1",
+      kind: "standard",
+    };
+    const humanTaskIntervention = {
+      id: "attention-task-human",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: "run-1",
+      dispatchId: "dispatch-1",
+      attentionType: "human_escalation_required",
+      severity: "high",
+      ownerType: "human",
+      status: "open",
+      assignedWorkerEndpointId: null,
+      title: "Operator decision required",
+      summaryMarkdown: "Only a person can resolve this task.",
+      payload: { taskKey: "T01" },
+      openedAt: "2026-07-16T08:00:00.000Z",
+      claimedAt: null,
+      resolvedAt: null,
+      updatedAt: "2026-07-16T08:00:00.000Z",
+    };
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      ...basePageData,
+      sortedSprints: [sprint],
+      showcaseSprints: [sprint],
+      workflowHumanInterventionBySprintId: new Map([["sprint-1", humanTaskIntervention]]),
+    } as any);
+
+    renderWithI18n(<SprintsPage />);
+
+    expect(screen.getAllByRole("button", { name: /Workflow status: Human needed/i })).toHaveLength(2);
   });
 });

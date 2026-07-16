@@ -114,29 +114,52 @@ burst.
 
 Fresh Docker snapshots use the smallest reproducible source:
 
-- targeted remote fetches are single-flighted and reusable for three seconds;
+- all requested snapshot branches are refreshed in one targeted remote fetch; branch-sync fetches
+  are single-flighted and reusable for three seconds;
+- LOCAL task preparation performs no remote fetch. A fresh REMOTE task refreshes only its feature
+  branch, while a resumed REMOTE task refreshes both its worker and feature branches;
 - bundle creation is single-flighted and reusable for ten seconds by resolved ref state;
 - single-branch bundle seeding and checkout run in one helper container for planning, QA, and reply
   workspaces;
+- valid reusable snapshots return after the local Git-HEAD check without refreshing remote refs;
+  missing or partial snapshots refresh inside the per-workspace creation lock before materializing;
 - full-ref seeding remains the correctness fallback for unresolved or detached refs;
 - repository-root and origin probes are cached; and
 - paired workspace/runtime volume removal runs concurrently.
 
+Fresh worker branches use a random UUID-derived suffix. HOST preparation creates the local ref
+atomically with `git worktree add -b`; it never resets an existing branch. Finalization accepts that
+fresh local ref only when the registered worktree path, branch, current tip, and ancestry prove it
+belongs to the same invocation. REMOTE preparation also probes the exact origin ref before provider
+work begins, and the first publication still uses an expected-absent `--force-with-lease`, so a
+branch created after the probe cannot be overwritten. If that push ends with an ambiguous retryable
+transport failure, publication probes the exact remote branch before retrying. A remote tip equal
+to the local tip confirms success, an absent ref permits another expected-absent attempt, and a
+different tip fails as an allocation collision. Feature-branch allocation performs its normal
+local and remote uniqueness probes before creation.
+
 Runtime volume ownership uses a durable `.codeux-owner` marker and the actual volume-root UID/GID.
 The recursive ownership repair runs only for a new volume, an owner mismatch, or recovery from an
-externally recreated volume. Ordinary launches do not run `chown -R`.
+externally recreated volume. Ordinary launches do not run `chown -R`. A process-scoped registry
+coalesces runtime-volume creation and ownership initialization across independent workspace-manager
+instances, so preparation and provider launch cannot create or repair the same volume twice.
 
-Git control-plane work uses two bounded helper tiers. An active sprint holds a reference-counted
-project lease keyed by the repository's Git common directory and runtime owner. The first eligible
-Git command lazily starts one warm helper; concurrent sprints and worktrees for that project share
-it, with at most four commands executing in parallel. The last active sprint drains pending and
-in-flight commands and removes the helper. Projects without an active sprint use one-shot helpers,
-so idle projects retain no container. Different repositories remain isolated, which also keeps
-project-specific credentials separate. Credentials, Git environment, and stdin are attached only
-to the individual `docker exec`; they are never retained in the helper. Commands requiring an extra
-host bind mount remain one-shot. After runtime shutdown begins, late Git commands also use the
-containerized one-shot path so they cannot recreate a persistent generation after the warm pool has
-been drained.
+Git control-plane work uses two bounded helper tiers. The dashboard-selected project is eagerly
+prewarmed, planning/reply/orchestration requests hold transient project leases, and every queued,
+running, or cancellation-pending sprint run holds durable ownership. All owners converge on one
+helper keyed by the repository's Git common directory and runtime owner, so concurrent sprints,
+worktrees, QA, CI repair, and chat requests share it with at most four commands executing in
+parallel. Ownership handoffs reuse the live generation without a stop/start window. Pause,
+deselection, and terminal run states release their owner; the final owner drains pending and
+in-flight commands before removal. Startup pruning completes before selected-project prewarm and
+sprint recovery. Credentials, Git environment, and stdin attach only to each `docker exec`.
+Repository archives, bundles, patch indexes, and rollback worktrees are staged inside the existing
+project mount; truly external paths keep the one-shot fallback. After shutdown begins, late Git
+commands stay one-shot so they cannot recreate a drained helper generation.
+
+Branch preflight performs one origin refresh per orchestration request. A successful refresh makes
+the local tracking refs authoritative for branch allocation and preparation, avoiding duplicate
+fetches and `ls-remote` calls; independent local/remote ref probes execute concurrently.
 
 Docker-volume workspaces reuse one short-lived sidecar per active workspace/runtime-volume pair for
 local checkout, inspection, export, and bundle bootstrap commands. The sidecar is Git-capable,
@@ -145,14 +168,19 @@ Its transient Git home is a 1 MiB tmpfs. Coding and QA workflows reserve the exa
 workspace/runtime-volume pair for their complete prepare-through-finalize lifetime, so the pool
 cannot evict a sidecar merely because that workflow is temporarily between commands. Release drains
 in-flight work before removing the sidecar without deleting restartable volumes.
-Network Git commands use an isolated one-shot container. The workspace pool admits at most 16
-sidecars: a new workspace evicts the least-recently-used unreserved idle generation, or waits when
-every slot is executing or reserved. Helper creation and removal share a four-operation Docker
-control-plane limit. This keeps overlapping task-QA and coding waves inside the same resource bound
-without creating `created`/`dead` container storms. Otherwise-idle, unreserved sidecars expire after
-30 seconds, and shutdown drains both helper pools before owner-scoped Docker cleanup. Fresh helper
-creation runs first without a speculative remove; only an explicit Docker container-name conflict
-reclaims the deterministic name and retries once.
+Network Git commands use an isolated one-shot container. Each one-shot generation has an explicit
+managed name, runtime-owner label, and helper label, and masks `alpine/git`'s declared `/git` volume
+with tmpfs. A restart between Docker create and start can therefore reclaim the otherwise
+never-started container without leaking either the workspace volume or an anonymous Git volume. The
+workspace pool admits at most 16 sidecars: a new workspace evicts the least-recently-used
+unreserved idle generation, or waits when every slot is executing or reserved. Helper creation and
+removal share a four-operation Docker control-plane limit. This keeps overlapping task-QA and
+coding waves inside the same resource bound without creating `created`/`dead` container storms.
+Otherwise-idle, unreserved sidecars expire after 30 seconds, and shutdown drains both helper pools
+before owner-scoped Docker cleanup. Fresh helper creation runs first without a speculative remove;
+only an explicit Docker container-name conflict reclaims the deterministic name and retries once.
+If shutdown or cancellation interrupts helper creation, the command fails through the bounded pool
+instead of escaping into an uncapped one-shot fallback.
 The shutdown sequence signals every active dispatch before beginning that drain, so provider and
 workspace commands can release their helper leases concurrently instead of making restart latency
 depend on their natural completion. Small bounded-parallel removal batches then reconcile every
@@ -167,8 +195,13 @@ merger's last published target SHA. Every publication remains a compare-and-swap
 failure rereads and resets to the concurrently advanced target. Merge history stays serial and
 conflict attribution remains per task without repeating ref-existence scans for every branch.
 
-Provider container names are reclaimed only after Docker reports a real name conflict. The normal
-launch path no longer runs a speculative `docker rm`.
+Provider container names are reconciled only after Docker reports a real name conflict. Code UX
+inspects the exact container and reclaims it only when the managed, runtime-owner, and session
+labels match and Docker reports a non-running `created`, `exited`, or `dead` state. A running
+same-session container is preserved, and a foreign or unverified container is never removed.
+Disposing the command-spawner host during shutdown also cannot fall back to a duplicate in-process
+launch once the invocation signal is aborted. The normal launch path does not run a speculative
+`docker rm`.
 
 ## Telemetry And Persistence
 
@@ -220,6 +253,12 @@ work instead of a serial control-plane loop.
 Tracked-session snapshots, the ten-minute new-workspace grace period, active managed-volume state,
 the newest-two cache generations, and the 30-day managed-volume retention window are unchanged.
 
+The local mockup-sprint pentest runner keeps its isolated server alive after terminal sprint state
+until every workspace/runtime volume labeled for that test project and sprint has been removed.
+Its final safety cleanup then removes only volumes owned by that isolated state home. Repeated
+400-task recovery runs therefore cannot leak thousands of volumes into the shared Docker daemon or
+slow later volume and container operations.
+
 ## Database Maintenance
 
 Terminal execution invocations, provider invocations, and their message trees follow the configured
@@ -261,8 +300,9 @@ while older files that predate that mode may safely no-op until an explicit offl
   label. Startup pruning, preview/file-browser reconciliation, login cleanup, and shutdown select
   that owner before removing assets, so an isolated stress-test runtime sharing the Docker daemon
   cannot stop a live runtime. Warm Git/workspace helper names include the same owner identity;
-  generation-aware invalidation preserves a concurrent replacement and a second stopped-helper
-  result falls back to a one-shot command instead of failing the provider invocation.
+  generation-aware invalidation preserves a concurrent replacement. An ordinary second
+  stopped-helper result may use a one-shot command, while shutdown and cancellation remain inside
+  the bounded pool and never launch an uncapped fallback generation.
 
 ## Focused Verification
 

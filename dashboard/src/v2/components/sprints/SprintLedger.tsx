@@ -16,7 +16,7 @@ import { sliceListWindow, type ListWindowOption } from "../../lib/list-window.js
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import type { Sprint } from "../../types.js";
-import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
+import type { ExecutionAttentionItemSummary, ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
 import {
   filterSprints,
@@ -49,6 +49,8 @@ import { useDashboardI18n } from "../../i18n/index.js";
 import { sprintsMessages } from "../../i18n/messages/sprints.js";
 
 const EMPTY_CI_STATUS_BY_SPRINT_ID = new Map<string, CiStatusPresentation>();
+const EMPTY_PLANNING_STATUS_BY_SPRINT_ID = new Map<string, string>();
+const EMPTY_WORKFLOW_INTERVENTION_BY_SPRINT_ID = new Map<string, ExecutionAttentionItemSummary>();
 
 export interface SprintLedgerProps {
   initialQuery?: string;
@@ -61,6 +63,8 @@ export interface SprintLedgerProps {
   pauseResumeRunsBySprintId: Map<string, { id: string; status: string }>;
   interventionBySprintId: Map<string, ExecutionHumanInterventionSummary>;
   ciStatusBySprintId?: ReadonlyMap<string, CiStatusPresentation>;
+  planningStatusBySprintId?: ReadonlyMap<string, string>;
+  workflowHumanInterventionBySprintId?: ReadonlyMap<string, ExecutionAttentionItemSummary>;
   pendingActionIds: Set<string>;
   onToggleShowcase: (sprint: Sprint) => void;
   onSprintToggle: (sprintId: string) => void;
@@ -89,8 +93,10 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   onListWindowChange,
   activeRunsBySprintId,
   pauseResumeRunsBySprintId,
-  interventionBySprintId,
+  interventionBySprintId: _interventionBySprintId,
   ciStatusBySprintId = EMPTY_CI_STATUS_BY_SPRINT_ID,
+  planningStatusBySprintId = EMPTY_PLANNING_STATUS_BY_SPRINT_ID,
+  workflowHumanInterventionBySprintId = EMPTY_WORKFLOW_INTERVENTION_BY_SPRINT_ID,
   pendingActionIds,
   onToggleShowcase,
   onSprintToggle,
@@ -169,19 +175,6 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     activeCount: sprints.filter((sprint) => sprint.status === "running" || sprint.status === "paused").length,
     completedCount: sprints.filter((sprint) => sprint.status === "completed").length,
   }), [sprints]);
-
-  const actionableInterventionBySprintId = useMemo(() => {
-    const map = new Map<string, ExecutionHumanInterventionSummary>();
-    for (const sprint of sprints) {
-      if (sprint.status === "running" || sprint.status === "paused") {
-        const intervention = interventionBySprintId.get(sprint.id);
-        if (intervention && intervention.ownerType !== "worker") {
-          map.set(sprint.id, intervention);
-        }
-      }
-    }
-    return map;
-  }, [sprints, interventionBySprintId]);
 
   const announceLedgerOutcome = useCallback((
     outcome: string,
@@ -700,8 +693,9 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                   isEven={index % 2 === 0}
                   activeRun={activeRunsBySprintId.get(sprint.id)}
                   pauseResumeRun={pauseResumeRunsBySprintId.get(sprint.id)}
-                  humanIntervention={actionableInterventionBySprintId.get(sprint.id) || null}
                   ciStatus={ciStatusBySprintId.get(sprint.id) || null}
+                  planningStatus={planningStatusBySprintId.get(sprint.id) || null}
+                  workflowHumanIntervention={workflowHumanInterventionBySprintId.get(sprint.id) || null}
                   sprintKeyPrefix={sprintKeyPrefix}
                   pendingActionIds={pendingActionIds}
                   isAnyBulkPending={isAnyBulkPending}

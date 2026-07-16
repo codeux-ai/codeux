@@ -379,6 +379,12 @@ export interface ExecutionAttentionItemSummary {
   updatedAt: string;
 }
 
+export interface ExecutionSprintWorkflowProjection {
+  sprintId: string;
+  planningStatus: string | null;
+  humanIntervention: ExecutionAttentionItemSummary | null;
+}
+
 export interface ExecutionDashboardSnapshot {
   projectId: string | null;
   projectName: string | null;
@@ -388,6 +394,8 @@ export interface ExecutionDashboardSnapshot {
   primaryAssignedWorker: ExecutionAssignedWorkerSummary | null;
   overflowAssignedWorkers: ExecutionAssignedWorkerSummary[];
   attentionItems: ExecutionAttentionItemSummary[];
+  /** Durable per-sprint workflow evidence that is not subject to bounded activity feeds. */
+  sprintWorkflowProjections: ExecutionSprintWorkflowProjection[];
   recentEvents: ExecutionRuntimeEventSummary[];
   /** Recent project invocation records used by the Live page invocation feed. */
   recentInvocations?: ExecutionInvocationRecord[];

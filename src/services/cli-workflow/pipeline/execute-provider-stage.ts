@@ -44,7 +44,11 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
   const previousInvocation = (ctx.deps.executionRepository && typeof ctx.deps.executionRepository.getLatestProviderInvocationUsageBySession === "function")
     ? ctx.deps.executionRepository.getLatestProviderInvocationUsageBySession(ctx.workspaceSessionId, "task_coding")
     : null;
-  const continueSessionId = previousInvocation?.nativeSessionId || (ctx.provider === "claude-code" ? null : ctx.workspaceSessionId);
+  const continueSessionId = previousInvocation?.nativeSessionId
+    || (ctx.provider === "claude-code" || ctx.provider === "codex" ? null : ctx.workspaceSessionId);
+  const continueSessionWithoutNativeId = ctx.provider === "codex"
+    && Boolean(previousInvocation)
+    && !previousInvocation?.nativeSessionId;
   // opencode's `export <sessionID>` reports cumulative totals for the whole
   // session, so a follow-up run that resumes the same session needs the
   // prior invocation's raw snapshot as a baseline to subtract out (see
@@ -106,6 +110,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     sessionId: ctx.sessionId,
     workspaceSessionId: ctx.workspaceSessionId,
     continueSessionId,
+    continueSessionWithoutNativeId,
     openCodeBaselineRawUsageJson,
     invocationId: ctx.executionInvocationId,
     finalizeExecutionInvocation: ctx.executionInvocationId ? false : undefined,

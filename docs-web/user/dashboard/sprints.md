@@ -6,7 +6,7 @@ The **Sprints** page (`/sprints`) is where you plan, manage, and launch sprint r
 
 Sprints are viewed either in a visual organic cell gallery or a dense ledger format. Their hierarchy is intentionally different:
 
-- **Gallery workflow badge** — one interactive delivery badge replaces hover-only lifecycle and merge-conflict badges. Activate it for the complete Coding → PR → QA → CI → Merge → Completion flow.
+- **Gallery workflow badge** — one interactive delivery badge replaces hover-only lifecycle and merge-conflict badges. Activate it for the complete Planning → Coding → QA → Pull Request → CI → Merge → Completion flow.
 - **Sprint key** — a blue, unboxed ID lockup keeps keys such as `CODUX-227` crisp without a decorative pill.
 - **Active spectral waves** — running cells use a restrained deep-sea composition of soft blue, cyan, and violet wave fields with slow ambient movement; reduced motion keeps the same composition static.
 - **Ledger lifecycle status** — dense rows retain their direct `idle`, `running`, `paused`, `completed`, `failed`, or `cancelled` label.
@@ -22,7 +22,7 @@ When reduced motion is enabled, optional attention motion stops while the waitin
 
 ## Delivery workflow and QA review details
 
-Sprint cells and ledger rows keep their sprint lifecycle status and use one bright delivery workflow badge in place of the standalone QA and CI badges. The workflow badge remains mounted even when a refreshed execution snapshot has no historical CI events, so it no longer flashes and disappears. During active coding, the sprint badge stays on Coding instead of aggregating and flipping between child-task PR, CI, and Merge activity; individual cards on Tasks and Live show those transitions. At 100% completion, current-run sprint QA and final CI or merge evidence become visible. The percentage alone never claims that a base-branch merge has started: Merge requires explicit merge-stage evidence. Once the sprint completes, the full PR, CI, Merge, and Completion rail settles successfully, including when older gate events are no longer present in the current snapshot.
+Sprint cells and ledger rows keep their sprint lifecycle status and use one bright delivery workflow badge in place of the standalone QA and CI badges. The workflow badge remains mounted even when a refreshed execution snapshot has no historical CI events, so it no longer flashes and disappears. Planning is the first sprint stage and follows the latest planning invocation. Running or paused planning remains authoritative while that request is active; failed or cancelled planning is authoritative only while the sprint remains idle. Once coding starts or the sprint completes, the downstream lifecycle wins and Planning settles as complete instead of exposing a historical planning failure. During active coding, the sprint badge stays on Coding instead of aggregating and flipping between child-task PR, CI, and Merge activity; individual cards on Tasks and Live show those transitions. At 100% completion, current-run sprint QA and final CI or merge evidence become visible. The percentage alone never claims that a base-branch merge has started: Merge requires explicit merge-stage evidence. Once the sprint completes, the full QA, PR, CI, Merge, and Completion rail settles successfully, including when older gate events are no longer present in the current snapshot.
 
 | Presentation | Meaning |
 | --- | --- |
@@ -31,20 +31,21 @@ Sprint cells and ledger rows keep their sprint lifecycle status and use one brig
 | Blue pencil, **QA edits** / **QA changes requested** | QA completed successfully and requested changes. This is an actionable review outcome, not a provider failure. |
 | Red X, **QA failed** | The QA provider run failed, errored, or was cancelled before returning a usable verdict. It does not mean QA requested code changes. |
 
-Hovering, focusing, or activating the badge opens one viewport-positioned interaction region on a lightly translucent, blurred outer surface. The opaque Delivery flow card shows Coding → Pull request → QA → CI → Merge → Completion, and vertically centered status circles are joined by motion-safe animated dotted connectors. When review data exists, a floating responsive arrow links the opaque QA review card with the outcome, summary, findings, fix instructions, reviewer metadata, and collapsed follow-up specifications. `Escape` restores focus to the exact trigger that opened it.
+Hovering, focusing, or activating the badge opens one viewport-positioned interaction region on a lightly translucent, blurred outer surface. The opaque Delivery flow card shows Planning → Coding → QA → Pull request → CI → Merge → Completion, and vertically centered status circles are joined by motion-safe animated dotted connectors. When review data exists, a floating responsive arrow links the opaque QA review card with the outcome, summary, findings, fix instructions, reviewer metadata, and collapsed follow-up specifications. `Escape` restores focus to the exact trigger that opened it.
 
 Generated follow-up task specifications are collapsed initially, so long prompts do not dominate the review. Each **Follow-up task N** button exposes `aria-expanded` and can be toggled with the keyboard or touch. Expansion reveals the generated title, description, priority, dependency task keys (or **None**), and full Markdown prompt in a bounded scrolling area. The card uses one column on constrained screens, may split summary and findings on wider screens, clamps to the viewport, and scrolls vertically when needed. Reduced motion removes spinner, pulse, rotation, and transition movement without removing labels, borders, focus rings, expanded content, or state semantics.
 
-## Six-stage delivery flow
+## Seven-stage sprint delivery flow
 
-The workflow badge summarizes six stages shared by Sprints, Tasks, Overview, and Live. Sprint-run intervention summaries do not override this workflow trigger because they may represent a generic pause or runtime error; genuinely human-waiting sprints retain the separate amber waiting cue described above:
+The sprint workflow badge uses seven stages. Task badges on Tasks, Overview, Live cards, and Live DAG nodes retain the focused six-stage task flow. Sprint-run intervention summaries do not override the workflow trigger because they may represent a generic pause or runtime error. A task-level intervention escalates the sprint badge to **Human needed** only when it is active, explicitly human-owned, and has no worker assignment; worker-claimable attention never escalates the sprint badge.
 
-1. **Coding** — waiting, active, paused, complete, or failed.
-2. **Pull request** — waiting, creating, missing, or ready.
+1. **Planning** — waiting, active, paused, complete, failed, or cancelled.
+2. **Coding** — waiting, active, paused, complete, or failed.
 3. **QA** — pending, reviewing, passed, blue **QA edits**, or provider/runtime failure.
-4. **CI** — pending, running, passed, or failed checks.
-5. **Merge** — waiting, ready, merging, merged, not required, conflict, or failed attempt.
-6. **Completion** — waiting, complete, failed, or cancelled.
+4. **Pull request** — waiting, creating, missing, or ready.
+5. **CI** — pending, running, passed, or failed checks.
+6. **Merge** — waiting, ready, merging, merged, not required, conflict, or failed attempt.
+7. **Completion** — waiting, complete, failed, or cancelled.
 
 The four first-class workflow states are `pending`, `in_progress`, `successful`, and `failed`. Pending uses a neutral clock, `in_progress` is presented as running with the signal-colored progress treatment, `successful` uses a green check, and `failed` uses a red X. A sprint aggregates the newest state for each task workflow plus the final feature-to-default-branch merge workflow. Failed wins over in progress, in progress wins over pending, and pending wins over successful, both for each step and for the overall badge.
 

@@ -88,6 +88,91 @@ describe("DashboardRealtimeEventRepository", () => {
     });
   });
 
+  it("routes one persisted conversation event through project and thread subscriptions", async () => {
+    const storage = await createStorage();
+    const repository = new DashboardRealtimeEventRepository(storage);
+
+    const event = repository.appendEvent({
+      scopeType: "project",
+      scopeId: "project-1",
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: "message-1",
+      projectId: "project-1",
+      threadId: "thread-1",
+      payload: {
+        id: "message-1",
+        threadId: "thread-1",
+      },
+    });
+
+    expect(event.scope).toBe("project:project-1");
+    expect(countPersistedRows(storage)).toBe(1);
+    expect(repository.getLatestSequenceForScopes(["project:project-1"])).toBe(1);
+    expect(repository.getLatestSequenceForScopes(["thread:thread-1"])).toBe(1);
+
+    expect(repository.listEventsSince(["project:project-1"], 0)).toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        scope: "project:project-1",
+        entityId: "message-1",
+      }),
+    ]);
+    expect(repository.listEventsSince(["thread:thread-1"], 0)).toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        scopeType: "thread",
+        scopeId: "thread-1",
+        scope: "thread:thread-1",
+        entityId: "message-1",
+      }),
+    ]);
+    expect(repository.listEventsSince(["project:project-1", "thread:thread-1"], 0)).toHaveLength(1);
+  });
+
+  it("deduplicates legacy adjacent project and thread copies during replay", async () => {
+    const storage = await createStorage();
+    const repository = new DashboardRealtimeEventRepository(storage);
+    const payload = {
+      id: "message-1",
+      threadId: "thread-1",
+      bodyMarkdown: "One logical reply",
+    };
+
+    repository.appendEvent({
+      scopeType: "project",
+      scopeId: "project-1",
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: "message-1",
+      projectId: "project-1",
+      threadId: "thread-1",
+      payload,
+      emittedAt: "2026-03-10T12:00:00.000Z",
+    });
+    repository.appendEvent({
+      scopeType: "thread",
+      scopeId: "thread-1",
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: "message-1",
+      projectId: "project-1",
+      threadId: "thread-1",
+      payload,
+      emittedAt: "2026-03-10T12:00:00.000Z",
+    });
+
+    expect(countPersistedRows(storage)).toBe(2);
+    expect(repository.listEventsSince(["thread:thread-1"], 0)).toEqual([
+      expect.objectContaining({
+        sequence: 2,
+        scope: "thread:thread-1",
+        entityId: "message-1",
+      }),
+    ]);
+    expect(repository.listEventsSince(["project:project-1", "thread:thread-1"], 0)).toHaveLength(1);
+  });
+
   it("tracks non-replayable snapshot events without including them in replay payloads", async () => {
     const repository = await createRepository();
 

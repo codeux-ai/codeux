@@ -61,12 +61,17 @@ export async function executePrepareStage(
     }
   }
 
-  const { worktreePath: finalPath, resumed } = await ctx.invocationWorkspacePreparer.prepareWorktree({
+  const {
+    worktreePath: finalPath,
+    resumed,
+    createdFreshWorkerBranch,
+  } = await ctx.invocationWorkspacePreparer.prepareWorktree({
     repoPath: ctx.repoPath,
     worktreePath: ctx.worktreePath,
     workerBranch: ctx.workerBranch,
     featureBranch: ctx.featureBranch,
     resumeSessionId: resumeFromFailedSessionId,
+    allowExistingWorkerBranch: ctx.allowExistingWorkerBranch,
     gitAuth: {
       githubToken: ctx.settings.git.githubToken,
       gitlabToken: ctx.settings.git.gitlabToken,
@@ -95,6 +100,12 @@ export async function executePrepareStage(
 
   const initialHead = (await ctx.runCommand("git", ["rev-parse", "HEAD"], ctx.worktreePath)).stdout.trim();
   ctx.initialHead = initialHead;
+  ctx.freshWorkerBranchOwnership = createdFreshWorkerBranch
+    ? {
+      worktreePath: ctx.worktreePath,
+      initialTip: initialHead,
+    }
+    : undefined;
 
   if (resumed) {
     ctx.deps.sessionTracking.appendActivity(ctx.sessionId, {

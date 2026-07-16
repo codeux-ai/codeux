@@ -1306,8 +1306,11 @@ export class QualityAssuranceService {
       const continueSessionId = canResume
         ? previousProviderInvocation?.nativeSessionId
           || savedNativeSessionId
-          || (provider === "claude-code" ? null : logicalSessionId)
+          || (provider === "claude-code" || provider === "codex" ? null : logicalSessionId)
         : null;
+      const continueSessionWithoutNativeId = canResume
+        && provider === "codex"
+        && !continueSessionId;
       const openCodeBaselineRawUsageJson = provider === "opencode"
         ? previousProviderInvocation?.rawUsageJson
           || (resumePayload?.reviewOpenCodeBaselineRawUsageJson as Record<string, unknown> | null | undefined)
@@ -1458,6 +1461,7 @@ export class QualityAssuranceService {
           sessionIdPrefix: "qa-review",
           logicalSessionId,
           continueSessionId,
+          continueSessionWithoutNativeId,
           openCodeBaselineRawUsageJson,
           invocationId: reviewExecutionInvocationId,
           systemRoutingMessage: args.agentInstructions.trim(),
@@ -2135,6 +2139,14 @@ export class QualityAssuranceService {
     maxTaskReviewRuns: number;
     findings?: string[];
   }): Promise<TaskQaReviewOutcome> {
+    const persistedRun = this.deps.qaReviewRepository.getRun(args.run.id) || args.run;
+    if (persistedRun.payload?.continuationStatus === "awaiting_provider") {
+      return this.reconcileAwaitingProviderTaskQaRun({
+        ...args,
+        run: persistedRun,
+      });
+    }
+
     if (this.activeQaContinuationRunIds.has(args.run.id)) {
       return {
         reviewed: false,
@@ -2313,20 +2325,25 @@ export class QualityAssuranceService {
       this.activeQaContinuationRunIds.delete(args.run.id);
     }
 
+    const awaitingHostedProvider = continued.applied && continued.mode === "jules";
     const continuationStatus = continued.noProgress
       ? "no_progress"
-      : continued.applied
+      : awaitingHostedProvider
+        ? "awaiting_provider"
+        : continued.applied
         ? "completed"
         : "skipped";
     const postExhaustionVerificationEligible = continued.applied
       && args.decisiveRuns === args.maxTaskReviewRuns;
+    const continuationUpdatedAt = new Date().toISOString();
     this.deps.qaReviewRepository.updateRun(args.run.id, {
       payload: {
         ...latestPayload(),
         continued: continued.applied,
         continuationMode: continued.mode,
         continuationStatus,
-        continuationSettledAt: new Date().toISOString(),
+        continuationDispatchedAt: awaitingHostedProvider ? continuationUpdatedAt : undefined,
+        continuationSettledAt: awaitingHostedProvider ? undefined : continuationUpdatedAt,
         continuationError: undefined,
         followUpNoProgress: continued.noProgress,
         followUpBlocker: continued.blocker,
@@ -2342,6 +2359,15 @@ export class QualityAssuranceService {
           mergeIndicator: null,
         });
         args.task.status = "CODING_COMPLETED";
+      } else if (awaitingHostedProvider) {
+        clearMergeProjectionForRerun(args.task);
+        this.deps.projectManagementRepository.updateTask(taskId, {
+          status: "in_progress",
+          isMerged: false,
+          mergeIndicator: "QA_PENDING",
+        });
+        args.task.status = "RUNNING";
+        args.task.merge_indicator = "QA_PENDING";
       } else if (continued.applied) {
         clearMergeProjectionForRerun(args.task);
         this.deps.projectManagementRepository.updateTask(taskId, {
@@ -2387,6 +2413,99 @@ export class QualityAssuranceService {
         args.task.id,
         args.run.summaryMarkdown || "QA requested follow-up changes.",
         continued.applied,
+      ),
+    };
+  }
+
+  private reconcileAwaitingProviderTaskQaRun(args: {
+    run: QaReviewRunRecord;
+    task: Subtask;
+    taskRun: TaskRunRecord | null;
+  }): TaskQaReviewOutcome {
+    const executionRepository = this.deps.executionRepository as Partial<ExecutionRepository>;
+    const taskRun = args.run.taskRunId && typeof executionRepository.getTaskRun === "function"
+      ? executionRepository.getTaskRun(args.run.taskRunId) || args.taskRun
+      : args.taskRun;
+    const payload = this.deps.qaReviewRepository.getRun(args.run.id)?.payload || args.run.payload || {};
+    const continuationStartedAt = typeof payload.continuationStartedAt === "string"
+      ? Date.parse(payload.continuationStartedAt)
+      : Number.NaN;
+    const taskRunFinishedAt = taskRun?.finishedAt ? Date.parse(taskRun.finishedAt) : Number.NaN;
+    const expectedSessionId = args.run.targetSessionId?.trim() || args.task.session_id?.trim();
+    const sessionMatches = !expectedSessionId
+      || !taskRun?.sessionId
+      || taskRun.sessionId === expectedSessionId;
+    const completedAfterDispatch = taskRun?.state === "COMPLETED"
+      && sessionMatches
+      && Number.isFinite(continuationStartedAt)
+      && Number.isFinite(taskRunFinishedAt)
+      && taskRunFinishedAt > continuationStartedAt;
+
+    if (completedAfterDispatch) {
+      const reconciledAt = taskRun?.finishedAt || new Date().toISOString();
+      this.deps.qaReviewRepository.updateRun(args.run.id, {
+        payload: {
+          ...payload,
+          continuationStatus: "completed",
+          continuationMode: "jules",
+          continuationSettledAt: reconciledAt,
+          continuationReconciled: true,
+          continued: true,
+          followUpNoProgress: false,
+          followUpBlocker: null,
+        },
+      });
+      if (args.task.record_id) {
+        clearMergeProjectionForRerun(args.task);
+        this.deps.projectManagementRepository.updateTask(args.task.record_id, {
+          status: "coding_completed",
+          isMerged: false,
+          mergeIndicator: "QA_PENDING",
+        });
+      }
+      args.task.status = "CODING_COMPLETED";
+      args.task.is_merged = false;
+      args.task.merge_indicator = "QA_PENDING";
+      return {
+        reviewed: true,
+        reopenedTask: true,
+        mergeBlocked: true,
+        reportText: renderQaChangesRequestedReport(
+          args.task.id,
+          args.run.summaryMarkdown || "QA requested follow-up changes.",
+          true,
+        ),
+      };
+    }
+
+    // API acceptance only proves that Jules queued the same-session follow-up.
+    // Keep the task in progress and retain the durable awaiting checkpoint so
+    // a process restart observes the provider run instead of resending it.
+    if (
+      args.task.status !== "RUNNING"
+      || args.task.is_merged === true
+      || args.task.merge_indicator !== "QA_PENDING"
+    ) {
+      if (args.task.record_id) {
+        clearMergeProjectionForRerun(args.task);
+        this.deps.projectManagementRepository.updateTask(args.task.record_id, {
+          status: "in_progress",
+          isMerged: false,
+          mergeIndicator: "QA_PENDING",
+        });
+      }
+      args.task.status = "RUNNING";
+      args.task.is_merged = false;
+      args.task.merge_indicator = "QA_PENDING";
+    }
+    return {
+      reviewed: false,
+      reopenedTask: false,
+      mergeBlocked: true,
+      reportText: renderQaChangesRequestedReport(
+        args.task.id,
+        args.run.summaryMarkdown || "QA requested follow-up changes.",
+        false,
       ),
     };
   }
@@ -2501,14 +2620,34 @@ export class QualityAssuranceService {
       githubToken: settings.git.githubToken,
       gitlabToken: settings.git.gitlabToken,
     });
+    const workspaceTaskId = args.taskRun?.taskId || args.task.record_id;
+    const recordedWorkspaceTarget = workspaceTaskId
+      && typeof this.deps.executionRepository.getLatestTaskWorkspaceResumeTarget === "function"
+      ? this.deps.executionRepository.getLatestTaskWorkspaceResumeTarget(
+        workspaceTaskId,
+        args.taskRun?.sprintRunId || undefined,
+      )
+      : null;
+    const knownWorkerBranch = args.task.worker_branch?.trim()
+      || args.taskRun?.workerBranch?.trim()
+      || null;
+    const durableWorkspaceTarget = recordedWorkspaceTarget
+      && (!recordedWorkspaceTarget.provider || recordedWorkspaceTarget.provider === args.provider)
+      && (!knownWorkerBranch
+        || !recordedWorkspaceTarget.workerBranch
+        || recordedWorkspaceTarget.workerBranch === knownWorkerBranch)
+      ? recordedWorkspaceTarget
+      : null;
+    const workspaceSessionId = durableWorkspaceTarget?.sessionId || args.sessionId;
     const {
       worktreePath,
       hasPreservedWorkspace,
       currentBranch: resolvedWorkspaceBranch,
     } = await this.invocationWorkspacePreparer.resolveContinuationWorkspace({
       repoPath: args.repoPath,
-      sessionId: args.sessionId,
+      sessionId: workspaceSessionId,
       executionMode: workflowSettings.executionMode,
+      worktreePath: durableWorkspaceTarget?.worktreePath,
     });
     let workerBranch = args.task.worker_branch?.trim()
       || args.taskRun?.workerBranch?.trim()
@@ -2635,6 +2774,8 @@ export class QualityAssuranceService {
           worktreePath,
           workerBranch,
           featureBranch: args.featureBranch,
+          resumeSessionId: workspaceSessionId,
+          allowExistingWorkerBranch: true,
           gitAuth,
           gitPolicy,
         });
@@ -2785,9 +2926,15 @@ export class QualityAssuranceService {
       cwd: worktreePath,
       ...buildProviderSettingsOverride(effectiveModel, followUpProviderSettings),
       sessionId: args.sessionId,
+      workspaceSessionId,
       workflowSettings,
       repoPath: args.repoPath,
-      continueSessionId: previousInvocation?.nativeSessionId || (args.provider === "claude-code" ? null : args.sessionId),
+      workspaceLifecycle: "continue",
+      continueSessionId: previousInvocation?.nativeSessionId
+        || (args.provider === "claude-code" || args.provider === "codex" ? null : args.sessionId),
+      continueSessionWithoutNativeId: args.provider === "codex"
+        && Boolean(previousInvocation)
+        && !previousInvocation?.nativeSessionId,
       // opencode's `export <sessionID>` is cumulative for the whole session, so
       // this follow-up (which resumes the same session) needs the prior
       // invocation's raw snapshot as a baseline to subtract out — otherwise it
@@ -2834,8 +2981,9 @@ export class QualityAssuranceService {
         : {
           name: workflowSettings.containerGitUserName,
           email: workflowSettings.containerGitUserEmail,
-        },
+      },
       githubMode: settings.git.githubMode,
+      allowExistingWorkerBranch: true,
     });
 
     let hasUnpushed = applyResult.hasChanges;
@@ -3002,7 +3150,13 @@ export class QualityAssuranceService {
   ): Promise<void> {
     const currentBranch = await this.workspaceManager.resolveCurrentBranch(worktreePath);
     if (currentBranch !== workerBranch) {
-      await this.runWorkspaceCommand(worktreePath, "git", ["checkout", workerBranch]).catch(() => undefined);
+      await this.runWorkspaceCommand(worktreePath, "git", ["checkout", workerBranch]);
+      const checkedOutBranch = await this.workspaceManager.resolveCurrentBranch(worktreePath);
+      if (checkedOutBranch !== workerBranch) {
+        throw new Error(
+          `Cannot continue CLI QA fixes: workspace ${worktreePath} is on '${checkedOutBranch || "unknown"}' instead of '${workerBranch}'.`,
+        );
+      }
     }
 
     // The original task committed and pushed its work to origin/<workerBranch> via a

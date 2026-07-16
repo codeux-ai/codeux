@@ -461,6 +461,7 @@ export class CycleRunner {
               ...payload,
               sourceAttentionType: "ci_fix",
               guardrailPurpose: "ci_fix",
+              guardrailSubject: taskId,
               guardrailAttempts: attempts,
               guardrailCap: cap,
               guardrailAction: "human_handoff",

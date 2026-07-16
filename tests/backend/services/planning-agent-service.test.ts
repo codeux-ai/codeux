@@ -806,7 +806,7 @@ describe("PlanningAgentService", () => {
     expect(workspaceReuse).toHaveBeenCalledWith(repoPath, expect.stringContaining(project.id), expect.objectContaining({
       branch: "main",
       remoteOnly: true,
-    }));
+    }), expect.any(Function));
     expect(workspaceReuse.mock.calls[0]?.[1]).toContain(sprint.id);
     expect(WorkspaceManager.prototype.removeWorktree).toHaveBeenCalledWith(repoPath, "docker-volume://planning-test");
     const call = vi.mocked(providerRunner.runProviderForText).mock.calls[0]?.[0];
@@ -916,7 +916,7 @@ describe("PlanningAgentService", () => {
     expect(WorkspaceManager.prototype.createOrReuseSnapshotWorkspace).toHaveBeenCalledWith(repoPath, expect.stringContaining(sprint.id), expect.objectContaining({
       branch: "main",
       remoteOnly: true,
-    }));
+    }), expect.any(Function));
     expect(WorkspaceManager.prototype.createSnapshotWorkspace).not.toHaveBeenCalled();
     const call = vi.mocked(providerRunner.runProviderForText).mock.calls[0]?.[0];
     expect(call?.continueSessionId).toBe("native-cancelled");
@@ -963,8 +963,50 @@ describe("PlanningAgentService", () => {
     expect(retried.started).toBe(false);
     const retryCall = vi.mocked(providerRunner.runProviderForText).mock.calls[1]?.[0];
     expect(retryCall?.continueSessionId).toBeNull();
+    expect(retryCall?.continueSessionWithoutNativeId).toBe(false);
     expect(retryCall?.prompt).toContain("Recover the full planning request");
     expect(retryCall?.prompt).not.toContain("Continue the previous planning attempt");
+
+    const missingCodexNativeSprint = projectRepository.createSprint(project.id, {
+      name: "Missing Codex Native Session Sprint",
+      goal: "Resume without confusing logical and native ids",
+    });
+    const missingCodexNativeUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: missingCodexNativeSprint.id,
+      sessionId: "planning-codex-logical-only",
+      provider: "codex",
+      purpose: "planning",
+      status: "cancelled",
+    });
+    const missingCodexNativeInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: missingCodexNativeSprint.id,
+      providerInvocationId: missingCodexNativeUsage.id,
+      type: "planning",
+      status: "cancelled",
+      provider: "codex",
+    });
+    executionRepository.appendExecutionInvocationMessage(missingCodexNativeInvocation.id, {
+      role: "user",
+      contentMarkdown: "Original Codex planning prompt",
+      metadata: {
+        planningRequest: {
+          kind: "plan_sprint",
+          autoStart: false,
+          replan: false,
+        },
+      },
+    });
+
+    const recoveredWithoutNativeTelemetry = await service.recoverInterruptedInvocation(missingCodexNativeInvocation.id);
+
+    expect(recoveredWithoutNativeTelemetry.createdTaskIds).toHaveLength(1);
+    const codexFallbackCall = vi.mocked(providerRunner.runProviderForText).mock.calls[2]?.[0];
+    expect(codexFallbackCall?.sessionId).toBe("planning-codex-logical-only");
+    expect(codexFallbackCall?.continueSessionId).toBeNull();
+    expect(codexFallbackCall?.continueSessionWithoutNativeId).toBe(true);
+    expect(codexFallbackCall?.allowFreshSessionFallback).toBe(false);
 
     const missingNativeSprint = projectRepository.createSprint(project.id, {
       name: "Missing Native Session Sprint",
@@ -990,7 +1032,7 @@ describe("PlanningAgentService", () => {
     await expect(service.recoverInterruptedInvocation(missingNativeInvocation.id)).rejects.toThrow(
       "Refusing to start a fresh session",
     );
-    expect(providerRunner.runProviderForText).toHaveBeenCalledTimes(2);
+    expect(providerRunner.runProviderForText).toHaveBeenCalledTimes(3);
   });
 
   it("stops virtual planning rate-limit retries after the configured max", async () => {
@@ -2095,6 +2137,8 @@ describe("PlanningAgentService", () => {
       runProvider: vi.fn(),
       runProviderForText: vi.fn().mockRejectedValue(new Error("Provider failed completely")),
     };
+    const releaseGitHelper = vi.fn(async () => undefined);
+    const acquireProjectGitHelper = vi.fn(() => releaseGitHelper);
 
     const service = new PlanningAgentService({
       projectManagementRepository: projectRepository,
@@ -2104,6 +2148,7 @@ describe("PlanningAgentService", () => {
       agentPresetSyncService: syncService,
       executionControlService: { orchestrateSprint: vi.fn() } as any,
       providerRunner,
+      acquireProjectGitHelper,
     });
 
     vi.spyOn((service as any).workspaceManager, 'removeWorktree').mockRejectedValue(new Error("Cleanup failed horribly"));
@@ -2127,6 +2172,9 @@ describe("PlanningAgentService", () => {
     const promise = service.planSprint(project.id, sprint.id, { autoStart: false });
 
     await expect(promise).rejects.toThrow("Provider failed completely");
+    expect(acquireProjectGitHelper).toHaveBeenCalledOnce();
+    expect(acquireProjectGitHelper).toHaveBeenCalledWith(repoPath);
+    expect(releaseGitHelper).toHaveBeenCalledOnce();
 
     const invocations = executionRepository.listExecutionInvocations({ projectId: project.id, limit: 10 });
     const invocation = invocations[0];

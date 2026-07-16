@@ -16,6 +16,12 @@ function makeRepo(initial: Record<string, number> = {}) {
       counts.set(k, next);
       return next;
     }),
+    recordOnce: vi.fn((input: { taskId: string; purpose: string }) => {
+      const k = key(input.taskId, input.purpose);
+      const next = (counts.get(k) ?? 0) + 1;
+      counts.set(k, next);
+      return { applied: true, count: next };
+    }),
     refund: vi.fn((input: { taskId: string; purpose: string }) => ({
       applied: true,
       count: Math.max(0, (counts.get(key(input.taskId, input.purpose)) ?? 0) - 1),
@@ -96,6 +102,14 @@ describe("GuardrailService.record / reset", () => {
     const service = new GuardrailService(repo, () => settings());
     expect(service.record(scope, "t1", "task_coding")).toBe(1);
     expect(repo.record).toHaveBeenCalledWith({ projectId: "proj-1", taskId: "t1", purpose: "task_coding" });
+    expect(service.recordOnce(scope, "t1", "ci_fix", "ci-fix-attempt:1", "provider")).toBe(1);
+    expect(repo.recordOnce).toHaveBeenCalledWith({
+      projectId: "proj-1",
+      taskId: "t1",
+      purpose: "ci_fix",
+      sourceKey: "ci-fix-attempt:1",
+      reason: "provider",
+    });
     expect(service.refund(scope, "t1", "task_coding", "runtime-restart:run-1", "restart")).toBe(0);
     expect(repo.refund).toHaveBeenCalledWith({
       projectId: "proj-1",

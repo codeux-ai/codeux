@@ -27,7 +27,15 @@ export function isPendingQaContinuation(run: QaReviewRunRecord | null): boolean 
     return false;
   }
   const continuationStatus = run.payload?.continuationStatus;
-  if (continuationStatus === "pending" || continuationStatus === "running") {
+  // `awaiting_provider` means a hosted follow-up was accepted and is now
+  // executing asynchronously. It remains part of the pending QA handoff so
+  // the orchestrator cannot apply exhaustion while the provider is working,
+  // but the QA service reconciles this state without dispatching again.
+  if (
+    continuationStatus === "pending"
+    || continuationStatus === "running"
+    || continuationStatus === "awaiting_provider"
+  ) {
     return true;
   }
   if (continuationStatus === "failed") {

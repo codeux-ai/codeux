@@ -493,13 +493,13 @@ describe("shared QA and CI card status integration", () => {
       expect(qaTrigger).toHaveClass("text-blue-700");
 
       const workflowTrigger = within(surface).getByRole("button", {
-        name: /CI status: Coding in progress.*Show workflow details/i,
+        name: /Workflow status: Coding in progress.*Show workflow details/i,
       });
       expect(workflowTrigger).toHaveTextContent("Coding in progress");
       expect(surface.querySelector('[data-ci-icon="failure"]')).not.toBeInTheDocument();
 
       await user.click(workflowTrigger);
-      const workflow = screen.getByRole("region", { name: "CI workflow details" });
+      const workflow = screen.getByRole("region", { name: "Workflow details" });
       expect(workflow.querySelector('[data-ci-step="pull_request"]')).toHaveAttribute("data-ci-step-state", "pending");
       expect(workflow.querySelector('[data-ci-step="checks"]')).toHaveAttribute("data-ci-step-state", "pending");
       expect(workflow.querySelector('[data-ci-step="merge"]')).toHaveAttribute("data-ci-step-state", "pending");
@@ -519,6 +519,7 @@ describe("shared QA and CI card status integration", () => {
     const surface = screen.getByRole("region", { name: surfaceLabel });
     const trigger = within(surface).getByRole("button", { name: "QA review details" });
     await tabTo(user, trigger);
+    await user.keyboard("{Enter}");
 
     const details = await screen.findByRole("region", { name: "QA Changes Requested" });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
@@ -613,7 +614,7 @@ describe("shared QA and CI card status integration", () => {
     }
     for (const [, surfaceLabel] of SPRINT_SURFACES) {
       const surface = screen.getByRole("region", { name: surfaceLabel });
-      expect(within(surface).getByRole("button", { name: /CI status: Coding in progress/i })).toBeVisible();
+      expect(within(surface).getByRole("button", { name: /Workflow status: Coding in progress/i })).toBeVisible();
       expect(surface.querySelector('[data-ci-icon="failure"]')).not.toBeInTheDocument();
     }
 
@@ -625,7 +626,7 @@ describe("shared QA and CI card status integration", () => {
     }
     for (const [, surfaceLabel] of SPRINT_SURFACES) {
       const surface = screen.getByRole("region", { name: surfaceLabel });
-      expect(within(surface).getByRole("button", { name: /CI status: Coding in progress/i })).toBeVisible();
+      expect(within(surface).getByRole("button", { name: /Workflow status: Coding in progress/i })).toBeVisible();
       expect(surface.querySelector('[data-ci-icon="failure"]')).not.toBeInTheDocument();
     }
   });

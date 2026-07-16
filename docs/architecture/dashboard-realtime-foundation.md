@@ -64,7 +64,8 @@ Coalescing rules:
 - Throttled snapshot publishes are requeued for the next allowed cadence instead of rebuilt immediately.
 - Snapshot payloads that fingerprint the same after timestamp fields are ignored are not written or broadcast again.
 - `execution_refresh` is a lightweight non-replayable invalidation event and coalesces scheduled project ids into one debounce payload.
-- Replayable runtime and chat events published through `publishRawEvent` remain distinct; they are not deduplicated by the snapshot coalescer.
+- Replayable runtime events published through `publishRawEvent` remain distinct; they are not deduplicated by the snapshot coalescer.
+- Each visible conversation mutation persists one replayable event under its project scope. The event's `threadId` is a routing alias for `thread:<threadId>`, so project-only and thread-only subscribers both receive it while a client subscribed to both scopes receives one frame and one sequence.
 
 Failure handling guarantees:
 
@@ -92,6 +93,13 @@ July 5, 2026 helper contract:
 
 - Dashboard realtime payload fingerprinting is available as a standalone backend helper in `src/services/dashboard-realtime-payload-fingerprint.ts`. The helper has no Express, WebSocket, repository, or persistence dependency, so realtime publishing code can consume it without coupling deduplication logic to transport concerns.
 - The helper covers the common snapshot events (`project.live.updated`, `project.execution.updated`, `project.runtime_status.updated`, `projects.updated`, `project.git.updated`, and `overview.telemetry.updated`) using stable high-signal fields. Unknown payloads use deterministic key-sorted fallback serialization that omits fetch timestamps and bounds depth, array length, object keys, and string length so unusually large feeds cannot dominate the realtime flush cycle.
+
+July 16, 2026 conversation routing refinement:
+
+- `ConnectionChatRepository` no longer appends separate project- and thread-scoped copies of the same thread or message mutation.
+- Conversation events are stored once under `project:<projectId>` and routed through `thread:<threadId>` as an alias during live delivery, replay, and scope-watermark lookup.
+- The websocket server selects one matching scope per client. An open Chat page that subscribes to both its project and selected thread therefore handles one logical mutation instead of two.
+- Replay collapses legacy adjacent project/thread copies, preferring the later sequence so existing databases do not reintroduce duplicate chat updates during reconnect recovery.
 
 ### Dashboard websocket endpoint
 

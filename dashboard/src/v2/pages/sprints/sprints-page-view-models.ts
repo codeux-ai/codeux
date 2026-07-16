@@ -3,6 +3,7 @@ import type { Sprint } from "../../types.js";
 import type {
   ExecutionAttentionItemSummary,
   ExecutionRuntimeEventSummary,
+  ExecutionSprintWorkflowProjection,
   ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
 } from "../../../../../src/contracts/app-types.js";
@@ -24,6 +25,7 @@ import {
   DEFAULT_PROVIDER_CONFIG_NAMES,
   DEFAULT_PROVIDER_SETTINGS,
 } from "../../../../../src/repositories/settings-defaults.js";
+import { isActiveHumanIntervention } from "../../lib/workflow-status-presentation.js";
 
 const ACTIVE_CONNECTION_STATUSES = new Set(["connected", "listening", "idle"]);
 const IN_WORK_STATUSES = new Set<SprintStatus>(["running", "paused"]);
@@ -155,6 +157,29 @@ export function buildPauseResumeRunsMap(sprintRuns: any[]) {
     }
   }
   return map;
+}
+
+export function buildPlanningStatusBySprintId(
+  projections: readonly ExecutionSprintWorkflowProjection[],
+): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const projection of projections) {
+    if (projection.planningStatus) {
+      result.set(projection.sprintId, projection.planningStatus);
+    }
+  }
+  return result;
+}
+
+export function buildWorkflowHumanInterventionBySprintId(
+  projections: readonly ExecutionSprintWorkflowProjection[],
+): Map<string, ExecutionAttentionItemSummary> {
+  const result = new Map<string, ExecutionAttentionItemSummary>();
+  for (const projection of projections) {
+    if (!isActiveHumanIntervention(projection.humanIntervention)) continue;
+    result.set(projection.sprintId, projection.humanIntervention!);
+  }
+  return result;
 }
 
 export function buildDisplaySprints(

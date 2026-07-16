@@ -80,32 +80,41 @@ async function findRecoverableRemoteWorkerBranch(args: {
   runner?: GitRunner;
 }): Promise<string | null> {
   const runner = args.runner ?? ((command, commandArgs, cwd) => runCommandStrict(command, commandArgs, cwd));
-  let refs: string[];
+  let refs: Array<{ ref: string; when: number }>;
   try {
-    const out = await runner("git", ["for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/"], args.repoPath);
-    refs = out.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+    const out = await runner(
+      "git",
+      ["for-each-ref", "--format=%(refname:short)%00%(committerdate:unix)", "refs/remotes/origin/"],
+      args.repoPath,
+    );
+    refs = out.stdout.split("\n").map((line) => {
+      const [ref = "", rawWhen = ""] = line.trim().split("\0");
+      return { ref, when: Number.parseInt(rawWhen, 10) || 0 };
+    }).filter(({ ref }) => Boolean(ref));
   } catch {
     return null;
   }
 
-  let best: { name: string; when: number } | null = null;
-  for (const ref of refs) {
+  const candidates = refs.flatMap(({ ref, when }) => {
     const branchName = ref.startsWith("origin/") ? ref.slice("origin/".length) : ref;
     if (!branchName.startsWith(args.branchPrefix)) {
-      continue;
+      return [];
     }
-
-    const remoteRef = ref.startsWith("origin/") ? ref : `origin/${branchName}`;
-    const ahead = await readAheadCount(runner, args.repoPath, args.featureBranch, remoteRef);
-    if (ahead <= 0) {
-      continue;
-    }
-
-    const when = await readCommitTimestamp(runner, args.repoPath, remoteRef);
-    if (!best || when > best.when) {
-      best = { name: branchName, when };
-    }
-  }
+    return [{ name: branchName, when, remoteRef: ref.startsWith("origin/") ? ref : `origin/${branchName}` }];
+  });
+  const recoverable = (await Promise.all(candidates.map(async (candidate) => (
+    await readAheadCount(runner, args.repoPath, args.featureBranch, candidate.remoteRef) > 0
+      ? candidate
+      : null
+  )))).filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
+  const best = recoverable.reduce<{ name: string; when: number } | null>(
+    (current, candidate) => !current
+      || candidate.when > current.when
+      || (candidate.when === current.when && candidate.name > current.name)
+      ? candidate
+      : current,
+    null,
+  );
   return best?.name ?? null;
 }
 
@@ -125,13 +134,4 @@ async function readAheadCount(
     }
   }
   return 0;
-}
-
-async function readCommitTimestamp(runner: GitRunner, repoPath: string, ref: string): Promise<number> {
-  try {
-    const res = await runner("git", ["log", "-1", "--format=%ct", ref], repoPath);
-    return Number.parseInt(res.stdout.trim(), 10) || 0;
-  } catch {
-    return 0;
-  }
 }

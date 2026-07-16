@@ -306,7 +306,13 @@ function createMainWindow(url: string): BrowserWindow {
         rendererUrl: window.webContents.getURL(),
       }).then(() => {
         if (process.env.CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT === "1") {
-          app.quit();
+          // This is an install/start probe, not a user-driven shutdown. On macOS, requesting the
+          // normal AppKit quit cycle from the did-finish-load promise can be deferred until another
+          // native termination event arrives, leaving an otherwise healthy RC alive on the runner.
+          // Electron documents app.exit() as the immediate, deterministic exit path; the regular
+          // before-quit handler below remains responsible for draining the embedded server during
+          // every production shutdown.
+          app.exit(0);
         }
       }).catch((error: unknown) => {
         process.exitCode = 1;

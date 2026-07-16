@@ -1,5 +1,6 @@
 import { runCommandStrict } from "./cli-process-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { acquireProjectGitHelper } from "../shared/subprocess/command-runner.js";
 
 /** Git config the reaper needs for one project, resolved from effective settings. */
 export interface ReaperProjectGit {
@@ -70,6 +71,15 @@ export class BranchReaperService {
   }
 
   private async reapProject(baseDir: string, git: ReaperProjectGit): Promise<number> {
+    const releaseGitHelper = acquireProjectGitHelper(baseDir);
+    try {
+      return await this.reapProjectWithHelper(baseDir, git);
+    } finally {
+      await releaseGitHelper();
+    }
+  }
+
+  private async reapProjectWithHelper(baseDir: string, git: ReaperProjectGit): Promise<number> {
     const defaultBranch = git.defaultBranch.trim();
     if (!defaultBranch) {
       return 0;

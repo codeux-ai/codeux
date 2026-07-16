@@ -42,7 +42,8 @@ export interface DockerSetupImageCacheInput {
 }
 
 const BUILD_LOCK_STALE_MS = 30 * 60 * 1000;
-const BUILD_LOCK_WAIT_MS = 1_000;
+const BUILD_LOCK_INITIAL_WAIT_MS = 25;
+const BUILD_LOCK_MAX_WAIT_MS = 250;
 const PLAYWRIGHT_CACHED_BROWSERS_PATH = "/ms-playwright";
 
 interface InProcessBuild {
@@ -97,6 +98,15 @@ class DockerBuildProgressTracker {
 
 export class DockerSetupImageCache {
   private static readonly inProcessBuilds = new Map<string, InProcessBuild>();
+  private readonly verifiedImages = new Set<string>();
+  private readonly imageChecks = new Map<string, Promise<boolean>>();
+  private readonly invalidationEpochs = new Map<string, number>();
+
+  invalidateImage(imageTag: string): void {
+    this.verifiedImages.delete(imageTag);
+    this.invalidationEpochs.set(imageTag, (this.invalidationEpochs.get(imageTag) || 0) + 1);
+    this.imageChecks.delete(imageTag);
+  }
 
   async resolveImage(input: DockerSetupImageCacheInput): Promise<DockerSetupImageCacheResult> {
     const {
@@ -147,10 +157,6 @@ export class DockerSetupImageCache {
     const imageTag = this.buildImageTag(baseImage, cacheKey);
     const cacheDir = path.join(runtimeRoot, "setup-image-cache", cacheKey);
 
-    await fs.mkdir(cacheDir, { recursive: true });
-    await fs.writeFile(path.join(cacheDir, "setup.sh"), scriptContent, "utf8");
-    await fs.writeFile(path.join(cacheDir, "Dockerfile"), dockerfileContent, "utf8");
-
     if (await this.imageExists(imageTag, repoPath, signal)) {
       onActivity(`Using cached Docker setup image ${imageTag}.`);
       return { image: imageTag, runSetupScriptAtRuntime: false };
@@ -194,6 +200,8 @@ export class DockerSetupImageCache {
       imageTag,
       baseImage,
       cacheDir,
+      scriptContent,
+      dockerfileContent,
       repoPath,
       signal,
       onActivity,
@@ -244,6 +252,8 @@ export class DockerSetupImageCache {
     imageTag: string;
     baseImage: string;
     cacheDir: string;
+    scriptContent: string;
+    dockerfileContent: string;
     repoPath: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
@@ -254,6 +264,8 @@ export class DockerSetupImageCache {
       imageTag,
       baseImage,
       cacheDir,
+      scriptContent,
+      dockerfileContent,
       repoPath,
       signal,
       onActivity,
@@ -285,6 +297,7 @@ export class DockerSetupImageCache {
         return { image: imageTag, runSetupScriptAtRuntime: false };
       }
 
+      await this.ensureBuildContextFiles(cacheDir, scriptContent, dockerfileContent);
       const dockerCacheDir = mapSourcePathForDaemon(cacheDir, "setup image cache");
       onActivity(`Building cached Docker setup image ${imageTag} from ${baseImage}.`);
       this.emitProgress(onProgress, {
@@ -333,6 +346,7 @@ export class DockerSetupImageCache {
         return { image: baseImage, runSetupScriptAtRuntime: true };
       }
 
+      this.markImageReady(imageTag);
       onActivity(`Built cached Docker setup image ${imageTag}.`);
       this.emitProgress(onProgress, {
         kind: "build_success",
@@ -357,15 +371,22 @@ export class DockerSetupImageCache {
     onProgress: ((progress: DockerSetupImageCacheProgress) => void) | undefined,
   ): Promise<boolean> {
     let loggedWait = false;
+    let waitMs = BUILD_LOCK_INITIAL_WAIT_MS;
     for (;;) {
       if (signal?.aborted) {
         throw signal.reason instanceof Error ? signal.reason : new Error("Docker setup image build was aborted.");
       }
 
       try {
+        await fs.mkdir(path.dirname(lockDir), { recursive: true });
         await fs.mkdir(lockDir);
         return true;
       } catch (error) {
+        if (this.isFileNotFoundError(error)) {
+          await delay(waitMs, undefined, { signal });
+          waitMs = Math.min(BUILD_LOCK_MAX_WAIT_MS, waitMs * 2);
+          continue;
+        }
         if (!this.isFileAlreadyExistsError(error)) {
           throw error;
         }
@@ -387,7 +408,8 @@ export class DockerSetupImageCache {
         });
         loggedWait = true;
       }
-      await delay(BUILD_LOCK_WAIT_MS, undefined, { signal });
+      await delay(waitMs, undefined, { signal });
+      waitMs = Math.min(BUILD_LOCK_MAX_WAIT_MS, waitMs * 2);
     }
   }
 
@@ -403,8 +425,66 @@ export class DockerSetupImageCache {
   }
 
   private async imageExists(imageTag: string, repoPath: string, signal?: AbortSignal): Promise<boolean> {
-    const inspectResult = await runStreamingCommand("docker", ["image", "inspect", imageTag], repoPath, process.env, { signal });
-    return inspectResult.ok;
+    if (this.verifiedImages.has(imageTag)) {
+      return true;
+    }
+
+    const existingCheck = this.imageChecks.get(imageTag);
+    if (existingCheck) {
+      return existingCheck;
+    }
+
+    const invalidationEpoch = this.invalidationEpochs.get(imageTag) || 0;
+    const check = runStreamingCommand(
+      "docker",
+      ["image", "inspect", imageTag],
+      repoPath,
+      process.env,
+      { signal },
+    ).then((inspectResult) => {
+      if (
+        inspectResult.ok
+        && (this.invalidationEpochs.get(imageTag) || 0) === invalidationEpoch
+      ) {
+        this.markImageReady(imageTag);
+      }
+      return inspectResult.ok;
+    });
+    this.imageChecks.set(imageTag, check);
+    try {
+      return await check;
+    } finally {
+      if (this.imageChecks.get(imageTag) === check) {
+        this.imageChecks.delete(imageTag);
+      }
+    }
+  }
+
+  private markImageReady(imageTag: string): void {
+    this.verifiedImages.add(imageTag);
+  }
+
+  private async ensureBuildContextFiles(
+    cacheDir: string,
+    scriptContent: string,
+    dockerfileContent: string,
+  ): Promise<void> {
+    await fs.mkdir(cacheDir, { recursive: true });
+    await Promise.all([
+      this.writeFileIfChanged(path.join(cacheDir, "setup.sh"), scriptContent),
+      this.writeFileIfChanged(path.join(cacheDir, "Dockerfile"), dockerfileContent),
+    ]);
+  }
+
+  private async writeFileIfChanged(filePath: string, content: string): Promise<void> {
+    try {
+      if (await fs.readFile(filePath, "utf8") === content) {
+        return;
+      }
+    } catch {
+      // Missing or unreadable build context files are replaced below.
+    }
+    await fs.writeFile(filePath, content, "utf8");
   }
 
   private subscribeToBuild(
@@ -431,5 +511,12 @@ export class DockerSetupImageCache {
       && error !== null
       && "code" in error
       && (error as NodeJS.ErrnoException).code === "EEXIST";
+  }
+
+  private isFileNotFoundError(error: unknown): boolean {
+    return typeof error === "object"
+      && error !== null
+      && "code" in error
+      && (error as NodeJS.ErrnoException).code === "ENOENT";
   }
 }

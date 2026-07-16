@@ -38,6 +38,7 @@ describe("AttentionQueuePanel", () => {
           ownerType: "worker",
           severity: "high",
           attentionType: "configuration_error",
+          updatedAt: "2026-07-16T08:00:00.000Z",
         }]
       },
       onClaimAttentionItem: vi.fn(),

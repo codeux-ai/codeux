@@ -97,6 +97,7 @@ export async function getProjectLiveSnapshot(
         primaryAssignedWorker: null,
         overflowAssignedWorkers: [],
         attentionItems: [],
+        sprintWorkflowProjections: [],
         recentEvents: [],
         recentInvocations: [],
         updatedAt: null,

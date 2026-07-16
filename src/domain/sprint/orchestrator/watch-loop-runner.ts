@@ -42,7 +42,6 @@ import type { SprintIssueService } from "../../../services/sprint-issue-service.
 import type { SprintRunLifecycleService } from "../../../services/sprint-run-lifecycle-service.js";
 import { getFailedJobLabels, getFailedLogSnippets } from "../../../sprint/ci-status-utils.js";
 import { resolveRollbackFinalizationCiIntelligence } from "./rollback-finalization-policy.js";
-import { acquireProjectGitHelperForSprint } from "../../../shared/subprocess/command-runner.js";
 
 
 export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "getSprintRun" | "getLatestTaskRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "listTaskRunEvents" | "listTaskRunEventsForRuns">;
@@ -213,7 +212,6 @@ export class WatchLoopRunner {
       sourceEventKey: `watch-loop-started:${sprintRunId}`,
     });
 
-    const releaseProjectGitHelper = acquireProjectGitHelperForSprint(repoPath);
     this.deps.heartbeatService.startHeartbeat(sprintRunId, scopedExecutionContext.sprint.id, leaseToken);
     try {
       while (!allFinished) {
@@ -374,7 +372,6 @@ export class WatchLoopRunner {
     } finally {
       this.deps.heartbeatService.stopHeartbeat(sprintRunId);
       this.lastStatusSnapshotFingerprints.delete(sprintRunId);
-      await releaseProjectGitHelper();
     }
     return fullReport;
   }
@@ -1413,7 +1410,7 @@ function mainMergeAttentionItemKind(
   if (source === "merge_conflict") {
     return "merge_conflict";
   }
-  if (source === "ci_fix_required") {
+  if (source === "ci_fix_required" || source === "ci_fix") {
     return "ci_fix_required";
   }
   return null;

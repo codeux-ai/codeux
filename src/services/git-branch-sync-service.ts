@@ -47,16 +47,18 @@ const isSafeBranchRefName = (branch: string): boolean => {
 
 const PRUNE_FETCH_ARGS = ["fetch", "origin", "--prune"];
 
-const buildFetchArgs = (branch?: string): string[] => {
-  const branchName = branch?.trim();
-  if (!branchName || !isSafeBranchRefName(branchName)) {
+const buildFetchArgs = (branch?: string | readonly string[]): string[] => {
+  const branchNames = Array.from(new Set((Array.isArray(branch) ? branch : [branch])
+    .map((candidate) => candidate?.trim())
+    .filter((candidate): candidate is string => Boolean(candidate))));
+  if (branchNames.length === 0 || branchNames.some((branchName) => !isSafeBranchRefName(branchName))) {
     return [...PRUNE_FETCH_ARGS];
   }
   return [
     "fetch",
     "origin",
     "--prune",
-    `+refs/heads/${branchName}:refs/remotes/origin/${branchName}`,
+    ...branchNames.map((branchName) => `+refs/heads/${branchName}:refs/remotes/origin/${branchName}`),
   ];
 };
 
@@ -95,7 +97,7 @@ const defaultGitRunner: GitBranchSyncRunner = (
 export async function fetchOriginIfAvailable(
   repoPath: string,
   runnerOrOptions?: GitBranchSyncRunner | GitBranchSyncOptions,
-  branch?: string,
+  branch?: string | readonly string[],
 ): Promise<boolean> {
   const options = normalizeOptions(runnerOrOptions);
   const runner = options.runner || defaultGitRunner;
@@ -230,8 +232,12 @@ async function syncRemoteBranchIfAvailableUnlocked(
     return true;
   }
 
-  const localHead = (await runGit(runner, ["rev-parse", branchName], repoPath)).stdout.trim();
-  const remoteHead = (await runGit(runner, ["rev-parse", `origin/${branchName}`], repoPath)).stdout.trim();
+  const [localHeadResult, remoteHeadResult] = await Promise.all([
+    runGit(runner, ["rev-parse", branchName], repoPath),
+    runGit(runner, ["rev-parse", `origin/${branchName}`], repoPath),
+  ]);
+  const localHead = localHeadResult.stdout.trim();
+  const remoteHead = remoteHeadResult.stdout.trim();
   if (localHead === remoteHead) {
     return true;
   }

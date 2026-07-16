@@ -41,13 +41,13 @@ describe("DependencyStatusIndicators", () => {
     const completedIndicator = getByTitle(/Depends on Test task 1 \(Resolved; completed\)/);
     expect(completedIndicator.className).toContain("text-status-green");
     expect(completedIndicator).toHaveAttribute("data-dependency-state", "resolved");
-    expect(Array.from(completedIndicator.querySelectorAll(':scope > span[aria-hidden="true"]')).map((element) => element.textContent)).toEqual(["TASK-1", "Resolved"]);
+    expect(Array.from(completedIndicator.querySelectorAll(':scope > span[aria-hidden="true"]')).map((element) => element.textContent)).toEqual(["TASK-1", "Resolved", "Clear", "Test task 1"]);
 
     const pendingIndicator = getByTitle(/Depends on Test task 2 \(Blocked; pending\)/);
     expect(pendingIndicator.className).toContain("text-status-amber");
     expect(pendingIndicator.className).not.toContain("border-dashed");
     expect(pendingIndicator).toHaveAttribute("data-dependency-state", "blocked");
-    expect(Array.from(pendingIndicator.querySelectorAll(':scope > span[aria-hidden="true"]')).map((element) => element.textContent)).toEqual(["TASK-2", "Blocked"]);
+    expect(Array.from(pendingIndicator.querySelectorAll(':scope > span[aria-hidden="true"]')).map((element) => element.textContent)).toEqual(["TASK-2", "Blocked", "Blocking", "Test task 2"]);
 
     const blockedIndicator = getByTitle(/Depends on Test task 3 \(QA failed; QA REVIEW FAILED\)/i);
     expect(blockedIndicator.className).toContain("text-status-red");
@@ -61,7 +61,7 @@ describe("DependencyStatusIndicators", () => {
     const codingCompleteIndicator = getByTitle(/Depends on Test task 4B \(Ready for QA; coding completed\)/i);
     expect(codingCompleteIndicator.className).toContain("text-cyan-700");
     expect(getByText("Ready for QA")).toBeTruthy();
-    expect(Array.from(codingCompleteIndicator.querySelectorAll(':scope > span[aria-hidden="true"]')).map((element) => element.textContent)).toEqual(["TASK-4B", "Ready for QA"]);
+    expect(Array.from(codingCompleteIndicator.querySelectorAll(':scope > span[aria-hidden="true"]')).map((element) => element.textContent)).toEqual(["TASK-4B", "Ready for QA", "Blocking", "Test task 4B"]);
 
     const unknownIndicator = getByTitle(/Depends on Unknown Task \(missing\) \(Unknown; pending\)/i);
     expect(unknownIndicator.className).toContain("border-dashed");

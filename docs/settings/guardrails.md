@@ -17,6 +17,8 @@ Per-job caps and on-limit actions determine whether Code UX blocks, waits, warns
 
 The system defaults allow five task-coding attempts and five CI-fix attempts per task. Both default to `BLOCK_AND_ESCALATE`, so reaching either cap stops further automated attempts and creates an intervention handoff. A cap of `0` remains unlimited.
 
+For CI repair, one attempt means one actual provider invocation. Workspace preparation, restart continuation, and host-side publication reconciliation do not spend additional attempts. If a provider finishes without producing a publishable change, the next retry starts a new provider continuation and consumes exactly one new attempt. CI-fix handoffs are deduplicated by their guardrail subject; resolving the handoff resets that same subject, including sprint-level final-merge repairs.
+
 On upgrade, a persisted guardrail profile that exactly matches the former complete default (eight coding attempts and three CI-fix attempts, with every other policy unchanged) is advanced once to the new five/five defaults. Any customized policy shape is preserved, even when it intentionally uses an `8` or `3` cap.
 
 | Control Surface | Runtime Effect | Review Before Saving |

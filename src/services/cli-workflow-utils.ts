@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { CliWorkflowSettings, ProviderId, ThinkingMode } from "../contracts/app-types.js";
 import { normalizeProviderThinkingMode } from "../repositories/settings-defaults.js";
 
@@ -82,7 +82,10 @@ export const buildWorkerBranchPrefix = (featureBranch: string, taskId: string, p
 };
 
 export const buildWorkerBranch = (featureBranch: string, taskId: string, provider: ProviderId): string => {
-  const suffix = Date.now().toString(36);
+  // A random suffix prevents two launches in the same millisecond (or after a clock rollback)
+  // from selecting the same worker ref. Remote publication additionally uses an absent-ref lease,
+  // so the allocation remains safe if a collision is ever observed.
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   return `${buildWorkerBranchPrefix(featureBranch, taskId, provider)}${suffix}`;
 };
 
