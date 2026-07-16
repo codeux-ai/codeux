@@ -860,7 +860,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     ownerSpec: string,
   ): Promise<CommandResult> {
     const environment = buildWorkspaceEnvironment(options.env ?? process.env);
-    const containerName = `code-ux-net-git-${createHash("sha1")
+    const containerName = `code-ux-net-git-${createHash("sha256")
       .update(`${volumeName}:${randomUUID()}`)
       .digest("hex")
       .slice(0, 24)}`;
