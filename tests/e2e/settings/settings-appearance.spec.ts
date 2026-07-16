@@ -59,20 +59,22 @@ test.describe('settings appearance integrations and mcp panels', () => {
   });
 
   test('persists Notion importer settings across reload and the system settings endpoint', async ({ page, request }) => {
+    const currentLimit = (await fetchSystemSettings(request)).integrations.notion.defaultSearchLimit;
+    const nextLimit = currentLimit === 42 ? 43 : 42;
     await openIntegrations(page);
     await integrationCard(page, 'Notion').getByRole('button', { name: 'Manage' }).click();
     await expect(page.getByRole('heading', { name: 'Notion Configuration' })).toBeVisible();
 
-    await fillRowNumber(page, 'Search limit', 42);
+    await fillRowNumber(page, 'Search limit', nextLimit);
     await expectUnsavedIndicator(page);
     await saveSettings(page);
 
-    await expect.poll(async () => (await fetchSystemSettings(request)).integrations.notion.defaultSearchLimit).toBe(42);
+    await expect.poll(async () => (await fetchSystemSettings(request)).integrations.notion.defaultSearchLimit).toBe(nextLimit);
 
     await page.reload();
     await openIntegrations(page);
     await integrationCard(page, 'Notion').getByRole('button', { name: 'Manage' }).click();
-    await expect(settingsRow(page, 'Search limit').getByRole('spinbutton')).toHaveValue('42');
+    await expect(settingsRow(page, 'Search limit').getByRole('spinbutton')).toHaveValue(String(nextLimit));
   });
 
   test('rejects invalid importer search limits before saving', async ({ page, request }) => {

@@ -4548,6 +4548,7 @@ describe("QualityAssuranceService", () => {
       payload: {
         continuationStatus: "running",
         continuationWorkspaceBaseRef: "original-worker-tip",
+        continuationWorkspaceBaseRecordedAt: "2026-07-16T10:00:00.000Z",
       },
     } as any;
     const qaReviewRepository = {
@@ -4561,8 +4562,20 @@ describe("QualityAssuranceService", () => {
     const service = new QualityAssuranceService({
       projectManagementRepository: { updateTask, getSprint: vi.fn().mockReturnValue(null) } as any,
       executionRepository: {
-        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue({ nativeSessionId: "native-followup" }),
+        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue({
+          id: "completed-qa-followup",
+          taskId: "task-record-1",
+          taskRunId: "task-run-1",
+          sessionId: "cli-codex-task-1",
+          provider: "codex",
+          purpose: "task_coding",
+          status: "completed",
+          nativeSessionId: "native-followup",
+          finishedAt: "2026-07-16T10:00:05.000Z",
+          updatedAt: "2026-07-16T10:00:05.000Z",
+        }),
         updateTaskRun: vi.fn(),
+        appendTaskRunEvent: vi.fn(),
       } as any,
       guardrailService: qaGuardrailStub(),
       sessionTracking: { updateSession: vi.fn(), appendActivity: vi.fn() } as any,
@@ -4593,20 +4606,7 @@ describe("QualityAssuranceService", () => {
         code: 0,
       }),
     );
-    vi.spyOn((service as any).providerExecutionService, "executeProvider").mockImplementation(async () => {
-      expect(updateTask).toHaveBeenLastCalledWith("task-record-1", {
-        status: "coding_completed",
-        isMerged: false,
-        mergeIndicator: "QA_PENDING",
-      });
-      return {
-        ok: true,
-        stdout: "",
-        stderr: "",
-        text: "already completed before restart",
-        usageTelemetry: { conversation: [], rawUsageJson: null },
-      };
-    });
+    const executeProvider = vi.spyOn((service as any).providerExecutionService, "executeProvider");
     const exportPatch = vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
     vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
     vi.spyOn((service as any).prService, "hasUnpushedCommits").mockResolvedValue(false);
@@ -4626,7 +4626,13 @@ describe("QualityAssuranceService", () => {
         status: "CODING_COMPLETED",
         worker_branch: "feature/task-1",
       },
-      taskRun: null,
+      taskRun: {
+        id: "task-run-1",
+        taskId: "task-record-1",
+        sprintRunId: "sprint-run-1",
+        dispatchId: "dispatch-1",
+        workerBranch: "feature/task-1",
+      },
       repoPath: "/repo",
       featureBranch: "feature/sprint-1",
       scope: { projectId: "project-1", sprintId: "sprint-1" },
@@ -4635,12 +4641,63 @@ describe("QualityAssuranceService", () => {
     });
 
     expect(result.producedMergeWork).toBe(true);
+    expect(executeProvider).not.toHaveBeenCalled();
     expect(exportPatch).toHaveBeenCalledWith("/worktree", "original-worker-tip");
     expect(runWorkspaceCommand).toHaveBeenCalledWith(
       "/worktree",
       "git",
       ["rev-parse", "--verify", "original-worker-tip^{commit}"],
     );
+  });
+
+  it("does not recover a stale coding invocation completed before the QA patch baseline", () => {
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: {} as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    const recovery = (service as any).resolveQaFollowUpProviderRecovery({
+      invocation: {
+        id: "initial-coding",
+        taskId: "task-record-1",
+        taskRunId: "task-run-1",
+        sessionId: "cli-codex-task-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "completed",
+        finishedAt: "2026-07-16T09:59:59.000Z",
+        updatedAt: "2026-07-16T09:59:59.000Z",
+      },
+      payload: {
+        continuationStatus: "running",
+        continuationWorkspaceBaseRecordedAt: "2026-07-16T10:00:00.000Z",
+      },
+      provider: "codex",
+      task: {
+        id: "T1",
+        record_id: "task-record-1",
+        title: "Fix thing",
+        prompt: "Implement the fix",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+      },
+      taskRun: {
+        id: "task-run-1",
+        taskId: "task-record-1",
+      },
+    });
+
+    expect(recovery).toBeNull();
   });
 
   it("resets stale merged state when a CLI QA follow-up opens a new PR", async () => {
