@@ -42,9 +42,10 @@ import type { SprintIssueService } from "../../../services/sprint-issue-service.
 import type { SprintRunLifecycleService } from "../../../services/sprint-run-lifecycle-service.js";
 import { getFailedJobLabels, getFailedLogSnippets } from "../../../sprint/ci-status-utils.js";
 import { resolveRollbackFinalizationCiIntelligence } from "./rollback-finalization-policy.js";
+import { acquireProjectGitHelperForSprint } from "../../../shared/subprocess/command-runner.js";
 
 
-export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "getSprintRun" | "getLatestTaskRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "listTaskRunEvents">;
+export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "getSprintRun" | "getLatestTaskRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "listTaskRunEvents" | "listTaskRunEventsForRuns">;
 export type WatchLoopAttentionDependencies = Pick<ProjectAttentionService, "listActiveProjectItems" | "openItems" | "resolveItemsForSprintRun" | "resolveItem">;
 
 export interface WatchLoopDependencies {
@@ -212,6 +213,7 @@ export class WatchLoopRunner {
       sourceEventKey: `watch-loop-started:${sprintRunId}`,
     });
 
+    const releaseProjectGitHelper = acquireProjectGitHelperForSprint(repoPath);
     this.deps.heartbeatService.startHeartbeat(sprintRunId, scopedExecutionContext.sprint.id, leaseToken);
     try {
       while (!allFinished) {
@@ -372,6 +374,7 @@ export class WatchLoopRunner {
     } finally {
       this.deps.heartbeatService.stopHeartbeat(sprintRunId);
       this.lastStatusSnapshotFingerprints.delete(sprintRunId);
+      await releaseProjectGitHelper();
     }
     return fullReport;
   }
@@ -1273,6 +1276,11 @@ export class WatchLoopRunner {
       return { pushedTaskIds, settledTaskIds };
     }
 
+    const resolvedRuns: Array<{
+      task: Subtask;
+      recordId: string;
+      taskRun: NonNullable<ReturnType<ExecutionRepository["getLatestTaskRun"]>>;
+    }> = [];
     for (const task of args.subtasks) {
       const recordId = task.record_id?.trim();
       if (!recordId) {
@@ -1282,12 +1290,37 @@ export class WatchLoopRunner {
       if (!isCliTaskRun(taskRun) || !taskRun?.id) {
         continue;
       }
+      resolvedRuns.push({ task, recordId, taskRun });
+    }
 
-      let events: ReturnType<ExecutionRepository["listTaskRunEvents"]>;
-      try {
-        events = this.deps.executionRepository.listTaskRunEvents(taskRun.id, CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT);
-      } catch {
-        continue;
+    let eventsByTaskRunId: Map<string, ReturnType<ExecutionRepository["listTaskRunEvents"]>>;
+    try {
+      eventsByTaskRunId = this.deps.executionRepository.listTaskRunEventsForRuns(
+        resolvedRuns.map(({ taskRun }) => taskRun.id),
+        {
+          eventTypes: ["cli_git_pushed", "cli_git_no_changes", "ci_gate_status"],
+          limitPerRun: CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT,
+        },
+      );
+    } catch {
+      eventsByTaskRunId = new Map();
+    }
+
+    for (const { task, recordId, taskRun } of resolvedRuns) {
+      let events = eventsByTaskRunId.get(taskRun.id);
+      if (!events) {
+        try {
+          events = this.deps.executionRepository.listTaskRunEvents(
+            taskRun.id,
+            CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT,
+            {
+              eventTypes: ["cli_git_pushed", "cli_git_no_changes", "ci_gate_status"],
+              skipValidation: true,
+            },
+          );
+        } catch {
+          continue;
+        }
       }
 
       const taskIds = [recordId, task.id?.trim()].filter((taskId): taskId is string => Boolean(taskId));
@@ -1318,7 +1351,10 @@ export class WatchLoopRunner {
   }
 
   private resolveWorkspaceReferenceFromTaskRunEvents(taskRunId: string): string | undefined {
-    const events = this.deps.executionRepository.listTaskRunEvents(taskRunId, 200);
+    const events = this.deps.executionRepository.listTaskRunEvents(taskRunId, 200, {
+      eventTypes: ["cli_workspace_bound", "cli_prepare_completed", "cli_worktree_preserved"],
+      skipValidation: true,
+    });
     for (const event of events) {
       if (event.eventType !== "cli_workspace_bound" && event.eventType !== "cli_prepare_completed" && event.eventType !== "cli_worktree_preserved") {
         continue;

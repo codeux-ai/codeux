@@ -138,9 +138,21 @@ function finalizePlanningInvocationError(
 
 interface PlanningContinuationContext {
   promptOverride?: string;
+  provider: Exclude<ProviderId, "jules">;
   continueSessionId: string;
   logicalSessionId: string;
   openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
+  requireExistingSession?: boolean;
+}
+
+interface PersistedPlanSprintRequest {
+  kind: "plan_sprint";
+  autoStart: boolean;
+  replan: boolean;
+  sprintRunId?: string;
+  planningAgentPresetId?: string;
+  quicksprintTemplateId?: string;
+  overrides?: PlanningOverrides;
 }
 
 export class PlanningAgentService {
@@ -322,16 +334,111 @@ export class PlanningAgentService {
       preservedAt: invocation.preservedAt || new Date().toISOString(),
     });
 
+    const continuationProvider = this.requirePlanningContinuationProvider(providerUsage.provider);
     return await this.runPlanSprint(invocation.projectId, invocation.sprintId, {
       autoStart: false,
       replan: true,
       planningAgentPresetId: invocation.agentPresetId || undefined,
+      overrides: {
+        virtualProvider: continuationProvider,
+        ...(providerUsage.model || invocation.model
+          ? { virtualModel: providerUsage.model || invocation.model || undefined }
+          : {}),
+      },
     }, signal, {
+      provider: continuationProvider,
       continueSessionId,
       logicalSessionId: providerUsage.sessionId,
       openCodeBaselineRawUsageJson: providerUsage.provider === "opencode" ? providerUsage.rawUsageJson : null,
       promptOverride: mode === "continue_session" ? "continue_session" : undefined,
+      requireExistingSession: true,
     });
+  }
+
+  /**
+   * Reissues a sprint-planning request interrupted by a runtime restart. When
+   * provider session metadata survived, the new invocation continues that
+   * native conversation with the complete original planning instructions. A
+   * request interrupted before provider linkage can be reissued from durable
+   * input because no provider conversation existed yet.
+   */
+  async recoverInterruptedInvocation(
+    invocationId: string,
+    mode: PlanningInvocationRestartMode = "continue_session",
+  ): Promise<PlanSprintResult> {
+    const invocation = this.deps.executionRepository?.getExecutionInvocation(invocationId);
+    if (!invocation) {
+      throw new Error(`Execution invocation not found: ${invocationId}`);
+    }
+    if (invocation.status !== "failed" && invocation.status !== "cancelled") {
+      throw new Error("Only failed or cancelled planning invocations can be recovered.");
+    }
+    if (invocation.type !== "planning" || !invocation.sprintId) {
+      throw new Error("Only sprint-linked planning invocations support automatic restart recovery.");
+    }
+
+    const options = this.readPersistedPlanSprintRequest(invocation.id, invocation.projectId, invocation.sprintId);
+    const providerUsage = invocation.providerInvocationId
+      ? this.deps.executionRepository?.getProviderInvocationUsage(invocation.providerInvocationId)
+      : null;
+    const continueSessionId = providerUsage
+      ? providerUsage.nativeSessionId || (providerUsage.provider === "claude-code" ? null : providerUsage.sessionId)
+      : null;
+    if (mode === "continue_session" && providerUsage && !continueSessionId) {
+      throw new Error(
+        `Interrupted ${providerUsage.provider} planning invocation does not have a resumable provider session id. Refusing to start a fresh session.`,
+      );
+    }
+    const continuationProvider = providerUsage
+      ? this.requirePlanningContinuationProvider(providerUsage.provider)
+      : null;
+    const continuation: PlanningContinuationContext | undefined = mode === "continue_session" && providerUsage && continueSessionId && continuationProvider
+      ? {
+          provider: continuationProvider,
+          continueSessionId,
+          logicalSessionId: providerUsage.sessionId,
+          openCodeBaselineRawUsageJson: providerUsage.provider === "opencode" ? providerUsage.rawUsageJson : null,
+          promptOverride: "continue_session",
+          requireExistingSession: true,
+        }
+      : undefined;
+    const recoveredAt = new Date().toISOString();
+    this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
+      preservedAt: invocation.preservedAt || recoveredAt,
+    });
+    this.deps.executionRepository?.appendExecutionInvocationMessage(invocation.id, {
+      role: "system",
+      contentMarkdown: continuation
+        ? "Runtime restart interrupted this planning request. Code UX is continuing it in the preserved provider session."
+        : "Runtime restart interrupted this planning request before a resumable provider session was persisted. Code UX is reissuing the complete request.",
+      metadata: {
+        recovery: "startup_planning_request_resumed",
+        continuationMode: continuation ? "continue_session" : "retry_full_prompt",
+      },
+      createdAt: recoveredAt,
+    });
+
+    const recoveredOptions: PlanSprintOptions = continuation
+      ? {
+          ...options,
+          planningAgentPresetId: options.planningAgentPresetId || invocation.agentPresetId || undefined,
+          overrides: {
+            ...options.overrides,
+            virtualProvider: continuation.provider,
+            ...(providerUsage?.model || invocation.model
+              ? { virtualModel: providerUsage?.model || invocation.model || undefined }
+              : {}),
+          },
+        }
+      : options;
+
+    return await this.runPlanSprint(
+      invocation.projectId,
+      invocation.sprintId,
+      recoveredOptions,
+      undefined,
+      continuation,
+    );
   }
 
   async planSprint(projectId: string, sprintId: string, options: PlanSprintOptions, signal?: AbortSignal): Promise<PlanSprintResult> {
@@ -404,6 +511,9 @@ export class PlanningAgentService {
       this.deps.executionRepository?.appendExecutionInvocationMessage(invocation.id, {
         role: "user",
         contentMarkdown: prompt,
+        metadata: {
+          planningRequest: this.buildPersistedPlanSprintRequest(options),
+        },
       });
     }
 
@@ -551,7 +661,7 @@ export class PlanningAgentService {
   private buildPlanningContinuationPrompt(fullPlanningPrompt: string): string {
     return [
       "Continue the previous planning attempt in this same provider session.",
-      "If the previous provider conversation cannot be resumed, use the original planning instructions below as the complete source of truth.",
+      "Use the original planning instructions below as the complete source of truth while continuing this conversation.",
       "",
       "Output the complete valid JSON sprint definition now. Requirements:",
       "- Output raw JSON only — no markdown fences, no commentary, no prose before or after.",
@@ -561,6 +671,61 @@ export class PlanningAgentService {
       "## Original Planning Instructions",
       fullPlanningPrompt,
     ].join("\n");
+  }
+
+  private buildPersistedPlanSprintRequest(options: PlanSprintOptions): PersistedPlanSprintRequest {
+    return {
+      kind: "plan_sprint",
+      autoStart: options.autoStart === true,
+      replan: options.replan === true,
+      ...(options.sprintRunId ? { sprintRunId: options.sprintRunId } : {}),
+      ...(options.planningAgentPresetId ? { planningAgentPresetId: options.planningAgentPresetId } : {}),
+      ...(options.quicksprintTemplateId ? { quicksprintTemplateId: options.quicksprintTemplateId } : {}),
+      ...(options.overrides ? { overrides: options.overrides } : {}),
+    };
+  }
+
+  private readPersistedPlanSprintRequest(
+    invocationId: string,
+    projectId: string,
+    sprintId: string,
+  ): PlanSprintOptions {
+    const messages = this.deps.executionRepository?.listExecutionInvocationMessages(invocationId) || [];
+    const raw = messages
+      .map((message) => message.metadata?.planningRequest)
+      .find((value) => value && typeof value === "object") as Record<string, unknown> | undefined;
+    const existingTasks = this.deps.projectManagementRepository.listTasks(projectId, sprintId);
+    if (!raw || raw.kind !== "plan_sprint") {
+      return {
+        autoStart: false,
+        replan: existingTasks.length > 0,
+      };
+    }
+    return {
+      autoStart: raw.autoStart === true,
+      replan: raw.replan === true || existingTasks.length > 0,
+      sprintRunId: typeof raw.sprintRunId === "string" ? raw.sprintRunId : undefined,
+      planningAgentPresetId: typeof raw.planningAgentPresetId === "string" ? raw.planningAgentPresetId : undefined,
+      quicksprintTemplateId: typeof raw.quicksprintTemplateId === "string" ? raw.quicksprintTemplateId : undefined,
+      overrides: raw.overrides && typeof raw.overrides === "object"
+        ? raw.overrides as PlanningOverrides
+        : undefined,
+    };
+  }
+
+  private requirePlanningContinuationProvider(provider: string): Exclude<ProviderId, "jules"> {
+    switch (provider) {
+      case "gemini":
+      case "codex":
+      case "claude-code":
+      case "qwen-code":
+      case "opencode":
+      case "antigravity":
+      case "mockup-cli":
+        return provider;
+      default:
+        throw new Error(`Provider ${provider} does not support provider-native sprint-planning continuation.`);
+    }
   }
 
   private resolvePlanningRuntime(projectId: string, overrides?: PlanningOverrides): {
@@ -698,6 +863,12 @@ export class PlanningAgentService {
     const providerSettings = { ...baseProviderSettings };
     const provider = providerSettings.provider as Exclude<ProviderId, "jules">;
 
+    if (args.continuation && args.continuation.provider !== provider) {
+      throw new Error(
+        `Planning continuation provider changed from ${args.continuation.provider} to ${provider}. Refusing to start a fresh provider session.`,
+      );
+    }
+
     if (args.overrides?.virtualModel) {
       providerSettings.model = args.overrides.virtualModel;
     }
@@ -817,6 +988,7 @@ export class PlanningAgentService {
         sessionIdPrefix: "planning",
         logicalSessionId: args.continuation?.logicalSessionId,
         continueSessionId: args.continuation?.continueSessionId,
+        allowFreshSessionFallback: args.continuation?.requireExistingSession !== true,
         openCodeBaselineRawUsageJson: args.continuation?.openCodeBaselineRawUsageJson,
         invocationId: args.invocationId,
         systemRoutingMessage,
@@ -830,7 +1002,7 @@ export class PlanningAgentService {
             invocationId: args.invocationId,
             provider,
             originator: originator || "system",
-            description,
+            descriptionChars: description.length,
           });
         },
       });

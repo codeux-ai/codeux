@@ -34,12 +34,7 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 import { DefaultRuntimeContext } from "../../../src/app/runtime-context.js";
 
 const stopServer = async (server: CodeUxServer): Promise<void> => {
-  const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
-  try {
-    await (server as any).handleSigint?.().catch?.(() => undefined);
-  } finally {
-    exitSpy.mockRestore();
-  }
+  await server.close();
 };
 
 describe("CodeUxServer", () => {
@@ -89,6 +84,12 @@ describe("CodeUxServer", () => {
       "cux_test_abcdefghijklmnopqrstuvwxyz123456",
     ], projectRoot);
     const serverModeServer = new CodeUxServer({ projectRoot, appConfig: serverModeConfig });
+    const projectManagementRepository = (
+      serverModeServer as unknown as {
+        projectManagementRepository: { getSelectedProjectId(): string | null };
+      }
+    ).projectManagementRepository;
+    const selectedProjectSpy = vi.spyOn(projectManagementRepository, "getSelectedProjectId");
 
     try {
       await serverModeServer.run();
@@ -103,6 +104,10 @@ describe("CodeUxServer", () => {
     } finally {
       await serverModeServer.close();
     }
+
+    const callsAfterClose = selectedProjectSpy.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(selectedProjectSpy).toHaveBeenCalledTimes(callsAfterClose);
   });
 
   describe("getEffectiveJulesApiKey", () => {
@@ -356,7 +361,7 @@ describe("CodeUxServer", () => {
         trackedSession,
         { ...remoteSession, provider: "jules" }
       ]);
-      expect((server as any).sessionTracking.listSessions).toHaveBeenCalledWith(300);
+      expect((server as any).sessionTracking.listSessions).toHaveBeenCalledWith(300, { includePrompt: false });
       expect(getCachedSessionsSpy).toHaveBeenCalled();
 
       isJulesApiConfiguredSpy.mockRestore();
@@ -929,8 +934,10 @@ describe("CodeUxServer", () => {
 
       bootDashboardArgs.syncGitSettingsFromDashboard();
 
+      const originalLogger = (runServer as any).logger;
       bootDashboardArgs.setLogger("newLogger" as any);
-      // expect removed
+      expect((runServer as any).logger).toBe("newLogger");
+      bootDashboardArgs.setLogger(originalLogger);
 
       expect(bootMcpTransport).toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalled();

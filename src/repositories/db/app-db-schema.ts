@@ -1101,6 +1101,7 @@ CREATE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_task_latest ON task_
 CREATE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_project_task_latest ON task_self_reflection_ratings (project_id, task_id, captured_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_project_created ON task_run_events (project_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_task_run_created_id ON task_run_events (task_run_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_task_run_events_task_run_type_created_id ON task_run_events (task_run_id, event_type, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_run_created ON task_run_events (task_run_id, created_at DESC, id DESC) WHERE event_type = 'provider_activity';
 CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_project_created ON task_run_events (project_id, created_at DESC, id DESC) WHERE event_type = 'provider_activity';
 CREATE INDEX IF NOT EXISTS idx_project_attention_items_project_owner_status ON project_attention_items (project_id, owner_type, status);

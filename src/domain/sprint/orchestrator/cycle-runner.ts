@@ -1,7 +1,10 @@
 import { applyActionRequiredAutomation } from "../../../sprint/action-required-automation.js";
 import { runSessionSyncStep } from "../../../sprint/steps/session-sync-step.js";
 import { runStatusDerivationStep } from "../../../sprint/steps/status-derivation-step.js";
-import { runStartReadyTasksStep } from "../../../sprint/steps/start-ready-tasks-step.js";
+import {
+  runStartReadyTasksStep,
+  type ProviderCapLogState,
+} from "../../../sprint/steps/start-ready-tasks-step.js";
 import { runStatusTableStep } from "../../../sprint/steps/status-table-step.js";
 import { runProtocolStep } from "../../../sprint/steps/protocol-step.js";
 import type { SprintCycleResult } from "../../../sprint/sprint-types.js";
@@ -26,7 +29,6 @@ import { FeaturePrGateService } from "../ci/feature-pr-gate.js";
 import {
   CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT,
   isCliTaskRun,
-  isCliTaskRunAwaitingGitFinalization,
 } from "../ci/cli-git-finalization.js";
 import { MergeConflictDebouncer } from "../ci/merge-conflict-debouncer.js";
 import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
@@ -74,9 +76,40 @@ export interface LocalCliGitEvidence {
   settledTaskIds: Set<string>;
 }
 
+const DEFAULT_QA_REVIEW_PARALLELISM = 4;
+const MAX_QA_REVIEW_PARALLELISM = 4;
+
+export function resolveTaskQaReviewParallelism(settings: ReturnType<
+  SprintOrchestratorDependencies["getDashboardSettings"]
+>): number {
+  const route = settings.aiProvider.invocationRouting.qa_review;
+  const routedProviderConfigIds = [...new Set([
+    ...(route.allowedProviders ?? []),
+    ...(route.provider ? [route.provider] : []),
+  ])];
+  const providerConfigIds = routedProviderConfigIds.length > 0
+    ? routedProviderConfigIds
+    : settings.aiProvider.provider
+      ? [settings.aiProvider.provider]
+      : [];
+  const configuredCapacity = providerConfigIds.reduce((total, providerConfigId) => {
+    const providerSettings = settings.aiProvider.providers[providerConfigId];
+    if (!providerSettings?.enabled || route.providers[providerConfigId]?.enabled === false) {
+      return total;
+    }
+    const limit = providerSettings.maxConcurrentTasks;
+    return Number.isFinite(limit) && Number(limit) > 0 ? total + Math.floor(Number(limit)) : total;
+  }, 0);
+  return Math.min(
+    MAX_QA_REVIEW_PARALLELISM,
+    Math.max(1, configuredCapacity || DEFAULT_QA_REVIEW_PARALLELISM),
+  );
+}
+
 export class CycleRunner {
   private readonly featurePrGate = new FeaturePrGateService();
   private readonly lastAutomatedInterventionKeys = new Map<string, string>();
+  private readonly providerCapLogState: ProviderCapLogState = new Map();
   private readonly stateCoordinator: CycleStateCoordinator;
   // Persists across cycles (CycleRunner is long-lived per orchestrator) so a
   // transient `DIRTY` PR state must persist before it escalates a conflict.
@@ -218,7 +251,13 @@ export class CycleRunner {
     let qaFinishedTaskIds = new Set<string>();
     if (subtasks.length > 0) {
       if (args.loopSteps.statusDerivation && !isAutomaticRollback) {
-        qaFinishedTaskIds = await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
+        qaFinishedTaskIds = await this.reviewCompletedTasks(
+          subtasks,
+          cycleEntryStates,
+          args,
+          dashboardSettings,
+          localCliGitEvidence,
+        );
       }
       const taskStateBeforeFastBranchGate = snapshotTaskState(subtasks);
       const fastBranchOnlyResult = await this.runFastBranchOnlyMergeGate(
@@ -543,7 +582,7 @@ export class CycleRunner {
         args,
         resolvedWorkerMergeConflictSuppressionKeys,
         gitStatus,
-      ) || this.isCliTaskAwaitingGitFinalization(task, args)
+      ) || this.isCliTaskAwaitingGitFinalization(task, args, localCliGitEvidence)
         // Failed CI is not merge work. Once its repair guardrail is exhausted,
         // the CI gate owns a human handoff and the merge protocol must not open
         // a misleading worker merge_required item for the same task.
@@ -616,6 +655,24 @@ export class CycleRunner {
       getRunningCounts: () => {
         return this.deps.providerConcurrencyService.getGlobalRunningCounts();
       },
+      getAvailableProviderCapacity: async (provider) => {
+        if (!(PROVIDER_IDS as readonly string[]).includes(provider)
+          || typeof this.deps.providerConcurrencyService.getAvailableCapacityCount !== "function") {
+          return null;
+        }
+        const providerSettings = dashboardSettings.aiProvider.providers[provider as ProviderId];
+        return await this.deps.providerConcurrencyService.getAvailableCapacityCount(
+          provider as ProviderId,
+          providerSettings?.maxConcurrentTasks ?? 0,
+          "task_coding",
+        );
+      },
+      providerCapLogState: this.providerCapLogState,
+      providerCapLogScope: [
+        args.executionContext.project.id,
+        args.executionContext.sprint.id,
+        args.sprintRunId ?? "no-run",
+      ].join(":"),
       startTask: (task) => {
         if (!args.sprintRunId) {
           throw new Error("Missing sprint run id for orchestrate action.");
@@ -712,38 +769,89 @@ export class CycleRunner {
     };
   }
 
-  private isCliTaskAwaitingGitFinalization(task: Subtask, args: CycleRunnerArgs): boolean {
+  private isCliTaskAwaitingGitFinalization(
+    task: Subtask,
+    args: CycleRunnerArgs,
+    evidence: LocalCliGitEvidence,
+  ): boolean {
     const taskId = task.record_id?.trim();
     if (!taskId || !args.sprintRunId) {
       return false;
     }
+    const taskAliases = [taskId, task.id?.trim()].filter((value): value is string => Boolean(value));
+    if (taskAliases.some((value) => evidence.pushedTaskIds.has(value) || evidence.settledTaskIds.has(value))) {
+      return false;
+    }
     const taskRun = this.deps.executionRepository.getLatestTaskRun(taskId, args.sprintRunId);
-    const listTaskRunEvents = this.deps.executionRepository.listTaskRunEvents?.bind(this.deps.executionRepository);
-    return isCliTaskRunAwaitingGitFinalization(taskRun, listTaskRunEvents);
+    return isCliTaskRun(taskRun);
   }
 
   private collectLocalCliGitEvidence(subtasks: Subtask[], args: CycleRunnerArgs): LocalCliGitEvidence {
     const pushedTaskIds = new Set<string>();
     const settledTaskIds = new Set<string>();
-    if (args.githubMode !== "LOCAL" || !args.sprintRunId) {
+    if (!args.sprintRunId) {
       return { pushedTaskIds, settledTaskIds };
     }
 
+    const recordIds = subtasks
+      .map((task) => task.record_id?.trim())
+      .filter((recordId): recordId is string => Boolean(recordId));
+    const executionRepository = this.deps.executionRepository as Partial<
+      SprintOrchestratorDependencies["executionRepository"]
+    >;
+    const latestRuns = typeof executionRepository.listLatestTaskRuns === "function"
+      ? executionRepository.listLatestTaskRuns(recordIds, args.sprintRunId)
+      : null;
+
+    const resolvedRuns: Array<{
+      task: Subtask;
+      recordId: string;
+      taskRun: NonNullable<ReturnType<SprintOrchestratorDependencies["executionRepository"]["getLatestTaskRun"]>>;
+    }> = [];
     for (const task of subtasks) {
       const recordId = task.record_id?.trim();
       if (!recordId) {
         continue;
       }
-      const taskRun = this.deps.executionRepository.getLatestTaskRun(recordId, args.sprintRunId);
+      const taskRun = latestRuns
+        ? latestRuns.get(recordId) ?? null
+        : this.deps.executionRepository.getLatestTaskRun(recordId, args.sprintRunId);
       if (!isCliTaskRun(taskRun) || !taskRun?.id) {
         continue;
       }
+      resolvedRuns.push({ task, recordId, taskRun });
+    }
 
-      let events: ReturnType<SprintOrchestratorDependencies["executionRepository"]["listTaskRunEvents"]>;
-      try {
-        events = this.deps.executionRepository.listTaskRunEvents(taskRun.id, CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT);
-      } catch {
-        continue;
+    let eventsByTaskRunId: Map<string, ReturnType<SprintOrchestratorDependencies["executionRepository"]["listTaskRunEvents"]>>;
+    try {
+      eventsByTaskRunId = this.deps.executionRepository.listTaskRunEventsForRuns(
+        resolvedRuns.map(({ taskRun }) => taskRun.id),
+        {
+          eventTypes: ["cli_git_pushed", "cli_git_no_changes", "ci_gate_status"],
+          limitPerRun: CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT,
+        },
+      );
+    } catch {
+      eventsByTaskRunId = new Map();
+    }
+
+    for (const { task, recordId, taskRun } of resolvedRuns) {
+      let events = eventsByTaskRunId.get(taskRun.id);
+      if (!events) {
+        // Keep partial test doubles and older adapters compatible while the
+        // production repository uses the single batched query above.
+        try {
+          events = this.deps.executionRepository.listTaskRunEvents(
+            taskRun.id,
+            CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT,
+            {
+              eventTypes: ["cli_git_pushed", "cli_git_no_changes", "ci_gate_status"],
+              skipValidation: true,
+            },
+          );
+        } catch {
+          continue;
+        }
       }
 
       const taskIds = [recordId, task.id?.trim()].filter((taskId): taskId is string => Boolean(taskId));
@@ -1314,6 +1422,7 @@ export class CycleRunner {
     previousStates: Map<string, Subtask["status"]>,
     args: CycleRunnerArgs,
     settings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
+    cliGitEvidence?: LocalCliGitEvidence,
   ): Promise<Set<string>> {
     const qaFinishedTaskIds = new Set<string>();
     if (!this.deps.qualityAssuranceService || !settings.agents.qualityAssurance.enabled) {
@@ -1325,18 +1434,38 @@ export class CycleRunner {
       sprintId: args.executionContext.sprint.id,
       tasks: subtasks,
     });
+    const qaGateStatuses = typeof this.deps.qualityAssuranceService.getTaskMergeGateStatuses === "function"
+      ? this.deps.qualityAssuranceService.getTaskMergeGateStatuses({
+          projectId: args.executionContext.project.id,
+          sprintId: args.executionContext.sprint.id,
+          tasks: subtasks,
+        })
+      : new Map<string, TaskQaMergeGateStatus>();
 
-    const limit = pLimit(5);
+    const reviewParallelism = resolveTaskQaReviewParallelism(settings);
+    const limit = pLimit(reviewParallelism);
     const reviewPromises: Promise<void>[] = [];
 
     for (const task of subtasks) {
       const prev = previousStates.get(task.id);
-      const qaGate = this.deps.qualityAssuranceService.getTaskMergeGateStatus({
-        projectId: args.executionContext.project.id,
-        sprintId: args.executionContext.sprint.id,
-        task,
-      });
+      const taskRecordId = task.record_id?.trim();
+      const qaGate = (taskRecordId ? qaGateStatuses.get(taskRecordId) : null)
+        ?? this.deps.qualityAssuranceService.getTaskMergeGateStatus({
+          projectId: args.executionContext.project.id,
+          sprintId: args.executionContext.sprint.id,
+          task,
+        });
       const taskIsCodeComplete = isTaskCodeComplete(task);
+      // Provider completion is not task completion for a CLI workflow. QA must
+      // inspect the finalized worker branch, never a workspace that is still
+      // being committed/published or was interrupted in that crash window.
+      if (
+        taskIsCodeComplete
+        && cliGitEvidence
+        && this.isCliTaskAwaitingGitFinalization(task, args, cliGitEvidence)
+      ) {
+        continue;
+      }
       const hasSameSessionFollowUpAfterLatestQaRequest = taskIsCodeComplete
         && this.hasCompletedTaskFollowUpAfterLatestQaRequest(task, qaGate, args.sprintRunId);
       const hasPendingQaFollowUp = isPendingQaContinuation(qaGate.latestRun);
@@ -1372,6 +1501,13 @@ export class CycleRunner {
 
       if (!shouldRunQaReview) {
         continue;
+      }
+      // A cycle should settle one resource-bounded QA wave, then merge those results and start
+      // newly unblocked coding work. Queueing the entire backlog behind p-limit would still block
+      // the cycle until every review finished and turn wide DAGs into coding/QA stop-the-world
+      // phases even though only `reviewParallelism` reviews can run at once.
+      if (reviewPromises.length >= reviewParallelism) {
+        break;
       }
 
       const runReview = async () => {

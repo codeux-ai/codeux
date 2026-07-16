@@ -58,6 +58,14 @@ interface StructuredLogRecord {
 }
 
 const logFileStreams = new Map<string, fs.WriteStream>();
+const MAX_PENDING_LOG_STREAM_BYTES = 8 * 1024 * 1024;
+
+const canQueueLogWrite = (stream: NodeJS.WritableStream, text: string): boolean => {
+  const writableLength = typeof (stream as { writableLength?: unknown }).writableLength === "number"
+    ? (stream as unknown as { writableLength: number }).writableLength
+    : 0;
+  return writableLength + Buffer.byteLength(text, "utf8") + 1 <= MAX_PENDING_LOG_STREAM_BYTES;
+};
 
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 10,
@@ -279,13 +287,16 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
     // In Node.js, console.info/log goes to stdout.
     // MCP uses stdout for its protocol.
     // We must redirect ALL logs to stderr.
-    if (shouldLogToConsole(level, purpose)) {
+    if (shouldLogToConsole(level, purpose) && canQueueLogWrite(process.stderr, consoleText)) {
       process.stderr.write(consoleText + "\n");
     }
 
     if (shouldLogToFile(level)) {
       try {
-        getLogFileStream()?.write(fileText + "\n");
+        const stream = getLogFileStream();
+        if (stream && canQueueLogWrite(stream, fileText)) {
+          stream.write(fileText + "\n");
+        }
       } catch {
         // Silently ignore log file write errors to avoid crashing
       }

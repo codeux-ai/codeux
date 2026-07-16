@@ -106,6 +106,24 @@ describe("ProviderExecutionLoop", () => {
     expect(opts.trackingOnActivity).toHaveBeenCalledWith("Claude Code could not resume the previous conversation (no conversation found). Retrying once with a fresh session...", "provider");
   });
 
+  it("does not replace a required Claude continuation with a fresh session", async () => {
+    const runCmd = vi.fn().mockResolvedValue({ ok: false, stdout: "", stderr: "No conversation found" });
+    const opts: ProviderExecutionLoopOptions = {
+      ...getDefaultOptions(),
+      provider: "claude-code",
+      continueSession: true,
+      allowFreshSessionFallback: false,
+      runCmd,
+      isClaudeConversationNotFoundError: vi.fn().mockReturnValue(true),
+    };
+
+    const result = await runProviderExecutionLoop(opts);
+
+    expect(result.ok).toBe(false);
+    expect(runCmd).toHaveBeenCalledTimes(1);
+    expect(opts.buildFreshClaudeSpec).not.toHaveBeenCalled();
+  });
+
   it("retries OpenCode with a fresh session when the native session is not found", async () => {
     const runCmd = vi.fn()
       .mockResolvedValueOnce({ ok: false, stdout: "", stderr: "Error: Session not found" })
@@ -125,6 +143,24 @@ describe("ProviderExecutionLoop", () => {
     expect(runCmd).toHaveBeenCalledTimes(2);
     expect(runCmd).toHaveBeenNthCalledWith(2, "opencode", ["run", "--format", "json", "--dir", "/workspace", "freshArg"]);
     expect(opts.trackingOnActivity).toHaveBeenCalledWith("OpenCode could not resume the previous session (session not found). Retrying once with a fresh session...", "provider");
+  });
+
+  it("does not replace a required OpenCode continuation with a fresh session", async () => {
+    const runCmd = vi.fn().mockResolvedValue({ ok: false, stdout: "", stderr: "Session not found" });
+    const opts: ProviderExecutionLoopOptions = {
+      ...getDefaultOptions(),
+      provider: "opencode",
+      continueSession: true,
+      allowFreshSessionFallback: false,
+      runCmd,
+      isOpenCodeSessionNotFoundError: vi.fn().mockReturnValue(true),
+    };
+
+    const result = await runProviderExecutionLoop(opts);
+
+    expect(result.ok).toBe(false);
+    expect(runCmd).toHaveBeenCalledTimes(1);
+    expect(opts.buildFreshOpenCodeSpec).not.toHaveBeenCalled();
   });
 
   it("demotes Antigravity run to failure when diagnostics indicate an error", async () => {

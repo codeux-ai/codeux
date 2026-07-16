@@ -15,6 +15,7 @@ const WORKFLOWS = {
 const PLAYWRIGHT_CONFIG = "playwright.config.ts";
 const RELEASE_INSTALL_VERIFIER = "scripts/verify-release-install.mjs";
 const ELECTRON_RUNTIME_PREPARER = "scripts/prepare-electron-runtime-deps.mjs";
+const ELECTRON_INSTALL_SMOKE = "pnpm run electron:smoke-installed";
 const REQUIRED_INSTALL = "pnpm install --frozen-lockfile --ignore-scripts";
 const PACKAGE_MANAGER_VERSION = "11.13.0";
 const MINIMUM_NODE_VERSION = "22.13";
@@ -251,6 +252,11 @@ describe("GitHub workflow health", () => {
     expect(releaseCandidate).toContain("node node_modules/electron/install.js");
     expect(releaseCandidate).toContain("pnpm run electron:prepare-deps");
     expect(releaseCandidate).toContain("pnpm exec electron-builder --config electron-builder.config.cjs ${{ matrix.electron-target }} --publish never");
+    expect(releaseCandidate).toContain("sudo apt-get install --no-install-recommends -y libopenjp2-tools xvfb");
+    expect(releaseCandidate).toContain("name: Install and start release candidate");
+    expect(releaseCandidate).toContain(ELECTRON_INSTALL_SMOKE);
+    expectCommandBefore(releaseCandidate, "name: Build unsigned desktop package", "name: Install and start release candidate");
+    expectCommandBefore(releaseCandidate, "name: Install and start release candidate", "name: Upload release candidate artifacts");
     expect(releaseCandidate).toContain("if-no-files-found: error");
     expect(releaseCandidate).not.toContain("pnpm run audit");
     expect(releaseCandidate).not.toContain("pnpm run build");
@@ -272,6 +278,8 @@ describe("GitHub workflow health", () => {
     expect(electronRuntimePreparer).toContain('const onnxRuntimeInstallMode = "skip";');
     expect(electronRuntimePreparer).toContain("onnxRuntimeInstallMode,");
     expect(electronRuntimePreparer).toContain("ONNXRUNTIME_NODE_INSTALL: onnxRuntimeInstallMode");
+    expect(electronRuntimePreparer).toContain('"--config.node-linker=hoisted"');
+    expect(electronRuntimePreparer).toContain("validateRuntimeTree();");
   });
 
   it("keeps legacy main ruleset contexts coupled to their current validation gates", async () => {
@@ -317,6 +325,7 @@ describe("GitHub workflow health", () => {
     expectManualOnly(releaseChecks, "Release candidate diagnostics");
     expect(releaseChecks).toContain("node scripts/verify-release-install.mjs");
     expect(releaseChecks).toContain("pnpm run ${{ matrix.electron-script }} -- --publish never");
+    expect(releaseChecks).toContain(ELECTRON_INSTALL_SMOKE);
 
     expect(mockup).toContain("name: Mockup Sprint Diagnostics");
     expectManualOnly(mockup, "Mockup sprint diagnostics");
@@ -351,6 +360,7 @@ describe("GitHub workflow health", () => {
     expect(desktop).toContain("node node_modules/electron/install.js");
     expect(desktop).toContain("pnpm run build && pnpm run electron:prepare-deps && pnpm exec electron-builder");
     expect(desktop).toContain("--publish never");
+    expect(desktop).toContain(ELECTRON_INSTALL_SMOKE);
     expectCommandBefore(release, "run: pnpm install --frozen-lockfile --ignore-scripts", "run: pnpm run audit");
 
     expect(desktopRelease).toContain("name: Desktop Release Diagnostics");
@@ -358,12 +368,13 @@ describe("GitHub workflow health", () => {
     expect(desktopRelease).toContain("permissions:\n  contents: read");
     expect(desktopRelease).toContain('GH_TOKEN: ""');
     expect(desktopRelease).not.toContain("softprops/action-gh-release");
+    expect(desktopRelease).toContain(ELECTRON_INSTALL_SMOKE);
   });
 
   it("keeps Playwright config isolated, serialized, and failure-artifact friendly", async () => {
     const config = await readRepoFile(PLAYWRIGHT_CONFIG);
 
-    expect(config).toContain("command: 'pnpm exec vite build && node dist/index.js'");
+    expect(config).toContain("command: 'node ./node_modules/vite/bin/vite.js build && node dist/index.js'");
     expect(config).toContain("process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464'");
     expect(config).toContain("baseURL: dashboardBaseUrl");
     expect(config).toContain("url: `${dashboardBaseUrl}/health`");
@@ -440,7 +451,7 @@ describe("GitHub workflow health", () => {
     expect(scenarioScript).toContain('"mockup-sprint-qa:require-file src/qa-dag/final.js');
     expect(scenarioScript).toContain('outcomes: ["changes_requested", "pass"]');
     expect(scenarioScript).toContain("requireSameWorkerBranch: true");
-    expect(scenarioScript.match(/injectMainCiFix:/g)).toHaveLength(2);
+    expect(scenarioScript.match(/injectMainCiFix:/g)).toHaveLength(3);
     expect(scenarioScript).toContain("minimumCompletedCiFixes: 1");
     expect(scenarioScript).toContain("requireSprintLevelCiFix: true");
     expect(scenarioScript).toContain('"qa-dag-follow-up": 2');

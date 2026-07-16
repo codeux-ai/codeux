@@ -30,6 +30,7 @@ const MAINTENANCE_CRITICAL_INDEXES = new Set([
   "idx_provider_invocations_task_run",
   "idx_qa_review_runs_task_run",
   "idx_task_run_events_task_run_created_id",
+  "idx_task_run_events_task_run_type_created_id",
 ]);
 
 export function resolveAppDbPath(dbPath?: string): string {

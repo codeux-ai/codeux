@@ -4,6 +4,7 @@ import type {
   DashboardSettings,
   DashboardSettingsScope,
   DockerContainer,
+  JulesSession,
   ProviderId,
   RestartInvocationPolicy,
   RestartSprintPolicy,
@@ -19,6 +20,7 @@ import type { ProjectAttentionService } from "../domain/workers/project-attentio
 import { sanitizeToken } from "./cli-workflow-utils.js";
 import { QaReviewRecoveryService } from "./runtime-recovery/qa-review-recovery.js";
 import { InvocationRecoveryService } from "./runtime-recovery/invocation-recovery.js";
+import { DurableRemoteRecoveryService } from "./runtime-recovery/durable-remote-recovery.js";
 import { calculateInvocationDurationMs, isTerminalTaskRunState } from "./runtime-recovery/recovery-utils.js";
 import {
   cancelStaleProviderInvocation,
@@ -28,6 +30,10 @@ import {
 import type { GuardrailService } from "./guardrail-service.js";
 import type { SprintRunLifecycleService } from "./sprint-run-lifecycle-service.js";
 import { runCommandStrict } from "./cli-process-runner.js";
+import {
+  CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT,
+  isCliTaskRun,
+} from "../domain/sprint/ci/cli-git-finalization.js";
 
 const ACTIVE_SPRINT_RUN_STATUSES = ["queued", "running"] as const;
 const ACTIVE_DISPATCH_STATUSES = ["queued", "claimed", "running", "cancel_requested"] as const;
@@ -39,6 +45,7 @@ const TERMINAL_PROVIDER_INVOCATION_STATUSES = new Set(["completed", "failed", "c
 const CLI_PROVIDERS = new Set<ProviderId>(["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"]);
 const DURABLE_REMOTE_PROVIDERS = new Set(["jules"]);
 const QA_RUN_START_TIMEOUT_MS = 60_000;
+const DURABLE_REMOTE_STARTUP_RECONCILIATION_TIMEOUT_MS = 5_000;
 
 interface RestartPolicies {
   sprintPolicy: RestartSprintPolicy;
@@ -65,6 +72,7 @@ export interface RuntimeStartupRecoveryResult {
   reconciledStructuredInvocationIds: string[];
   reconciledTaskCodingInvocationIds: string[];
   reconciledTaskCodingProviderIds: string[];
+  reconciledPostProviderTaskRunIds: string[];
   reconciledTerminalProviderDispatchIds: string[];
   reconciledTerminalDispatchIds: string[];
   rehydratedSprintRunIds: string[];
@@ -80,6 +88,9 @@ export interface RuntimeStartupRecoveryResult {
   reconciledDuplicateDispatchIds: string[];
   reconciledInterruptedRepairProviderInvocationIds: string[];
   requeuedInterruptedRepairAttentionItemIds: string[];
+  reactivatedDurableRemoteTaskRunIds: string[];
+  reactivatedDurableRemoteSprintRunIds: string[];
+  resumedPlanningInvocationIds: string[];
 }
 
 interface RuntimeStartupRecoveryServiceDeps {
@@ -89,12 +100,17 @@ interface RuntimeStartupRecoveryServiceDeps {
   qaReviewRepository?: QaReviewRepository;
   projectManagementRepository: ProjectManagementRepository;
   projectAttentionService?: Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItem" | "requeueInterruptedVirtualRepairItems">;
-  guardrailService?: Pick<GuardrailService, "evaluate">;
+  guardrailService?: Pick<GuardrailService, "evaluate" | "refund">;
   sprintOrchestrator: SprintOrchestrator;
   dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]>; removeContainers: (containerIds: string[], options?: { removeVolumes?: boolean }) => Promise<void> }, "listContainers"> & {
     removeContainers?: (containerIds: string[], options?: { removeVolumes?: boolean }) => Promise<void>;
   };
   getDashboardSettings?: (scope?: DashboardSettingsScope) => DashboardSettings;
+  listDurableRemoteSessions?: () => Promise<JulesSession[]>;
+  resumeInterruptedPlanningInvocation?: (
+    invocationId: string,
+    mode: "continue_session" | "retry_full_prompt",
+  ) => Promise<unknown>;
   isProcessAlive?: (pid: number) => boolean;
   logger?: Logger;
 }
@@ -123,6 +139,13 @@ export class RuntimeStartupRecoveryService {
     const restartPolicySyncedPausedSprintIds = this.syncPausedSprintProjections();
     const restartPolicyResult = this.applyRestartSprintPolicy(restartPolicies.sprintPolicy);
     const shouldRecoverInterruptedInvocations = restartPolicies.sprintPolicy === "continue";
+    const interruptedPlanningInvocationIds = shouldRecoverInterruptedInvocations
+      ? this.deps.executionRepository.listActiveExecutionInvocationsByTypes(["planning"]).map((invocation) => invocation.id)
+      : [];
+    const durableRemoteRecoveryResult = shouldRecoverInterruptedInvocations
+      && restartPolicies.invocationPolicy === "continue"
+      ? await this.reconcileDurableRemoteSessions()
+      : { reactivatedTaskRunIds: [], reactivatedSprintRunIds: [] };
     const reconciledLocalDispatchIds = shouldRecoverInterruptedInvocations
       ? await this.reconcileInterruptedLocalDispatches(new Set(recoveredCliSessionIds), activeContainerSessionIds, restartPolicies.invocationPolicy)
       : [];
@@ -135,10 +158,26 @@ export class RuntimeStartupRecoveryService {
     const reconciledContainerInvocationIds = shouldRecoverInterruptedInvocations
       ? await this.reconcileInterruptedCliInvocations(new Set(recoveredCliSessionIds), activeContainerSessionIds, restartPolicies.invocationPolicy)
       : [];
+    // A provider can finish while the outer CLI workflow is still committing and
+    // publishing its branch. Reclassify that exact restart window before generic
+    // terminal-invocation recovery treats the prematurely projected task run as
+    // authoritative and strands it outside the Git merge gate.
+    const reconciledPostProviderTaskRunIds = shouldRecoverInterruptedInvocations
+      ? this.reconcileRecoveredCliProviderCompletionsAwaitingGitFinalization(
+          new Set(recoveredCliSessionIds),
+          restartPolicies.invocationPolicy,
+        )
+      : [];
     const reconciledQaReviewRunIds = await qaReviewRecovery.reconcileInterruptedQaReviewRuns(activeContainerSessionIds);
     const reconciledTerminalProviderLinkedInvocationIds = invocationRecovery.reconcileTerminalProviderLinkedInvocations();
     const demotedPrematureMergeConflictEscalationIds = await this.demotePrematureMergeConflictEscalations();
     const reconciledStructuredInvocationIds = await invocationRecovery.reconcileInterruptedStructuredInvocations(activeContainerSessionIds);
+    const resumedPlanningInvocationIds = shouldRecoverInterruptedInvocations
+      && restartPolicies.invocationPolicy !== "cancel"
+      ? this.resumeInterruptedPlanningInvocations([
+          ...new Set([...interruptedPlanningInvocationIds, ...reconciledStructuredInvocationIds]),
+        ], restartPolicies.invocationPolicy)
+      : [];
     const rehydratedSprintRunIds = this.rehydrateDurableProviderSprintRuns();
     const restartPolicySyncedOrphanedSprintIds = this.syncOrphanedRunningSprintProjections();
     const reconciledTerminalProviderDispatchIds = this.reconcileTerminalProviderBackedDispatches();
@@ -173,11 +212,15 @@ export class RuntimeStartupRecoveryService {
       || reconciledStructuredInvocationIds.length > 0
       || reconciledTaskCodingInvocationIds.length > 0
       || reconciledTaskCodingProviderIds.length > 0
+      || reconciledPostProviderTaskRunIds.length > 0
       || reconciledTerminalProviderDispatchIds.length > 0
       || reconciledTerminalDispatchIds.length > 0
       || reconciledDuplicateDispatchIds.length > 0
       || reconciledInterruptedRepairProviderInvocationIds.length > 0
       || requeuedInterruptedRepairAttentionItemIds.length > 0
+      || durableRemoteRecoveryResult.reactivatedTaskRunIds.length > 0
+      || durableRemoteRecoveryResult.reactivatedSprintRunIds.length > 0
+      || resumedPlanningInvocationIds.length > 0
       || rehydratedSprintRunIds.length > 0
       || reconciledTaskRunIds.length > 0
       || reconciledPausedSprintRunIds.length > 0
@@ -200,11 +243,15 @@ export class RuntimeStartupRecoveryService {
         reconciledStructuredInvocations: reconciledStructuredInvocationIds.length,
         reconciledTaskCodingInvocations: reconciledTaskCodingInvocationIds.length,
         reconciledTaskCodingProviders: reconciledTaskCodingProviderIds.length,
+        reconciledPostProviderTaskRuns: reconciledPostProviderTaskRunIds.length,
         reconciledTerminalProviderDispatches: reconciledTerminalProviderDispatchIds.length,
         reconciledTerminalDispatches: reconciledTerminalDispatchIds.length,
         reconciledDuplicateDispatches: reconciledDuplicateDispatchIds.length,
         reconciledInterruptedRepairProviderInvocations: reconciledInterruptedRepairProviderInvocationIds.length,
         requeuedInterruptedRepairAttentionItems: requeuedInterruptedRepairAttentionItemIds.length,
+        reactivatedDurableRemoteTaskRuns: durableRemoteRecoveryResult.reactivatedTaskRunIds.length,
+        reactivatedDurableRemoteSprintRuns: durableRemoteRecoveryResult.reactivatedSprintRunIds.length,
+        resumedPlanningInvocations: resumedPlanningInvocationIds.length,
         rehydratedSprintRuns: rehydratedSprintRunIds.length,
         reconciledTaskRuns: reconciledTaskRunIds.length,
         reconciledPausedSprintRuns: reconciledPausedSprintRunIds.length,
@@ -229,6 +276,7 @@ export class RuntimeStartupRecoveryService {
       reconciledStructuredInvocationIds,
       reconciledTaskCodingInvocationIds,
       reconciledTaskCodingProviderIds,
+      reconciledPostProviderTaskRunIds,
       reconciledTerminalProviderDispatchIds,
       reconciledTerminalDispatchIds,
       rehydratedSprintRunIds,
@@ -239,11 +287,173 @@ export class RuntimeStartupRecoveryService {
       reconciledDuplicateDispatchIds,
       reconciledInterruptedRepairProviderInvocationIds,
       requeuedInterruptedRepairAttentionItemIds,
+      reactivatedDurableRemoteTaskRunIds: durableRemoteRecoveryResult.reactivatedTaskRunIds,
+      reactivatedDurableRemoteSprintRunIds: durableRemoteRecoveryResult.reactivatedSprintRunIds,
+      resumedPlanningInvocationIds,
       restartPolicyPausedSprintRunIds: restartPolicyResult.pausedSprintRunIds,
       restartPolicyCancelledSprintRunIds: restartPolicyResult.cancelledSprintRunIds,
       resumedSprintRunIds,
       supersededSprintRunIds,
     };
+  }
+
+  private resumeInterruptedPlanningInvocations(
+    reconciledInvocationIds: readonly string[],
+    invocationPolicy: RestartInvocationPolicy,
+  ): string[] {
+    if (!this.deps.resumeInterruptedPlanningInvocation || reconciledInvocationIds.length === 0) {
+      return [];
+    }
+    const latestBySprint = new Map<string, ExecutionInvocationRecord>();
+    for (const invocationId of reconciledInvocationIds) {
+      const invocation = this.deps.executionRepository.getExecutionInvocation(invocationId);
+      if (
+        !invocation
+        || invocation.type !== "planning"
+        || !invocation.sprintId
+        || (invocation.status !== "failed" && invocation.status !== "cancelled")
+      ) {
+        continue;
+      }
+      const existing = latestBySprint.get(invocation.sprintId);
+      if (!existing || Date.parse(invocation.startedAt) > Date.parse(existing.startedAt)) {
+        latestBySprint.set(invocation.sprintId, invocation);
+      }
+    }
+
+    const resumedIds: string[] = [];
+    for (const invocation of latestBySprint.values()) {
+      resumedIds.push(invocation.id);
+      const mode = invocationPolicy === "restart" ? "retry_full_prompt" : "continue_session";
+      this.deps.resumeInterruptedPlanningInvocation(invocation.id, mode).catch((error) => {
+        this.deps.logger?.error("Failed to resume interrupted planning invocation after startup", {
+          projectId: invocation.projectId,
+          sprintId: invocation.sprintId,
+          invocationId: invocation.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+    return resumedIds;
+  }
+
+  private async reconcileDurableRemoteSessions(): Promise<{
+    reactivatedTaskRunIds: string[];
+    reactivatedSprintRunIds: string[];
+  }> {
+    if (!this.deps.listDurableRemoteSessions) {
+      return { reactivatedTaskRunIds: [], reactivatedSprintRunIds: [] };
+    }
+    const sessionsPromise = this.deps.listDurableRemoteSessions();
+    try {
+      const sessions = await new Promise<JulesSession[]>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error(
+            `Durable remote session reconciliation timed out after ${DURABLE_REMOTE_STARTUP_RECONCILIATION_TIMEOUT_MS}ms`,
+          ));
+        }, DURABLE_REMOTE_STARTUP_RECONCILIATION_TIMEOUT_MS);
+        timeout.unref?.();
+        sessionsPromise.then(
+          (result) => {
+            clearTimeout(timeout);
+            resolve(result);
+          },
+          (error) => {
+            clearTimeout(timeout);
+            reject(error);
+          },
+        );
+      });
+      return new DurableRemoteRecoveryService({
+        executionRepository: this.deps.executionRepository,
+        projectManagementRepository: this.deps.projectManagementRepository,
+        sprintRunLifecycleService: this.deps.sprintRunLifecycleService,
+      }).reconcileActiveJulesSessions(sessions);
+    } catch (error) {
+      this.deps.logger?.warn("Could not reconcile durable remote sessions during startup", {
+        provider: "jules",
+        error: error instanceof Error ? error.message : String(error),
+      });
+      const failSafeSessions = this.listLocallyDurableJulesSessions();
+      const failSafeResult = new DurableRemoteRecoveryService({
+        executionRepository: this.deps.executionRepository,
+        projectManagementRepository: this.deps.projectManagementRepository,
+        sprintRunLifecycleService: this.deps.sprintRunLifecycleService,
+      }).reconcileActiveJulesSessions(failSafeSessions, { evidence: "local_fail_safe" });
+
+      // A timeout bounds readiness, not the provider request. If that request
+      // eventually succeeds, repair any additional remotely-active sessions
+      // and attach their runs to the already-started orchestrator registry.
+      if (error instanceof Error && error.message.includes("timed out after")) {
+        void sessionsPromise.then((sessions) => {
+          const repaired = new DurableRemoteRecoveryService({
+            executionRepository: this.deps.executionRepository,
+            projectManagementRepository: this.deps.projectManagementRepository,
+            sprintRunLifecycleService: this.deps.sprintRunLifecycleService,
+          }).reconcileActiveJulesSessions(sessions);
+          for (const sprintRunId of repaired.reactivatedSprintRunIds) {
+            void this.deps.sprintOrchestrator.recoverSprintRun(sprintRunId).catch((recoveryError) => {
+              this.deps.logger?.error("Failed to resume a late-reconciled durable remote sprint run", {
+                sprintRunId,
+                error: recoveryError instanceof Error ? recoveryError.message : String(recoveryError),
+              });
+            });
+          }
+          if (repaired.reactivatedTaskRunIds.length > 0 || repaired.reactivatedSprintRunIds.length > 0) {
+            this.deps.logger?.info("Reconciled durable remote sessions after startup readiness", {
+              provider: "jules",
+              reactivatedTaskRuns: repaired.reactivatedTaskRunIds.length,
+              reactivatedSprintRuns: repaired.reactivatedSprintRunIds.length,
+            });
+          }
+        }).catch((lateError) => {
+          this.deps.logger?.warn("Late durable remote session reconciliation failed", {
+            provider: "jules",
+            error: lateError instanceof Error ? lateError.message : String(lateError),
+          });
+        });
+      }
+
+      return failSafeResult;
+    }
+  }
+
+  private listLocallyDurableJulesSessions(): JulesSession[] {
+    const executionRepository = this.deps.executionRepository as ExecutionRepository & {
+      listTaskRunsByStates?: (states: TaskRunRecord["state"][]) => TaskRunRecord[];
+    };
+    const candidates = new Map<string, TaskRunRecord>();
+    if (typeof executionRepository.listTaskRunsByStates === "function") {
+      for (const taskRun of executionRepository.listTaskRunsByStates([...ACTIVE_TASK_RUN_STATES])) {
+        if (taskRun.provider === "jules" && taskRun.mode === "jules" && this.resolveTaskRunSessionKey(taskRun)) {
+          candidates.set(taskRun.id, taskRun);
+        }
+      }
+    }
+    for (const usage of this.deps.executionRepository.listRunningProviderInvocationUsages(["jules"])) {
+      if (usage.invocationSource !== "EXTERNAL_API" || !usage.taskRunId) {
+        continue;
+      }
+      const taskRun = this.deps.executionRepository.getTaskRun(usage.taskRunId);
+      if (taskRun?.provider === "jules" && taskRun.mode === "jules" && this.resolveTaskRunSessionKey(taskRun)) {
+        candidates.set(taskRun.id, taskRun);
+      }
+    }
+
+    const sessions = new Map<string, JulesSession>();
+    for (const taskRun of candidates.values()) {
+      const sessionId = this.resolveTaskRunSessionKey(taskRun);
+      if (!sessionId || sessions.has(sessionId)) {
+        continue;
+      }
+      sessions.set(sessionId, {
+        id: sessionId,
+        name: taskRun.sessionName || `sessions/${sessionId}`,
+        prompt: "",
+        state: "IN_PROGRESS",
+      });
+    }
+    return [...sessions.values()];
   }
 
   private async requeueInterruptedVirtualRepairAttention(): Promise<{
@@ -689,6 +899,118 @@ export class RuntimeStartupRecoveryService {
     return sessionName.replace(/^sessions\//, "");
   }
 
+  /**
+   * The tracked CLI session covers the whole provider -> Git -> PR workflow, but
+   * task projections can observe provider completion before Git finalization has
+   * durably recorded its result. If shutdown lands in that window, a COMPLETED
+   * task run is not actually mergeable. Turn only recovered sessions with exact
+   * completed-provider evidence back into retryable runs; the replacement then
+   * resumes the preserved workspace at Git finalization.
+   */
+  private reconcileRecoveredCliProviderCompletionsAwaitingGitFinalization(
+    recoveredCliSessionIds: ReadonlySet<string>,
+    invocationPolicy: RestartInvocationPolicy,
+  ): string[] {
+    if (recoveredCliSessionIds.size === 0) {
+      return [];
+    }
+
+    const candidates = this.deps.executionRepository.listTaskRunsByStates(["COMPLETED"])
+      .filter((taskRun) => {
+        const sessionId = this.resolveTaskRunSessionKey(taskRun);
+        return Boolean(sessionId && recoveredCliSessionIds.has(sessionId) && isCliTaskRun(taskRun));
+      });
+    if (candidates.length === 0) {
+      return [];
+    }
+
+    const eventsByTaskRunId = this.deps.executionRepository.listTaskRunEventsForRuns(
+      candidates.map((taskRun) => taskRun.id),
+      {
+        eventTypes: ["cli_git_pushed", "cli_git_no_changes", "cli_workflow_completed"],
+        limitPerRun: CLI_GIT_FINALIZATION_EVENT_SCAN_LIMIT,
+      },
+    );
+    const reconciledAt = new Date().toISOString();
+    const reconciledTaskRunIds: string[] = [];
+    const retryTask = invocationPolicy !== "cancel";
+
+    for (const taskRun of candidates) {
+      const finalizationEvents = eventsByTaskRunId.get(taskRun.id) || [];
+      if (finalizationEvents.some((event) => (
+        event.eventType === "cli_git_pushed"
+        || event.eventType === "cli_git_no_changes"
+        || event.eventType === "cli_workflow_completed"
+      ))) {
+        continue;
+      }
+
+      const completedProviderInvocation = this.deps.executionRepository
+        .listProviderInvocationsForTask(taskRun.projectId, taskRun.taskId)
+        .filter((invocation) => (
+          invocation.taskRunId === taskRun.id
+          && invocation.purpose === "task_coding"
+          && invocation.status === "completed"
+        ))
+        .sort((left, right) => this.providerInvocationActivityMs(right) - this.providerInvocationActivityMs(left))[0];
+      if (!completedProviderInvocation) {
+        continue;
+      }
+
+      const task = this.deps.projectManagementRepository.getTask(taskRun.taskId);
+      if (!task || task.isMerged) {
+        continue;
+      }
+
+      const dispatch = taskRun.dispatchId
+        ? this.deps.executionRepository.getTaskDispatch(taskRun.dispatchId)
+        : null;
+      if (dispatch) {
+        this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+        this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+          connectionId: null,
+          status: "cancelled",
+          startedAt: dispatch.startedAt || taskRun.startedAt || reconciledAt,
+          finishedAt: reconciledAt,
+          lastHeartbeatAt: reconciledAt,
+          errorMessage: retryTask
+            ? null
+            : "Restart policy cancelled a CLI workflow before Git finalization completed.",
+        });
+      }
+
+      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+        connectionId: null,
+        state: retryTask ? "FAILED" : "BLOCKED",
+        finishedAt: reconciledAt,
+        durationMs: calculateDurationMs(taskRun, reconciledAt),
+      });
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "task_dispatch_reconciled", "system", {
+        reason: "shutdown_interrupted_after_provider_completion",
+        providerInvocationId: completedProviderInvocation.id,
+        providerStatus: "completed",
+        previousTaskRunState: taskRun.state,
+        nextTaskRunState: retryTask ? "FAILED" : "BLOCKED",
+        previousDispatchStatus: dispatch?.status || null,
+        nextDispatchStatus: dispatch ? "cancelled" : null,
+      }, {
+        sourceEventKey: `startup-recovery:post-provider-git-finalization:${taskRun.id}`,
+      });
+
+      if (retryTask) {
+        this.refundRestartInterruptedCodingAttempt(taskRun, taskRun.projectId, taskRun.taskId);
+        this.resetTaskToPending(taskRun.taskId);
+      } else {
+        this.deps.projectManagementRepository.updateTask(taskRun.taskId, {
+          status: "QA_REVIEW_FAILED",
+        });
+      }
+      reconciledTaskRunIds.push(taskRun.id);
+    }
+
+    return reconciledTaskRunIds;
+  }
+
   private reconcileInterruptedTaskRuns(): string[] {
     const executionRepository = this.deps.executionRepository as ExecutionRepository & {
       listTaskRunsByStates?: (states: TaskRunRecord["state"][]) => TaskRunRecord[];
@@ -1071,7 +1393,7 @@ export class RuntimeStartupRecoveryService {
       if (!interruptionReason) {
         continue;
       }
-      if (invocationPolicy !== "continue") {
+      if (invocationPolicy !== "continue" || invocation.purpose === "planning") {
         await this.removeContainersForSessions(new Set([invocation.sessionId]));
       }
 
@@ -1247,6 +1569,7 @@ export class RuntimeStartupRecoveryService {
       }
 
       if (retryTask) {
+        this.refundRestartInterruptedCodingAttempt(taskRun, dispatch.projectId, dispatch.taskId);
         this.resetTaskToPending(dispatch.taskId);
       } else {
         this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
@@ -1780,6 +2103,10 @@ export class RuntimeStartupRecoveryService {
       return `Restart policy restarted ${invocation.purpose} invocation after Code UX restart. Session ${invocation.sessionId} was stopped so orchestration can dispatch a fresh attempt.`;
     }
 
+    if (invocation.purpose === "planning") {
+      return `Recovered interrupted planning invocation after Code UX restart. The local provider process cannot be reattached, so the durable planning request will continue in a replacement invocation.`;
+    }
+
     if (recoveredCliSessionIds.has(invocation.sessionId)) {
       return `Recovered stale ${invocation.purpose} invocation after Code UX restart. The backing CLI session (${invocation.sessionId}) was interrupted before completion.`;
     }
@@ -1837,8 +2164,10 @@ export class RuntimeStartupRecoveryService {
       }
     }
 
-    if (invocation.taskRunId) {
-      const taskRun = this.deps.executionRepository.getTaskRun(invocation.taskRunId);
+    const taskRun = invocation.taskRunId
+      ? this.deps.executionRepository.getTaskRun(invocation.taskRunId)
+      : null;
+    if (taskRun) {
       if (taskRun && !isTerminalTaskRunState(taskRun)) {
         this.deps.executionRepository.updateTaskRun(taskRun.id, {
           connectionId: null,
@@ -1847,20 +2176,19 @@ export class RuntimeStartupRecoveryService {
           durationMs: calculateDurationMs(taskRun, reconciledAt),
         });
       }
-      if (taskRun) {
-        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "cli_workflow_cancelled", "system", {
-          dispatchId: invocation.dispatchId || null,
-          providerInvocationId: invocation.id,
-          reason: "runtime_restart_interrupted",
-          recoveredSessionId: invocation.sessionId,
-          message: failureReason,
-        }, {
-          sourceEventKey: `startup-recovery:cli-invocation:${invocation.id}:${taskRun.id}`,
-        });
-      }
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "cli_workflow_cancelled", "system", {
+        dispatchId: invocation.dispatchId || null,
+        providerInvocationId: invocation.id,
+        reason: "runtime_restart_interrupted",
+        recoveredSessionId: invocation.sessionId,
+        message: failureReason,
+      }, {
+        sourceEventKey: `startup-recovery:cli-invocation:${invocation.id}:${taskRun.id}`,
+      });
     }
 
     if (retryTask) {
+      this.refundRestartInterruptedCodingAttempt(taskRun, invocation.projectId, invocation.taskId);
       this.resetTaskToPending(invocation.taskId);
     } else {
       this.deps.projectManagementRepository.updateTask(invocation.taskId, {
@@ -1903,8 +2231,10 @@ export class RuntimeStartupRecoveryService {
       }
     }
 
-    if (invocation.taskRunId) {
-      const taskRun = this.deps.executionRepository.getTaskRun(invocation.taskRunId);
+    const taskRun = invocation.taskRunId
+      ? this.deps.executionRepository.getTaskRun(invocation.taskRunId)
+      : null;
+    if (taskRun) {
       if (taskRun && !isTerminalTaskRunState(taskRun)) {
         this.deps.executionRepository.updateTaskRun(taskRun.id, {
           connectionId: null,
@@ -1913,20 +2243,19 @@ export class RuntimeStartupRecoveryService {
           durationMs: calculateDurationMs(taskRun, reconciledAt),
         });
       }
-      if (taskRun) {
-        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "cli_workflow_cancelled", "system", {
-          dispatchId: invocation.dispatchId || null,
-          executionInvocationId: invocation.id,
-          providerInvocationId: invocation.providerInvocationId || null,
-          reason: "runtime_restart_interrupted_retry_wait",
-          message: failureReason,
-        }, {
-          sourceEventKey: `startup-recovery:retry-wait:${invocation.id}:${taskRun.id}`,
-        });
-      }
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "cli_workflow_cancelled", "system", {
+        dispatchId: invocation.dispatchId || null,
+        executionInvocationId: invocation.id,
+        providerInvocationId: invocation.providerInvocationId || null,
+        reason: "runtime_restart_interrupted_retry_wait",
+        message: failureReason,
+      }, {
+        sourceEventKey: `startup-recovery:retry-wait:${invocation.id}:${taskRun.id}`,
+      });
     }
 
     if (retryTask) {
+      this.refundRestartInterruptedCodingAttempt(taskRun, invocation.projectId, invocation.taskId);
       this.resetTaskToPending(invocation.taskId);
     } else {
       this.deps.projectManagementRepository.updateTask(invocation.taskId, {
@@ -1950,6 +2279,23 @@ export class RuntimeStartupRecoveryService {
       projectId: invocation.projectId,
       sprintId: invocation.sprintId,
     }).cliWorkflow.executionMode;
+  }
+
+  private refundRestartInterruptedCodingAttempt(
+    taskRun: TaskRunRecord | null,
+    projectId: string,
+    taskId: string,
+  ): void {
+    if (!taskRun || (!taskRun.sessionId && !taskRun.sessionName)) {
+      return;
+    }
+    this.deps.guardrailService?.refund(
+      { projectId, sprintId: taskRun.sprintId },
+      taskId,
+      "task_coding",
+      `runtime-restart:${taskRun.id}`,
+      "runtime_restart_interrupted",
+    );
   }
 
   private resetTaskToPending(taskId: string): void {

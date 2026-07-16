@@ -12,6 +12,11 @@ export async function executeCleanupStage(ctx: PipelineContext): Promise<{ clean
     return { cleanedUp: true };
   }
 
+  // A successful task workspace may remain available for QA/restart recovery,
+  // but its helper container is only a command sidecar. Release that sidecar
+  // immediately so preserved volumes do not retain one container per task.
+  await ctx.workspaceManager.releaseWorkspaceHelper(ctx.worktreePath);
+
   ctx.deps.sessionTracking.appendActivity(ctx.sessionId, {
     originator: "system",
     description: `Preserving worktree: ${ctx.worktreePath}`,

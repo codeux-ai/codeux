@@ -311,6 +311,9 @@ export interface ExecutionProviderRunArgs {
   onActivity?: (description: string, originator?: string) => void;
   signal?: AbortSignal;
   continueSessionId?: string | null;
+  /** Defaults to true. Set false when recovery must fail rather than silently
+   *  replacing a missing provider conversation with a fresh session. */
+  allowFreshSessionFallback?: boolean;
   /** Native in-session operation forwarded through the shared provider boundary. */
   nativeSessionOperation?: NativeSessionOperation;
   /** The previous invocation's raw opencode export snapshot for this session,
@@ -578,6 +581,7 @@ export class ProviderExecutionService {
         gitlabToken: args.gitlabToken,
         signal: args.signal,
         continueSessionId,
+        allowFreshSessionFallback: args.allowFreshSessionFallback,
         nativeSessionOperation: args.nativeSessionOperation,
         openCodeBaselineUsage: openCodeBaselineRawUsageJson,
         invocationId: execInvocationId,

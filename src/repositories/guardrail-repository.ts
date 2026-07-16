@@ -13,6 +13,11 @@ import { GUARDRAIL_JOB_TYPES } from "./settings-defaults.js";
  */
 export type GuardrailLedgerPurpose = GuardrailJobType | "qa_review";
 
+export interface GuardrailRefundResult {
+  applied: boolean;
+  count: number;
+}
+
 export const GUARDRAIL_LEDGER_PURPOSES: GuardrailLedgerPurpose[] = [...GUARDRAIL_JOB_TYPES, "qa_review"];
 
 interface GuardrailLedgerRow {
@@ -49,6 +54,44 @@ export class GuardrailRepository {
     return this.getCount(input.taskId, input.purpose);
   }
 
+  /**
+   * Atomically refunds one recorded invocation exactly once. Operational recovery uses the
+   * interrupted task-run id as `sourceKey`, preventing repeated startup passes from reducing
+   * a task's real attempt count more than once.
+   */
+  refund(input: {
+    projectId: string;
+    taskId: string;
+    purpose: GuardrailLedgerPurpose;
+    sourceKey: string;
+    reason?: string;
+  }): GuardrailRefundResult {
+    return this.db.transaction(() => {
+      const now = new Date().toISOString();
+      const inserted = this.db.prepare(`
+        INSERT OR IGNORE INTO guardrail_ledger_adjustments
+          (id, project_id, task_id, purpose, adjustment, source_key, reason, created_at)
+        VALUES (?, ?, ?, ?, -1, ?, ?, ?)
+      `).run(
+        `gra_${randomUUID().replace(/-/g, "")}`,
+        input.projectId,
+        input.taskId,
+        input.purpose,
+        input.sourceKey,
+        input.reason ?? null,
+        now,
+      ).changes > 0;
+      if (inserted) {
+        this.db.prepare(`
+          UPDATE guardrail_ledger
+          SET count = MAX(0, count - 1), updated_at = ?
+          WHERE task_id = ? AND purpose = ?
+        `).run(now, input.taskId, input.purpose);
+      }
+      return { applied: inserted, count: this.getCount(input.taskId, input.purpose) };
+    });
+  }
+
   getCount(taskId: string, purpose: GuardrailLedgerPurpose): number {
     const row = this.db.prepare(`
       SELECT count FROM guardrail_ledger WHERE task_id = ? AND purpose = ?
@@ -80,10 +123,16 @@ export class GuardrailRepository {
   }
 
   reset(taskId: string): void {
-    this.db.prepare(`DELETE FROM guardrail_ledger WHERE task_id = ?`).run(taskId);
+    this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM guardrail_ledger_adjustments WHERE task_id = ?`).run(taskId);
+      this.db.prepare(`DELETE FROM guardrail_ledger WHERE task_id = ?`).run(taskId);
+    });
   }
 
   resetPurpose(taskId: string, purpose: GuardrailLedgerPurpose): void {
-    this.db.prepare(`DELETE FROM guardrail_ledger WHERE task_id = ? AND purpose = ?`).run(taskId, purpose);
+    this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM guardrail_ledger_adjustments WHERE task_id = ? AND purpose = ?`).run(taskId, purpose);
+      this.db.prepare(`DELETE FROM guardrail_ledger WHERE task_id = ? AND purpose = ?`).run(taskId, purpose);
+    });
   }
 }

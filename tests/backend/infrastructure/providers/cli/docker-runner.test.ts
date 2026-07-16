@@ -552,9 +552,11 @@ describe("DockerRunner", () => {
   });
 
   it("supports mockup-cli Docker labels, names, env files, and argv files", async () => {
+    const prompt = "mockup-cli:write fixture.txt :: hello";
     await runner.runProviderInDocker({
       command: "node",
-      args: ["-e", "console.log('mock')", "mockup-cli:write fixture.txt :: hello"],
+      args: ["-e", "console.log('mock')", prompt],
+      prompt,
       cwd: "docker-volume://workspace-1",
       providerEnv: {
         CODE_UX_MOCKUP_MODEL: "default",
@@ -579,7 +581,7 @@ describe("DockerRunner", () => {
       "--label",
       "code-ux.command=node",
       "--label",
-      "code-ux.args-count=3",
+      "code-ux.args-count=2",
     ]));
     expect(dockerArgs.slice(-2)).toEqual(["provider-runner", "node"]);
     expect(dockerArgs).toContain("CODE_UX_PROVIDER_ARGV_FILE=/opt/code-ux/provider-argv.sh");
@@ -589,7 +591,13 @@ describe("DockerRunner", () => {
     expect(envWrite?.[1]).toContain("CODE_UX_MOCKUP_SESSION_ID=mock-session-1");
 
     const argvWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider-argv.sh"));
-    expect(argvWrite?.[1]).toContain("mockup-cli:write fixture.txt :: hello");
+    expect(argvWrite?.[1]).not.toContain(prompt);
+    const promptWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider-prompt.txt"));
+    expect(promptWrite?.[1]).toBe(prompt);
+    expect(promptWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
+    expect(vi.mocked(runStreamingCommand).mock.calls[0]?.[4]).toEqual(expect.objectContaining({
+      stdinFile: "/tmp/code-ux-docker-123/provider-prompt.txt",
+    }));
   });
 
   it("keeps Docker and provider execution behind mocked command runners", async () => {
@@ -845,6 +853,7 @@ describe("DockerRunner", () => {
     await runner.runProviderInDocker({
       command: "codex",
       args: ["exec", "--yolo", longPrompt],
+      prompt: longPrompt,
       cwd: "docker-volume://workspace-1",
       providerEnv: {},
       sessionId: "session-1",
@@ -870,10 +879,74 @@ describe("DockerRunner", () => {
     expect(dockerArgs.slice(-2)).toEqual(["provider-runner", "codex"]);
 
     const argvWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider-argv.sh"));
-    expect(argvWrite?.[1]).toContain(`plan ${"x".repeat(1024)}`);
-    expect(argvWrite?.[1]).toContain(" with ");
-    expect(argvWrite?.[1]).toContain("'\"'\"'quotes'\"'\"'");
+    expect(argvWrite?.[1]).not.toContain(`plan ${"x".repeat(1024)}`);
+    expect(argvWrite?.[1]).toContain("'-'");
     expect(argvWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
+    const promptWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider-prompt.txt"));
+    expect(promptWrite?.[1]).toBe(longPrompt);
+    expect(promptWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
+    expect(vi.mocked(runStreamingCommand).mock.calls[0]?.[4]).toEqual(expect.objectContaining({
+      stdinFile: "/tmp/code-ux-docker-123/provider-prompt.txt",
+    }));
+  });
+
+  it.each([
+    { provider: "gemini" as const, command: "gemini", args: ["--yolo", "--p", "PROMPT"], expected: ["--yolo"] },
+    { provider: "qwen-code" as const, command: "qwen", args: ["--yolo", "-p", "PROMPT"], expected: ["--yolo"] },
+    { provider: "claude-code" as const, command: "claude", args: ["--print", "PROMPT"], expected: ["--print"] },
+    { provider: "opencode" as const, command: "opencode", args: ["run", "--format", "json", "PROMPT"], expected: ["run", "--format", "json"] },
+  ])("streams oversized $provider prompts instead of reconstructing a large container argument", async ({ provider, command, args, expected }) => {
+    const prompt = "PROMPT".repeat(12_000);
+    const providerArgs = args.map((arg) => arg === "PROMPT" ? prompt : arg);
+
+    await runner.runProviderInDocker({
+      command,
+      args: providerArgs,
+      prompt,
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: `large-${provider}`,
+      providerLabel: provider,
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const argvWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider-argv.sh"));
+    for (const expectedArg of expected) {
+      expect(argvWrite?.[1]).toContain(`'${expectedArg}'`);
+    }
+    expect(argvWrite?.[1]).not.toContain(prompt.slice(0, 1024));
+    expect(vi.mocked(runStreamingCommand).mock.calls[0]?.[4]).toEqual(expect.objectContaining({
+      stdinFile: "/tmp/code-ux-docker-123/provider-prompt.txt",
+    }));
+  });
+
+  it("preserves Antigravity's single prompt argument below the execve limit", () => {
+    const prompt = `${"é".repeat(30_000)}\n${"z".repeat(30_000)}`;
+    const launch = (runner as any).prepareProviderLaunch(
+      "antigravity",
+      ["--dangerously-skip-permissions", "-p", prompt],
+      prompt,
+    ) as { args: string[]; stdinPrompt: string | null };
+
+    expect(launch.stdinPrompt).toBeNull();
+    expect(launch.args).toEqual(["--dangerously-skip-permissions", "-p", prompt]);
+  });
+
+  it("rejects an unsafe Antigravity prompt before execve can fail opaquely", () => {
+    const prompt = "é".repeat(70_000);
+
+    expect(() => (runner as any).prepareProviderLaunch(
+      "antigravity",
+      ["--dangerously-skip-permissions", "-p", prompt],
+      prompt,
+    )).toThrow(/Antigravity cannot safely accept a 140000-byte prompt.*safe limit is 122880 bytes/);
   });
 
   it("applies configured memory limits to provider Docker runs", async () => {

@@ -82,6 +82,8 @@ You can create a sprint from the Sprints page or directly from the top-bar sprin
 
 From the top bar, open the sprint selector and click **Add Sprint**. This compact flow asks only for a name and goal, creates an idle sprint, refreshes the sprint collection, and selects the new sprint. The selector stays enabled even when the project has no sprints so this action remains available for first-sprint creation. Click **Manage Sprints** in the same selector to open the full Sprints page.
 
+Sprint action menus automatically flip at viewport edges and scroll internally when their full action list is taller than the available screen space, so every action remains reachable on short windows.
+
 From the Sprints page:
 
 1. Click **+ New sprint**.

@@ -51,6 +51,7 @@ import { ensureDefaultCodeUxAssetsInstalled } from "./code-ux-default-assets-ser
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { mergePreviewEnvironmentVariables, sanitizePreviewEnvironmentVariables } from "../shared/preview-environment.js";
+import { getRuntimeOwnerDockerArgs, getRuntimeOwnerLabel } from "../shared/config/runtime-owner.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -440,6 +441,7 @@ export class SprintPreviewService {
       "create",
       "--label", "code-ux.preview-volume=true",
       "--label", "code-ux.managed=true",
+      ...getRuntimeOwnerDockerArgs(),
       "--label", `code-ux.project-id=${projectId}`,
       "--label", `code-ux.sprint-id=${sprintId}`,
       "--label", `code-ux.session-id=${sessionId}`,
@@ -1203,7 +1205,7 @@ export class SprintPreviewService {
     try {
       const result = await runCommandStrict(
         "docker",
-        ["ps", "-aq", "--filter", "label=code-ux.preview=true"],
+        ["ps", "-aq", "--filter", "label=code-ux.preview=true", "--filter", `label=${getRuntimeOwnerLabel()}`],
         process.cwd(),
       );
       return result.stdout
@@ -1223,6 +1225,7 @@ export class SprintPreviewService {
           "ps",
           "-a",
           "--filter", "label=code-ux.preview=true",
+          "--filter", `label=${getRuntimeOwnerLabel()}`,
           "--format",
           "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Label \"code-ux.project-id\"}}\t{{.Label \"code-ux.sprint-id\"}}\t{{.Label \"code-ux.session-id\"}}\t{{.Label \"code-ux.host-port\"}}",
         ],

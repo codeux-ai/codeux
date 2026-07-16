@@ -158,6 +158,23 @@ describe("DatabaseMaintenanceService", () => {
     expect(mockSessionDb.prepare).toHaveBeenCalledWith(expect.stringContaining("DELETE FROM provider_activities"));
     expect(mockAppDb.exec).toHaveBeenCalledWith("PRAGMA wal_checkpoint(PASSIVE);");
   });
+
+  it("checkpoints WAL files while provider work is active without running retention writes", () => {
+    mockAppDb.prepare.mockImplementation((sql: string) => ({
+      all: vi.fn(() => []),
+      run: vi.fn(() => ({ changes: 0 })),
+      get: vi.fn(() => sql.includes("FROM provider_invocations") ? { active: 1 } : undefined),
+    }));
+
+    createService().runPeriodicMaintenance();
+
+    expect(mockAppDb.prepare).not.toHaveBeenCalledWith(expect.stringContaining("DELETE FROM task_runs"));
+    expect(mockSessionDb.prepare).not.toHaveBeenCalled();
+    expect(mockAppDb.exec).toHaveBeenCalledWith("PRAGMA wal_checkpoint(PASSIVE);");
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      "Skipping periodic database pruning while provider invocations are active.",
+    );
+  });
 });
 
 describe("DatabaseMaintenanceService SQLite retention", () => {

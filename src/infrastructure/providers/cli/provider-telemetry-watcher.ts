@@ -14,6 +14,10 @@ import {
 } from "./provider-usage.js";
 import { CodexRolloutAccumulator, type CodexLogResult } from "./provider-logs/codex-log-parser.js";
 import {
+  ClaudeCodeLogAccumulator,
+  type ClaudeCodeLogResult,
+} from "./provider-logs/claude-code-log-parser.js";
+import {
   ProviderTranscriptChunkDecoder,
   type ProviderTranscriptChunk,
   type ProviderTranscriptCursor,
@@ -62,6 +66,8 @@ type ProviderMetadataSignature = { available: true; signature: string } | { avai
 interface FullReadInputs {
   resolvedNativeSessionId: string | null;
   claudeSessionJsonl: string | null;
+  claudeLog: ClaudeCodeLogResult | null;
+  claudeIncrementalSignature: string | null;
   codexSessionJson: string | null;
   codexRollout: CodexLogResult | null;
   codexIncrementalSignature: string | null;
@@ -108,6 +114,7 @@ async function buildTelemetrySourceSignature(args: {
   stdout: string;
   stderr: string;
   claudeSessionJsonl: string | null;
+  claudeIncrementalSignature: string | null;
   codexSessionJson: string | null;
   codexIncrementalSignature: string | null;
   qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null;
@@ -121,6 +128,7 @@ async function buildTelemetrySourceSignature(args: {
     signatureForString(args.stdout),
     signatureForString(args.stderr),
     signatureForString(args.claudeSessionJsonl || ""),
+    args.claudeIncrementalSignature || "",
     signatureForString(args.codexSessionJson || ""),
     args.codexIncrementalSignature || "",
     signatureForString(args.antigravityTranscriptJsonl || ""),
@@ -180,14 +188,17 @@ export class ProviderTelemetryWatcher {
   private failureBackoff: FailureBackoffState | null = null;
   private resolvedNativeSessionId: string | null = null;
   private readonly codexRolloutAccumulator: CodexRolloutAccumulator | null;
+  private readonly claudeLogAccumulator: ClaudeCodeLogAccumulator | null;
   private readonly codexChunkDecoder = new ProviderTranscriptChunkDecoder();
   private readonly claudeChunkDecoder = new ProviderTranscriptChunkDecoder();
-  private claudeJsonlChunks: string[] = [];
   private wakeWait: (() => void) | null = null;
 
   constructor(private readonly opts: TelemetryWatcherOptions) {
     this.codexRolloutAccumulator = opts.provider === "codex"
       ? new CodexRolloutAccumulator(opts.startedMs)
+      : null;
+    this.claudeLogAccumulator = opts.provider === "claude-code"
+      ? new ClaudeCodeLogAccumulator(opts.startedMs)
       : null;
   }
 
@@ -216,6 +227,8 @@ export class ProviderTelemetryWatcher {
     const result = await this.collectIncrementalCodexInputs(null, {
       resolvedNativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId,
       claudeSessionJsonl: null,
+      claudeLog: null,
+      claudeIncrementalSignature: null,
       codexSessionJson: null,
       codexRollout: null,
       codexIncrementalSignature: null,
@@ -295,6 +308,8 @@ export class ProviderTelemetryWatcher {
         const {
           resolvedNativeSessionId,
           claudeSessionJsonl,
+          claudeLog,
+          claudeIncrementalSignature,
           codexSessionJson,
           codexRollout,
           codexIncrementalSignature,
@@ -309,6 +324,7 @@ export class ProviderTelemetryWatcher {
           stdout,
           stderr,
           claudeSessionJsonl,
+          claudeIncrementalSignature,
           codexSessionJson,
           codexIncrementalSignature,
           qwenLog,
@@ -339,6 +355,7 @@ export class ProviderTelemetryWatcher {
           capturedText: "",
           nativeSessionId: resolvedNativeSessionId || this.opts.nativeSessionId,
           claudeSessionJsonl,
+          claudeSessionLog: claudeLog,
           codexSessionJson,
           codexRollout: parsedCodexRollout,
           qwenReportedUsage: qwenLog?.usage ?? null,
@@ -384,6 +401,8 @@ export class ProviderTelemetryWatcher {
     const emptyInputs: FullReadInputs = {
       resolvedNativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId,
       claudeSessionJsonl: null,
+      claudeLog: null,
+      claudeIncrementalSignature: null,
       codexSessionJson: null,
       codexRollout: null,
       codexIncrementalSignature: null,
@@ -487,6 +506,11 @@ export class ProviderTelemetryWatcher {
     preReadSourceSignature: string | null,
     emptyInputs: FullReadInputs,
   ): Promise<FullReadResult> {
+    let latestLog: ClaudeCodeLogResult | null = null;
+    let signature: string | null = null;
+    let sourceId: string | null = null;
+    let reset = false;
+    const decodedParts: string[] = [];
     for (let index = 0; index < MAX_INCREMENTAL_CHUNKS_PER_POLL; index += 1) {
       const chunk = await this.opts.readClaudeSessionJsonlChunk!(
         this.opts.nativeSessionId!,
@@ -494,9 +518,14 @@ export class ProviderTelemetryWatcher {
       );
       if (!chunk) break;
       const decoded = this.claudeChunkDecoder.consume(chunk);
-      if (decoded.reset) this.claudeJsonlChunks = [];
-      if (decoded.text) this.claudeJsonlChunks.push(decoded.text);
+      signature = `${chunk.sourceId}:${chunk.nextOffset}:${chunk.totalBytes}`;
+      sourceId = decoded.sourceId;
+      reset ||= decoded.reset;
+      if (decoded.text) decodedParts.push(decoded.text);
       if (decoded.complete || chunk.nextOffset === chunk.startOffset) break;
+    }
+    if (sourceId && this.claudeLogAccumulator) {
+      latestLog = this.claudeLogAccumulator.appendChunk(decodedParts.join(""), sourceId, reset);
     }
     return {
       skipped: false,
@@ -504,7 +533,8 @@ export class ProviderTelemetryWatcher {
       inputs: {
         ...emptyInputs,
         resolvedNativeSessionId: this.opts.nativeSessionId,
-        claudeSessionJsonl: this.claudeJsonlChunks.length > 0 ? this.claudeJsonlChunks.join("") : null,
+        claudeLog: latestLog,
+        claudeIncrementalSignature: signature,
       },
     };
   }
@@ -523,6 +553,8 @@ export class ProviderTelemetryWatcher {
         inputs: {
           resolvedNativeSessionId,
           claudeSessionJsonl: null,
+          claudeLog: null,
+          claudeIncrementalSignature: null,
           codexSessionJson: null,
           codexRollout: null,
           codexIncrementalSignature: null,
@@ -549,6 +581,8 @@ export class ProviderTelemetryWatcher {
           inputs: {
             resolvedNativeSessionId,
             claudeSessionJsonl: null,
+            claudeLog: null,
+            claudeIncrementalSignature: null,
             codexSessionJson: null,
             codexRollout: null,
             codexIncrementalSignature: null,
@@ -566,6 +600,8 @@ export class ProviderTelemetryWatcher {
         inputs: {
           resolvedNativeSessionId,
           claudeSessionJsonl: null,
+          claudeLog: null,
+          claudeIncrementalSignature: null,
           codexSessionJson: null,
           codexRollout: null,
           codexIncrementalSignature: null,
@@ -583,6 +619,8 @@ export class ProviderTelemetryWatcher {
       inputs: {
         resolvedNativeSessionId,
         claudeSessionJsonl: null,
+        claudeLog: null,
+        claudeIncrementalSignature: null,
         codexSessionJson: null,
         codexRollout: null,
         codexIncrementalSignature: null,

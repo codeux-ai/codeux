@@ -67,11 +67,12 @@ macOS DMG builds include the MIT license resource through `build/license_en.txt`
 - `pnpm run electron:dist:win`: build Windows targets.
 - `pnpm run electron:benchmark:runtime`: launch Electron with an isolated temporary user profile, navigate dashboard routes, probe backend endpoints, and write route/API/renderer/runtime metrics under `.cache/electron-runtime-benchmark/`.
 - `pnpm run electron:benchmark:win`: build Windows installers with `normal` and `store` compression and write timing/size data to `release/electron-benchmark/summary.json`.
+- `pnpm run electron:smoke-installed`: select the native package in `release/electron/` whose artifact name matches the current `package.json` version, install it, start that installed app with an isolated profile, wait until its backend and renderer are ready, and require a clean exit. Linux requires passwordless `sudo` and `xvfb-run`, as provided by the release runners.
 - `pnpm run electron:install-deps`: rebuild native app dependencies for Electron.
 
 The release output is written to `release/electron/`.
 
-Electron package builds run `pnpm run electron:prepare-deps` before Electron Builder. That script creates a production-only, hoisted runtime dependency tree in `.cache/electron-runtime/node_modules`, prunes non-runtime package files, generates deterministic PNG/ICO/BMP desktop artwork, and Electron Builder copies it to `resources/node_modules` so ASAR-packaged builds can resolve pnpm transitive dependencies at runtime.
+Electron package builds run `pnpm run electron:prepare-deps` before Electron Builder. That script creates a production-only, hoisted runtime dependency tree in `.cache/electron-runtime/node_modules`, prunes non-runtime package files, generates deterministic PNG/ICO/BMP desktop artwork, and Electron Builder copies it to `resources/node_modules` so ASAR-packaged builds can resolve pnpm transitive dependencies at runtime. The pnpm invocation passes `--config.node-linker=hoisted` directly; a nested runtime `.npmrc` is not sufficient when pnpm 11 discovers the enclosing workspace. Preparation rejects symbolic-link layouts, missing direct production packages, and failed MCP SDK, `dotenv`, or `zod` imports before accepting or fingerprinting the tree. `zod` remains a direct production dependency because the MCP SDK consumes it as a runtime peer as well as a transitive dependency.
 
 pnpm 11 treats ignored dependency build scripts as an error. The workspace `allowBuilds` policy therefore approves only `onnxruntime-node`. Electron runtime preparation explicitly sets `ONNXRUNTIME_NODE_INSTALL=skip`: the CPU native bindings used by Code UX are already bundled, while the upstream default on Linux downloads optional CUDA/TensorRT binaries from NuGet. This keeps desktop packaging deterministic and offline from that optional feed without suppressing the dependency postinstall or its pnpm policy check. Keep the allowlist narrow; adding another package requires confirming that its build script is necessary for the packaged runtime and safe on every release runner.
 
@@ -87,7 +88,7 @@ Speech transcription uses the same packaged backend route as the npm-served dash
 
 Local speech models are user-cache data, not application bundle data. The service resolves them under `~/.code-ux/models/speech/<sanitized-model-id>/`, where the default `onnx-community/whisper-base.en` becomes `onnx-community--whisper-base.en` and contains an encoder, merged decoder, tokenizer, preprocessing metadata, and generation metadata. Whisper Tiny uses the same bundle layout as a faster, lower-footprint alternative. Missing model files produce a structured `missing_local_model` or setup `client_error`; the desktop package should not bundle model weights by default because they are large and user-replaceable. Local is the default provider mode and never sends audio externally. An OpenAI-compatible endpoint is used only when API mode is selected and its base URL, API key, and model are configured.
 
-The runtime dependency tree is fingerprinted from production dependencies and the lockfile. If the fingerprint matches a previous run, `electron:prepare-deps` reuses the existing tree instead of deleting and reinstalling it.
+The runtime dependency tree is fingerprinted from production dependencies and the lockfile. If the fingerprint matches a previous run, `electron:prepare-deps` revalidates the copy-safe layout and runtime imports before reusing the existing tree instead of deleting and reinstalling it.
 
 Dashboard-only libraries belong in `devDependencies` because Vite bundles them into `dashboard/dist/`; keeping them out of production dependencies prevents Electron packages from copying unused source packages into `resources/node_modules`.
 
@@ -128,7 +129,7 @@ Use `.github/workflows/release.yml` for published desktop releases. It is the la
 
 The no-secret release-candidate package lane is part of `.github/workflows/ci.yml`, named `Code UX CI Pipeline`. It runs for `main` validation and manual dispatches after package smoke, keeping the full desktop package proof out of the routine `dev` lane.
 
-The `10 Release Candidate / desktop package` matrix starts as soon as the package smoke job passes, so desktop packaging can run beside the E2E and orchestration matrices instead of waiting for them to finish. It downloads the shared `codeux-build-linux` artifact, installs the cached Electron binary, rebuilds Electron native dependencies, prepares runtime assets, and runs Electron Builder directly with `--linux`, `--mac`, or `--win` plus `--publish never`. The package smoke job that precedes it runs `node scripts/verify-release-install.mjs` with `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1`, so the npm tarball install check uses the same compiled artifact instead of rebuilding.
+The `10 Release Candidate / desktop package` matrix starts as soon as the package smoke job passes, so desktop packaging can run beside the E2E and orchestration matrices instead of waiting for them to finish. It downloads the shared `codeux-build-linux` artifact, installs the cached Electron binary, rebuilds Electron native dependencies, prepares runtime assets, and runs Electron Builder directly with `--linux`, `--mac`, or `--win` plus `--publish never`. After compilation, every native runner installs its candidate—the Linux `.deb`, Windows NSIS `.exe`, or macOS app copied from the `.dmg`—and starts that installed copy with an isolated home and dashboard port. Success requires the packaged backend to start, the dashboard renderer to finish loading, an atomic readiness marker to be written, and the app to shut down cleanly. The package smoke job that precedes it runs `node scripts/verify-release-install.mjs` with `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1`, so the npm tarball install check uses the same compiled artifact instead of rebuilding.
 
 Release-candidate packaging sets `CSC_IDENTITY_AUTO_DISCOVERY=false` for unsigned Electron packaging and passes `--publish never` to Electron Builder. It does not require provider API keys, npm publishing credentials, Docker credentials, GitHub Release events, or real project state. When Electron output exists, the workflow uploads files from `release/electron/` as workflow artifacts only; it does not publish to npm or attach files to a GitHub Release.
 
@@ -141,6 +142,7 @@ pnpm run build
 node scripts/verify-release-install.mjs
 pnpm run electron:install-deps
 pnpm run electron:dist -- --publish never
+pnpm run electron:smoke-installed
 ```
 
 Use `pnpm run electron:dist:linux -- --publish never`, `pnpm run electron:dist:mac -- --publish never`, or `pnpm run electron:dist:win -- --publish never` when matching a specific GitHub Actions matrix leg.

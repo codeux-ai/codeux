@@ -4,6 +4,7 @@ import {
   DOCKER_NO_NEW_PRIVILEGES_ARGS,
   toDockerMountArg,
 } from "./cli-docker-utils.js";
+import { getRuntimeOwnerDockerArgs } from "../shared/config/runtime-owner.js";
 
 export const CUSTOM_DASHBOARD_VALIDATION_CONTAINER_PORT = 4173;
 export const CUSTOM_DASHBOARD_VALIDATION_LOG_DRIVER = "local";
@@ -49,6 +50,7 @@ export function buildCustomDashboardValidationDockerRunArgs(
     ...DOCKER_NO_NEW_PRIVILEGES_ARGS,
     "--workdir", CUSTOM_DASHBOARD_VALIDATION_CONTAINER_WORKSPACE,
     "--label", "code-ux.managed=true",
+    ...getRuntimeOwnerDockerArgs(),
     "--label", "code-ux.custom-dashboard-validation-build=true",
     "--label", `code-ux.project-id=${args.projectId}`,
     "--label", `code-ux.dashboard-id=${args.dashboardId}`,
@@ -95,6 +97,7 @@ export function buildCustomDashboardValidationDockerCreateArgs(
     "-p", `127.0.0.1:${args.hostPort}:${CUSTOM_DASHBOARD_VALIDATION_CONTAINER_PORT}`,
     "--workdir", CUSTOM_DASHBOARD_VALIDATION_CONTAINER_WORKSPACE,
     "--label", "code-ux.managed=true",
+    ...getRuntimeOwnerDockerArgs(),
     "--label", "code-ux.custom-dashboard-validation=true",
     "--label", `code-ux.project-id=${args.projectId}`,
     "--label", `code-ux.dashboard-id=${args.dashboardId}`,

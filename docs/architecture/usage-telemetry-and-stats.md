@@ -146,6 +146,12 @@ If usage is absent or totals are zero, Code UX falls back to token estimation us
 
 Host runs read the active session under `~/.claude/projects`; Docker-backed runs read the same JSONL contract from the paired provider runtime volume mounted at `/code-ux-runtime-home` before the Docker workspace and runtime volumes are cleaned up.
 
+Live Claude polling uses `ClaudeCodeLogAccumulator`: it preserves the incomplete trailing line,
+parses only bytes appended since the previous poll, replaces duplicate message-id snapshots in
+place, and reports a stable conversation revision plus the changed turn suffix. It does not join
+all prior chunks and reparse the entire session on every poll. Final collection uses the same parser
+contract, while reported usage remains authoritative over estimates.
+
 ### Antigravity
 
 Antigravity runs with `agy` CLI commands.

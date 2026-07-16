@@ -120,6 +120,10 @@ export interface ProviderRunInput {
    *  Claude Code: uses --resume. Gemini: adds --resume. Codex: uses exec resume --last.
    *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
   continueSessionId?: string | null;
+  /** Whether a missing resumable provider conversation may be replaced by a
+   *  fresh conversation. Disable this when the caller promises strict
+   *  same-session continuity, such as restart recovery for sprint planning. */
+  allowFreshSessionFallback?: boolean;
   /** The previous invocation's raw opencode export snapshot (`{ tokens, cost }`)
    *  for this same session, when `continueSessionId` resumes it. `opencode
    *  export` reports cumulative session totals, so this is subtracted out to
@@ -262,6 +266,7 @@ export class ProviderRunner implements IProviderRunner {
     nativeSessionOperation?: NativeSessionOperation;
     codexOutputPath?: string | null;
     continueSessionId?: string | null;
+    allowFreshSessionFallback?: boolean;
     openCodeBaselineUsage?: Record<string, unknown> | null;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
@@ -385,7 +390,7 @@ export class ProviderRunner implements IProviderRunner {
     const runCmd = async () => {
       if (workflowSettings.executionMode === "DOCKER") {
         const result = await this.dockerRunner.runProviderInDocker({
-          command, args, cwd, providerEnv, sessionId,
+          command, args, prompt, cwd, providerEnv, sessionId,
           providerLabel: provider, workflowSettings, repoPath, signal, onActivity: trackingOnActivity,
           providerMountAuth,
           providerAuthPath,
@@ -538,6 +543,7 @@ export class ProviderRunner implements IProviderRunner {
         command,
         args,
         continueSession: !!continueSession,
+        allowFreshSessionFallback: input.allowFreshSessionFallback,
         antigravityLogPath,
         runCmd: async (cmd, a) => {
           command = cmd;

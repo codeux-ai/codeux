@@ -54,6 +54,10 @@ import type { Sprint, SprintLinkedIssueInput } from "../../types.js";
 import type { SprintImportedTaskInput } from "../../types.js";
 import { useDashboardI18n } from "../../i18n/index.js";
 import { sprintsMessages } from "../../i18n/messages/sprints.js";
+import {
+  computeSprintActionMenuPosition,
+  type SprintMenuRect,
+} from "../../lib/sprint-menu-positioning.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const SPRINT_GALLERY_VISIBILITY_STORAGE_KEY = "code_ux_sprints_show_gallery";
@@ -202,11 +206,16 @@ export const SprintsPage: FunctionComponent = () => {
     clearError: clearImportedTaskFeedbackError,
   } = useActionFeedback();
   const previousSelectedProjectIdRef = useRef<string | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement>(null);
+  const rowMenuTriggerRef = useRef<HTMLElement | null>(null);
   const [rowMenu, setRowMenu] = useState<{
     sprintId: string;
+    triggerRect: SprintMenuRect;
     top: number;
     left: number;
-    openUp: boolean;
+    maxHeight: number;
+    transformOrigin: string;
+    positioned: boolean;
   } | null>(null);
 
   const {
@@ -359,20 +368,103 @@ export const SprintsPage: FunctionComponent = () => {
     event.stopPropagation();
     const trigger = event.currentTarget as HTMLElement;
     const rect = trigger.getBoundingClientRect();
-    const estimatedMenuHeight = 228;
-    const openUp = rect.bottom + estimatedMenuHeight > window.innerHeight - 16;
+    rowMenuTriggerRef.current = trigger;
+    const triggerRect: SprintMenuRect = {
+      top: rect.top,
+      left: rect.left,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+    };
 
     setRowMenu((current) => (
       current?.sprintId === sprintId
         ? null
         : {
           sprintId,
-          top: openUp ? rect.top - 8 : rect.bottom + 8,
-          left: rect.right,
-          openUp,
+          triggerRect,
+          top: 8,
+          left: Math.max(8, Math.min(rect.right, window.innerWidth - 8)),
+          maxHeight: Math.max(0, window.innerHeight - 16),
+          transformOrigin: "top right",
+          positioned: false,
         }
     ));
   }, [setRowMenu]);
+
+  const updateRowMenuPosition = useCallback(() => {
+    const menuElement = rowMenuRef.current;
+    if (!menuElement) {
+      return;
+    }
+
+    setRowMenu((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const liveTriggerRect = rowMenuTriggerRef.current?.getBoundingClientRect();
+      const triggerRect = liveTriggerRect
+        ? {
+          top: liveTriggerRect.top,
+          left: liveTriggerRect.left,
+          right: liveTriggerRect.right,
+          bottom: liveTriggerRect.bottom,
+          width: liveTriggerRect.width,
+          height: liveTriggerRect.height,
+        }
+        : current.triggerRect;
+      const visualRect = menuElement.getBoundingClientRect();
+      const position = computeSprintActionMenuPosition(
+        triggerRect,
+        { width: window.innerWidth, height: window.innerHeight },
+        {
+          width: Math.max(visualRect.width, menuElement.scrollWidth),
+          height: Math.max(visualRect.height, menuElement.scrollHeight),
+        },
+      );
+      const maxHeight = Math.max(0, window.innerHeight - Math.max(8, position.top) - 8);
+
+      if (
+        current.positioned
+        && current.top === position.top
+        && current.left === position.left
+        && current.maxHeight === maxHeight
+        && current.transformOrigin === position.transformOrigin
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        triggerRect,
+        top: position.top,
+        left: position.left,
+        maxHeight,
+        transformOrigin: position.transformOrigin,
+        positioned: true,
+      };
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!rowMenu?.sprintId) {
+      return undefined;
+    }
+
+    updateRowMenuPosition();
+    if (typeof ResizeObserver === "undefined" || !rowMenuRef.current) {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(updateRowMenuPosition);
+    observer.observe(rowMenuRef.current);
+    if (rowMenuTriggerRef.current) {
+      observer.observe(rowMenuTriggerRef.current);
+    }
+    return () => observer.disconnect();
+  }, [rowMenu?.sprintId, updateRowMenuPosition]);
 
   const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
 
@@ -454,25 +546,29 @@ export const SprintsPage: FunctionComponent = () => {
     if (!rowMenu) {
       return;
     }
-    const closeMenu = () => setRowMenu(null);
+    const closeMenu = () => {
+      rowMenuTriggerRef.current = null;
+      setRowMenu(null);
+    };
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         closeMenu();
       }
     };
+    const handleViewportChange = () => updateRowMenuPosition();
 
     document.addEventListener("click", closeMenu);
     document.addEventListener("keydown", handleEscape);
-    window.addEventListener("resize", closeMenu);
-    window.addEventListener("scroll", closeMenu, true);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
 
     return () => {
       document.removeEventListener("click", closeMenu);
       document.removeEventListener("keydown", handleEscape);
-      window.removeEventListener("resize", closeMenu);
-      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
     };
-  }, [rowMenu, setRowMenu]);
+  }, [rowMenu, setRowMenu, updateRowMenuPosition]);
 
   const animateLatestCell = useCallback(() => {
     requestAnimationFrame(() => {
@@ -1144,11 +1240,16 @@ export const SprintsPage: FunctionComponent = () => {
 
       {rowMenu && activeRowMenuSprint && createPortal(
         <div
+          ref={rowMenuRef}
+          role="menu"
+          aria-label={translate(sprintsMessages, "openActionsFor", { name: activeRowMenuSprint.name })}
           className="fixed z-[220] max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto"
           style={{
             top: `${rowMenu.top}px`,
             left: `${rowMenu.left}px`,
-            transform: rowMenu.openUp ? "translate(-100%, -100%)" : "translateX(-100%)",
+            maxHeight: `${rowMenu.maxHeight}px`,
+            transformOrigin: rowMenu.transformOrigin,
+            visibility: rowMenu.positioned ? "visible" : "hidden",
           }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -1199,6 +1300,7 @@ export const SprintsPage: FunctionComponent = () => {
               }}
               onClose={() => setRowMenu(null)}
               markCompletedIcon="square"
+              role="menuitem"
               buttonClassName="flex w-full min-w-0 items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium leading-snug text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none"
             />
           </div>

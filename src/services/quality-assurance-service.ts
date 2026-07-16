@@ -78,6 +78,8 @@ import { workerClarificationAgentMcpAccess } from "./agent-mcp-access.js";
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
 const SPRINT_RUN_KEEPALIVE_MS = 30_000;
+const QA_TASK_LIST_TOKEN_THRESHOLD = 100_000;
+const QA_TOKEN_ESTIMATE_CHARACTERS_PER_TOKEN = 4;
 
 interface QaFixContinuationResult {
   applied: boolean;
@@ -602,10 +604,12 @@ export class QualityAssuranceService {
     sprintId: string;
     tasks: Subtask[];
   }): Promise<void> {
-    const runningRuns = args.tasks
+    const taskIds = args.tasks
       .map((task) => task.record_id?.trim())
-      .filter((taskId): taskId is string => Boolean(taskId))
-      .flatMap((taskId) => this.deps.qaReviewRepository.listLatestTaskCycleRuns(taskId))
+      .filter((taskId): taskId is string => Boolean(taskId));
+    const snapshots = this.deps.qaReviewRepository.listTaskReviewSnapshots(taskIds);
+    const runningRuns = [...snapshots.values()]
+      .flatMap((snapshot) => snapshot.latestCycleRuns)
       .filter((run): run is QaReviewRunRecord => Boolean(run && run.status === "running"));
 
     if (runningRuns.length === 0) {
@@ -1149,6 +1153,43 @@ export class QualityAssuranceService {
     });
   }
 
+  getTaskMergeGateStatuses(args: {
+    projectId: string;
+    sprintId: string;
+    tasks: Subtask[];
+  }): Map<string, TaskQaMergeGateStatus> {
+    const settings = this.deps.getDashboardSettings({ projectId: args.projectId, sprintId: args.sprintId });
+    const qaSettings = settings.agents.qualityAssurance;
+    const taskIds = args.tasks
+      .map((task) => task.record_id?.trim())
+      .filter((taskId): taskId is string => Boolean(taskId));
+    const snapshots = this.deps.qaReviewRepository.listTaskReviewSnapshots(taskIds);
+    const statuses = new Map<string, TaskQaMergeGateStatus>();
+
+    for (const task of args.tasks) {
+      const taskId = task.record_id?.trim();
+      if (!taskId) {
+        continue;
+      }
+      const triggerType = resolveTaskTriggerType(task, qaSettings);
+      const isReviewRequired = Boolean(qaSettings.enabled && triggerType);
+      const snapshot = snapshots.get(taskId);
+      const latestRun = isReviewRequired && snapshot?.latestRun
+        ? this.reconcileRunningQaRun(snapshot.latestRun)
+        : null;
+      statuses.set(taskId, computeTaskMergeGateStatus({
+        taskId,
+        triggerType,
+        qaSettings,
+        latestRun,
+        runsUsed: isReviewRequired ? snapshot?.runsUsed ?? 0 : 0,
+        decisiveRuns: isReviewRequired ? snapshot?.decisiveRuns ?? 0 : 0,
+      }));
+    }
+
+    return statuses;
+  }
+
   private findResumableQaReviewerRun(
     runs: QaReviewRunRecord[],
     agentPresetId: string | null,
@@ -1327,6 +1368,8 @@ export class QualityAssuranceService {
           });
         }
       }
+      let releaseSnapshotHelperReservation: (() => void) | null = null;
+      try {
       let snapshotWorkspace = args.repoPath;
       let shouldCleanupSnapshot = false;
       if (workflowSettings.executionMode === "DOCKER") {
@@ -1337,6 +1380,14 @@ export class QualityAssuranceService {
           fallbackBranch: args.baseBranch,
           useDefaultBranch: false,
         });
+        const plannedSnapshotWorkspace = this.workspaceManager.buildWorktreePath(
+          args.repoPath,
+          `${snapshotSessionId}-snapshot`,
+          "DOCKER",
+        );
+        releaseSnapshotHelperReservation = this.workspaceManager.reserveWorkspaceHelper(
+          plannedSnapshotWorkspace,
+        );
         snapshotWorkspace = await this.invocationWorkspacePreparer.createSnapshotWorkspace({
           repoPath: args.repoPath,
           sessionId: snapshotSessionId,
@@ -1456,6 +1507,9 @@ export class QualityAssuranceService {
       }
 
       return result.parsed;
+      } finally {
+        releaseSnapshotHelperReservation?.();
+      }
     });
   }
 
@@ -1649,6 +1703,7 @@ export class QualityAssuranceService {
         `Provider: ${args.currentTask.provider || "unknown"}`,
         `Worker branch: ${args.currentTask.worker_branch || "none"}`,
         `PR URL: ${args.currentTask.pr_url || "none"}`,
+        `Depends on: ${args.currentTask.depends_on.length > 0 ? args.currentTask.depends_on.join(", ") : "none"}`,
         "",
         "Prompt:",
         args.currentTask.prompt,
@@ -1660,23 +1715,9 @@ export class QualityAssuranceService {
         "## CURRENT TASK",
         "No single task is preselected. If fixes are required, choose the best target task from the sprint task list and return its task key in `targetTaskKey`.",
       ];
-    const fullTaskInstructionsHeading = isTaskLevelReview
-      ? "## FULL TASK INSTRUCTIONS (SPRINT CONTEXT; ONLY CURRENT TASK IS UNDER REVIEW)"
-      : "## FULL TASK INSTRUCTIONS";
-    const fullTaskContextSections = args.subtasks.map((task) => [
-      `### ${task.id}: ${task.title}`,
-      `Status: ${task.status || "unknown"}`,
-      `Provider: ${task.provider || "unknown"}`,
-      `Worker branch: ${task.worker_branch || "none"}`,
-      `PR URL: ${task.pr_url || "none"}`,
-      `Depends on: ${task.depends_on.length > 0 ? task.depends_on.join(", ") : "none"}`,
-      "",
-      "Instruction:",
-      task.prompt || "No task instruction provided.",
-      "",
-      "Recent activity excerpts:",
-      this.renderActivityExcerpt(task),
-    ].join("\n"));
+    const sprintTaskContextSection = isTaskLevelReview
+      ? this.buildTaskReviewSiblingContext(args.subtasks, args.currentTask)
+      : this.buildSprintReviewTaskContext(args.subtasks);
 
     return [
       "## QUALITY ASSURANCE AGENT INSTRUCTIONS",
@@ -1694,13 +1735,7 @@ export class QualityAssuranceService {
       `Project: ${args.projectName}`,
       `Sprint goal: ${args.sprintGoal || "No sprint goal provided."}`,
       "",
-      "## SPRINT TASKS",
-      args.subtasks.map((task) => (
-        `- [${task.status || "unknown"}] ${task.id}: ${task.title} | provider=${task.provider || "unknown"} | branch=${task.worker_branch || "none"} | pr=${task.pr_url || "none"}`
-      )).join("\n"),
-      "",
-      fullTaskInstructionsHeading,
-      fullTaskContextSections.join("\n\n"),
+      ...sprintTaskContextSection,
       "",
       ...currentTaskSection,
       "",
@@ -1736,6 +1771,80 @@ export class QualityAssuranceService {
       "- Every `followUpTasks[].promptMarkdown` entry must contain the full task instructions, not just a short summary.",
       "- For `completed_task_without_pr`, set `shouldHavePr` explicitly.",
       "- Do not include prose outside the JSON object.",
+    ].join("\n");
+  }
+
+  private buildTaskReviewSiblingContext(subtasks: Subtask[], currentTask: Subtask | null): string[] {
+    const completedSiblingTitles = subtasks
+      .filter((task) => task.id !== currentTask?.id && task.status?.trim().toLowerCase() === "completed")
+      .map((task) => `- ${task.title}`);
+    return [
+      "## PREVIOUSLY COMPLETED SPRINT TASKS (TITLES ONLY)",
+      completedSiblingTitles.length > 0
+        ? completedSiblingTitles.join("\n")
+        : "- No other sprint tasks have completed.",
+    ];
+  }
+
+  private buildSprintReviewTaskContext(subtasks: Subtask[]): string[] {
+    const sprintTaskList = subtasks.map((task) => (
+      `- [${task.status || "unknown"}] ${task.id}: ${task.title} | provider=${task.provider || "unknown"} | branch=${task.worker_branch || "none"} | pr=${task.pr_url || "none"}`
+    )).join("\n");
+    const taskContextInputs = subtasks.map((task) => {
+      const instruction = task.prompt || "No task instruction provided.";
+      const sectionWithoutInstruction = this.renderFullTaskContextSection(task, "");
+      return { task, instruction, sectionWithoutInstruction };
+    });
+    const fullTaskContextCharacters = sprintTaskList.length
+      + Math.max(0, taskContextInputs.length - 1) * 2
+      + taskContextInputs.reduce(
+        (total, input) => total + input.sectionWithoutInstruction.length + input.instruction.length,
+        0,
+      );
+    const estimatedFullTaskContextTokens = Math.ceil(
+      fullTaskContextCharacters / QA_TOKEN_ESTIMATE_CHARACTERS_PER_TOKEN,
+    );
+    const shortenTaskInstructions = estimatedFullTaskContextTokens > QA_TASK_LIST_TOKEN_THRESHOLD;
+    const taskContextPolicy = shortenTaskInstructions
+      ? [
+        `Context policy: the full sprint task context is approximately ${estimatedFullTaskContextTokens.toLocaleString("en-US")} tokens, exceeding the 100,000-token threshold.`,
+        "Every task remains listed in order, but each task instruction below contains only its first half.",
+        "Use the visible first half of each task instruction together with repository and validation evidence.",
+        "Recent activity excerpts are not shortened.",
+      ].join("\n")
+      : "";
+    const fullTaskContextSections = taskContextInputs.map(({ task, instruction }) => {
+      if (!shortenTaskInstructions) {
+        return this.renderFullTaskContextSection(task, instruction);
+      }
+      const firstHalf = instruction.slice(0, Math.ceil(instruction.length / 2));
+      return this.renderFullTaskContextSection(task, firstHalf);
+    });
+    return [
+      "## SPRINT TASKS",
+      sprintTaskList,
+      "",
+      "## FULL TASK INSTRUCTIONS",
+      taskContextPolicy,
+      "",
+      fullTaskContextSections.join("\n\n"),
+    ];
+  }
+
+  private renderFullTaskContextSection(task: Subtask, instruction: string): string {
+    return [
+      `### ${task.id}: ${task.title}`,
+      `Status: ${task.status || "unknown"}`,
+      `Provider: ${task.provider || "unknown"}`,
+      `Worker branch: ${task.worker_branch || "none"}`,
+      `PR URL: ${task.pr_url || "none"}`,
+      `Depends on: ${task.depends_on.length > 0 ? task.depends_on.join(", ") : "none"}`,
+      "",
+      "Instruction:",
+      instruction,
+      "",
+      "Recent activity excerpts:",
+      this.renderActivityExcerpt(task),
     ].join("\n");
   }
 
@@ -3074,7 +3183,8 @@ function buildReviewScopeInstructions(triggerType: QaReviewTriggerType, currentT
 
   return [
     `- This is a single-task QA review. The only task under review is ${currentTaskKey}.`,
-    "- Treat `SPRINT TASKS` and non-current entries in `FULL TASK INSTRUCTIONS` as context only, not as deliverables for this review.",
+    "- `PREVIOUSLY COMPLETED SPRINT TASKS` contains title-only historical context. Those sibling tasks are not deliverables for this review.",
+    "- The complete current-task details, prompt, dependencies, and recent activity are provided in `CURRENT TASK UNDER REVIEW`.",
     "- Assume the current workspace/branch contains only the current task's changes on top of its base branch. Independent sibling tasks may be completed in separate branches or PRs and may be absent here.",
     "- A task-level review must pass when the current task satisfies its own prompt, even if other completed sprint tasks are not present in this branch.",
     "- Do not request changes because files, commits, PRs, or behavior from other completed sibling tasks are missing from this branch.",

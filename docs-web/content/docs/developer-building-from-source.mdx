@@ -161,12 +161,12 @@ pnpm run audit                 # pnpm audit --audit-level=high
 pnpm run smoke-test            # node dist/index.js --help
 pnpm run dev:server-only       # boot just the server from source
 # Electron helper scripts:
-# electron:generate-icons, electron:prepare-deps, electron:dev, electron:pack, electron:dist, electron:dist:linux, electron:dist:mac, electron:dist:win, electron:benchmark:runtime, electron:benchmark:win, electron:install-deps
+# electron:generate-icons, electron:prepare-deps, electron:dev, electron:pack, electron:dist, electron:dist:linux, electron:dist:mac, electron:dist:win, electron:benchmark:runtime, electron:benchmark:win, electron:smoke-installed, electron:install-deps
 ```
 
 Electron and npm package builds must include the `docs-web` runtime catalog. The dashboard Docs page fetches its collection and markdown through `/api/docs-web`, so installed desktop builds and npm-installed CLI/server runs need the same `docs-web` directory beside the compiled runtime root.
 
-Electron runtime dependency preparation runs a production-only pnpm 11 install. The workspace `allowBuilds` policy approves only `onnxruntime-node`; preparation sets `ONNXRUNTIME_NODE_INSTALL=skip` because the CPU bindings used by Code UX are bundled and the upstream Linux default fetches optional CUDA/TensorRT binaries from NuGet. This keeps desktop packaging deterministic without suppressing the dependency postinstall or pnpm's build-policy check. Keep that allowlist narrow and review any addition as release-executed code.
+Electron runtime dependency preparation runs a production-only pnpm 11 install with `--config.node-linker=hoisted` passed on the command line. A nested runtime `.npmrc` is not enough once pnpm discovers the enclosing workspace. Preparation rejects symbolic links, missing direct production packages, and failed MCP SDK/`zod` imports so Electron Builder cannot silently copy a broken peer-dependency layout. The workspace `allowBuilds` policy approves only `onnxruntime-node`; preparation sets `ONNXRUNTIME_NODE_INSTALL=skip` because the CPU bindings used by Code UX are bundled and the upstream Linux default fetches optional CUDA/TensorRT binaries from NuGet. This keeps desktop packaging deterministic without suppressing the dependency postinstall or pnpm's build-policy check. Keep that allowlist narrow and review any addition as release-executed code.
 
 They must also include `assets/models-dev/catalog.json`. The automatic token-pricing path reads this snapshot beside the compiled runtime; without it, known models can appear unpriced only in the desktop build. Electron packaging tests pin both runtime assets and a representative GPT-5.5 catalogue rate.
 

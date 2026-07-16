@@ -63,6 +63,8 @@ export function restoreFocusSafely(...candidates: Array<HTMLElement | null | und
 export interface FocusTrapOptions {
   onClose?: () => void;
   initialFocusRef?: { current: HTMLElement | null };
+  /** Preferred return target when reactive rendering may replace activeElement. */
+  restoreFocusRef?: { current: HTMLElement | null };
   restoreFocus?: boolean;
   /** Temporarily yield keyboard handling without losing the original opener. */
   paused?: boolean;
@@ -79,7 +81,7 @@ export function useFocusTrap(
     ? { onClose: optionsOrOnClose }
     : (optionsOrOnClose || {});
 
-  const { onClose, initialFocusRef, restoreFocus = true, paused = false } = options;
+  const { onClose, initialFocusRef, restoreFocusRef, restoreFocus = true, paused = false } = options;
   const onCloseRef = useRef(onClose);
   const pausedRef = useRef(paused);
 
@@ -168,7 +170,7 @@ export function useFocusTrap(
         // Defer focus restoration to ensure element is re-enabled or DOM is updated
         const trigger = triggerRef.current;
         window.setTimeout(() => {
-          restoreFocusSafely(trigger);
+          restoreFocusSafely(restoreFocusRef?.current, trigger);
         }, 0);
       }
     };

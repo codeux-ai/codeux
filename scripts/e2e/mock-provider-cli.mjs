@@ -38,11 +38,18 @@ function parseArgs(argv) {
     }
   }
 
-  if (!parsed.prompt && argv.length > 0) {
-    parsed.prompt = argv[argv.length - 1] || "";
-  }
-
   return parsed;
+}
+
+async function readStdin() {
+  if (process.stdin.isTTY) {
+    return "";
+  }
+  const chunks = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function readMarker(prompt, name) {
@@ -161,6 +168,9 @@ function writeProviderStdout(run) {
 
 async function main() {
   const run = parseArgs(process.argv.slice(2));
+  if (!run.prompt) {
+    run.prompt = await readStdin();
+  }
   const cwd = process.cwd();
   const sleepMs = clampSleepMs(readMarker(run.prompt, "sleep") || "0");
   const noOp = hasMarker(run.prompt, "no-op");

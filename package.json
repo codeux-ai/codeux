@@ -70,6 +70,7 @@
     "electron:dist:win": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --config electron-builder.config.cjs --win",
     "electron:benchmark:runtime": "node scripts/benchmark-electron-runtime.mjs",
     "electron:benchmark:win": "node scripts/benchmark-electron-windows.mjs",
+    "electron:smoke-installed": "node scripts/smoke-installed-electron.mjs",
     "electron:install-deps": "electron-builder install-app-deps",
     "test": "vitest run",
     "smoketest:codex": "node --import ./scripts/tsnode-register.mjs tests/smoketest/codex.smoketest.ts",
@@ -88,6 +89,7 @@
     "test:orchestration:full": "pnpm run build && pnpm run test:e2e:mockup-sprint-pentest",
     "test:orchestration:large-dag": "pnpm run build && node scripts/e2e/run-mockup-sprint-pentest.mjs --scenario large-dag-stress --timeout-ms 3600000",
     "test:orchestration:pentest": "pnpm run build && node scripts/e2e/run-mockup-sprint-pentest.mjs --scenario pentest --timeout-ms 3600000",
+    "test:orchestration:extreme-dag": "pnpm run build && node scripts/e2e/run-mockup-sprint-pentest.mjs --scenario extreme-dag-recovery --timeout-ms 7200000 --stall-timeout-ms 300000 --restart-every-ms 30000 --restart-count 8",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:backend:coverage": "vitest run tests/backend --coverage",
@@ -120,7 +122,8 @@
     "multer": "^2.1.1",
     "onnxruntime-node": "^1.24.3",
     "p-limit": "^7.3.0",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@monaco-editor/react": "^4.7.0",

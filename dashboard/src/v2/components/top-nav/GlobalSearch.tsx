@@ -226,6 +226,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
 
             <SearchOverlay
                 anchorRef={searchBarContainerRef}
+                restoreFocusRef={searchBarRef}
                 committedSearchQuery={debouncedQuery}
                 isOpen={isSearchOpen}
                 onClose={() => setIsSearchOpen(false)}

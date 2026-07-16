@@ -169,6 +169,7 @@ const createMockContext = (): PipelineContext => {
       resolveResumeWorktreePath: vi.fn(),
       prepareWorktree: vi.fn(),
       removeWorktree: vi.fn(),
+      releaseWorkspaceHelper: vi.fn(),
       buildWorkspaceGuidance: vi.fn(),
     } as any,
     invocationWorkspacePreparer: {
@@ -913,6 +914,7 @@ describe("executeCleanupStage", () => {
     await executeCleanupStage(ctx);
 
     expect(ctx.workspaceManager.removeWorktree).toHaveBeenCalledWith("/repo", "/repo/worktree");
+    expect(ctx.workspaceManager.releaseWorkspaceHelper).not.toHaveBeenCalled();
   });
 
   it("preserves the worktree if cleanupWorktreeOnSuccess is false and workflow succeeded", async () => {
@@ -923,6 +925,7 @@ describe("executeCleanupStage", () => {
     await executeCleanupStage(ctx);
 
     expect(ctx.workspaceManager.removeWorktree).not.toHaveBeenCalled();
+    expect(ctx.workspaceManager.releaseWorkspaceHelper).toHaveBeenCalledWith("/repo/worktree");
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
       description: expect.stringContaining("Preserving worktree")
     }));
@@ -937,6 +940,7 @@ describe("executeCleanupStage", () => {
     await executeCleanupStage(ctx);
 
     expect(ctx.workspaceManager.removeWorktree).not.toHaveBeenCalled();
+    expect(ctx.workspaceManager.releaseWorkspaceHelper).toHaveBeenCalledWith("/repo/worktree");
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
       description: expect.stringContaining("Preserving worktree")
     }));

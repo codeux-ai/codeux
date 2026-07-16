@@ -266,6 +266,55 @@ describe("GitStatusService", () => {
     }
   });
 
+  it("bounds cached status payloads and never retains raw access tokens in cache keys", async () => {
+    GitStatusService.invalidateCache();
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n", stderr: "" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n", stderr: "" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n", stderr: "" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n", stderr: "" };
+      return { ok: true, stdout: "", stderr: "" };
+    });
+
+    for (let index = 0; index < 140; index += 1) {
+      await service.getStatus(
+        "LOCAL",
+        { githubToken: `raw-secret-${index}` },
+        { scope: "FEATURE_PR_CI", featureBranch: `feature/cache-${index}` },
+        10_000,
+      );
+    }
+
+    const cache = (GitStatusService as unknown as {
+      statusCache: Map<string, unknown>;
+    }).statusCache;
+    expect(cache.size).toBeLessThanOrEqual(128);
+    expect([...cache.keys()].join("\n")).not.toContain("raw-secret-");
+    GitStatusService.invalidateCache();
+  });
+
+  it("invalidates status keys for Windows repository paths without relying on JSON escaping", () => {
+    GitStatusService.invalidateCache();
+    const cache = (GitStatusService as unknown as {
+      statusCache: Map<string, { timestamp: number; promise: Promise<unknown> }>;
+    }).statusCache;
+    const windowsRepo = "C:\\Users\\developer\\Code UX";
+    const otherRepo = "C:\\Users\\developer\\Other";
+    cache.set(JSON.stringify({ repoPath: windowsRepo, mode: "LOCAL" }), {
+      timestamp: Date.now(),
+      promise: Promise.resolve({}),
+    });
+    cache.set(JSON.stringify({ repoPath: otherRepo, mode: "LOCAL" }), {
+      timestamp: Date.now(),
+      promise: Promise.resolve({}),
+    });
+
+    GitStatusService.invalidateCache(windowsRepo);
+
+    expect([...cache.keys()].map((key) => JSON.parse(key).repoPath)).toEqual([otherRepo]);
+    GitStatusService.invalidateCache();
+  });
+
   it("returns unavailable if not inside git worktree", async () => {
     runner.mockResolvedValue({ ok: false, stdout: "false\n", stderr: "not a git repo" });
     const status = await service.getStatus("REMOTE");

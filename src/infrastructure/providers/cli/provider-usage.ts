@@ -288,8 +288,18 @@ function claudeJsonlToTelemetry(
   sinceMs?: number,
 ): ProviderUsageTelemetry | null {
   if (!raw.trim()) return null;
+  return claudeLogToTelemetry(
+    parseClaudeCodeSessionJsonl(raw, sinceMs),
+    nativeSessionId,
+    rawUsageJson,
+  );
+}
 
-  const parsed = parseClaudeCodeSessionJsonl(raw, sinceMs);
+function claudeLogToTelemetry(
+  parsed: ClaudeCodeLogResult,
+  nativeSessionId: string,
+  rawUsageJson: Record<string, unknown> | null,
+): ProviderUsageTelemetry {
 
   // Prefer the session id embedded in the JSONL entries over the caller-supplied one.
   const resolvedSessionId = parsed.nativeSessionId ?? nativeSessionId;
@@ -310,6 +320,8 @@ function claudeJsonlToTelemetry(
       transcriptText,
       nativeSessionId: resolvedSessionId,
       conversation,
+      conversationRevision: parsed.conversationRevision,
+      conversationChangedFromIndex: parsed.conversationChangedFromIndex,
     };
   }
 
@@ -328,6 +340,8 @@ function claudeJsonlToTelemetry(
     transcriptText,
     nativeSessionId: resolvedSessionId,
     conversation,
+    conversationRevision: parsed.conversationRevision,
+    conversationChangedFromIndex: parsed.conversationChangedFromIndex,
   };
 }
 
@@ -341,6 +355,8 @@ export async function collectProviderUsageTelemetry(args: {
   capturedText?: string;
   nativeSessionId?: string | null;
   claudeSessionJsonl?: string | null;
+  /** Pre-parsed append-only Claude session state supplied by the live watcher. */
+  claudeSessionLog?: ClaudeCodeLogResult | null;
   codexSessionJson?: string | null;
   /** Pre-parsed live rollout state supplied by the incremental watcher. */
   codexRollout?: CodexLogResult | null;
@@ -589,19 +605,30 @@ export async function collectProviderUsageTelemetry(args: {
   }
 
   if (args.nativeSessionId) {
-    if (args.claudeSessionJsonl) {
-      const usage = claudeJsonlToTelemetry(
-        args.claudeSessionJsonl,
-        args.nativeSessionId,
-        { source: "container-session-jsonl" },
-        args.startTimeMs,
-      );
+    if (args.claudeSessionLog || args.claudeSessionJsonl) {
+      const usage = args.claudeSessionLog
+        ? claudeLogToTelemetry(
+            args.claudeSessionLog,
+            args.nativeSessionId,
+            { source: "container-session-jsonl" },
+          )
+        : claudeJsonlToTelemetry(
+            args.claudeSessionJsonl!,
+            args.nativeSessionId,
+            { source: "container-session-jsonl" },
+            args.startTimeMs,
+          );
       if (usage) {
         const conversation = withLeadingUserTurn(usage.conversation, args.prompt);
         if (usage.totalTokens > 0) {
           return { ...usage, conversation };
         }
-        return estimateTelemetry("claude-code", args.model, args.prompt, usage.transcriptText || fallbackOutput);
+        const estimated = estimateTelemetry("claude-code", args.model, args.prompt, usage.transcriptText || fallbackOutput);
+        estimated.nativeSessionId = usage.nativeSessionId;
+        estimated.conversation = conversation;
+        estimated.conversationRevision = usage.conversationRevision;
+        estimated.conversationChangedFromIndex = usage.conversationChangedFromIndex;
+        return estimated;
       }
     }
     const usage = await parseClaudeSessionTelemetry(args.cwd, args.nativeSessionId, args.startTimeMs);
@@ -610,7 +637,12 @@ export async function collectProviderUsageTelemetry(args: {
       if (usage.totalTokens > 0) {
         return { ...usage, conversation };
       }
-      return estimateTelemetry("claude-code", args.model, args.prompt, usage.transcriptText || fallbackOutput);
+      const estimated = estimateTelemetry("claude-code", args.model, args.prompt, usage.transcriptText || fallbackOutput);
+      estimated.nativeSessionId = usage.nativeSessionId;
+      estimated.conversation = conversation;
+      estimated.conversationRevision = usage.conversationRevision;
+      estimated.conversationChangedFromIndex = usage.conversationChangedFromIndex;
+      return estimated;
     }
   }
 

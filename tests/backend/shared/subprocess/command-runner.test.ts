@@ -5,6 +5,101 @@ import * as path from "path";
 import { CommandRunner } from "../../../../src/shared/subprocess/command-runner.js";
 import { beginRuntimeShutdown, resetRuntimeShutdownForTests } from "../../../../src/services/shutdown-state.js";
 
+const DOCKER_HELPER_POOL_MODULE = "../../../../src/infrastructure/providers/cli/docker-helper-pool.js";
+
+async function createGitRepositoryFixture(prefix: string): Promise<{ tempDir: string; repoDir: string }> {
+  const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), prefix));
+  const repoDir = path.join(tempDir, "repo");
+  await fsPromises.mkdir(path.join(repoDir, ".git"), { recursive: true });
+  await fsPromises.writeFile(path.join(repoDir, ".git", "HEAD"), "ref: refs/heads/main\n", "utf8");
+  return { tempDir, repoDir };
+}
+
+async function loadCommandRunnerWithMockedGitPool() {
+  vi.resetModules();
+  let capturedSpec: unknown;
+  const pool = {
+    ensure: vi.fn(async (_key: string) => "git-helper-1"),
+    reserve: vi.fn((_key: string) => vi.fn()),
+    withContainer: vi.fn(async (key: string, operation: (containerId: string) => Promise<unknown>) => (
+      operation(await pool.ensure(key))
+    )),
+    touch: vi.fn((_key: string) => undefined),
+    invalidate: vi.fn((_key: string, _expectedId?: string) => true),
+    release: vi.fn(async (_key: string) => undefined),
+    shutdown: vi.fn(async () => undefined),
+    isContainerGone: vi.fn((result: { stdout?: string; stderr?: string }) => (
+      `${result.stderr ?? ""} ${result.stdout ?? ""}`.toLowerCase().includes("no such container")
+    )),
+  };
+
+  vi.doMock(DOCKER_HELPER_POOL_MODULE, () => ({
+    HELPER_LABEL: "code-ux.helper",
+    HELPER_OWNER_NAME_SUFFIX: "test-owner",
+    DockerHelperContainerPool: class MockDockerHelperContainerPool {
+      constructor(spec: unknown) {
+        capturedSpec = spec;
+      }
+
+      ensure(key: string): Promise<string> {
+        return pool.ensure(key);
+      }
+
+      reserve(key: string): () => void {
+        return pool.reserve(key);
+      }
+
+      withContainer<T>(key: string, operation: (containerId: string) => Promise<T>): Promise<T> {
+        return pool.withContainer(key, operation) as Promise<T>;
+      }
+
+      touch(key: string): void {
+        pool.touch(key);
+      }
+
+      invalidate(key: string, expectedId?: string): boolean {
+        return pool.invalidate(key, expectedId);
+      }
+
+      release(key: string): Promise<void> {
+        return pool.release(key);
+      }
+
+      shutdown(): Promise<void> {
+        return pool.shutdown();
+      }
+
+      isContainerGone(result: { stdout?: string; stderr?: string }): boolean {
+        return pool.isContainerGone(result);
+      }
+    },
+  }));
+
+  const commandRunnerModule = await import("../../../../src/shared/subprocess/command-runner.js");
+  const isolatedRunner = new commandRunnerModule.CommandRunner();
+  const spawnProcess = vi.fn(async () => ({
+    ok: true,
+    code: 0,
+    stdout: "",
+    stderr: "",
+  }));
+  (isolatedRunner as unknown as { spawnProcess: typeof spawnProcess }).spawnProcess = spawnProcess;
+
+  return {
+    commandRunnerModule,
+    isolatedRunner,
+    pool,
+    spawnProcess,
+    activate: (repoDir: string) => commandRunnerModule.acquireProjectGitHelperForSprint(repoDir),
+    getCapturedSpec: () => capturedSpec,
+    cleanup: async () => {
+      await commandRunnerModule.shutdownGitHelperPool();
+      vi.doUnmock(DOCKER_HELPER_POOL_MODULE);
+      vi.resetModules();
+    },
+  };
+}
+
 describe("CommandRunner", () => {
   const runner = new CommandRunner();
   const node = process.execPath;
@@ -579,6 +674,445 @@ describe("CommandRunner", () => {
       expect(worktreeContext?.poolKey).toBe(rootContext?.poolKey);
     } finally {
       await fsPromises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses distinct git helper pool keys for separate repositories", async () => {
+    const first = await createGitRepositoryFixture("code-ux-git-pool-first-");
+    const second = await createGitRepositoryFixture("code-ux-git-pool-second-");
+    try {
+      const resolveContext = (CommandRunner as unknown as {
+        resolveGitPoolContextForPath: (cwd: string) => { poolKey: string; mountRoot: string } | null;
+      }).resolveGitPoolContextForPath;
+      const firstContext = resolveContext(first.repoDir);
+      const secondContext = resolveContext(second.repoDir);
+
+      expect(firstContext?.mountRoot).toBe(first.repoDir);
+      expect(secondContext?.mountRoot).toBe(second.repoDir);
+      expect(firstContext?.poolKey).not.toBe(secondContext?.poolKey);
+    } finally {
+      await Promise.all([
+        fsPromises.rm(first.tempDir, { recursive: true, force: true }),
+        fsPromises.rm(second.tempDir, { recursive: true, force: true }),
+      ]);
+    }
+  });
+
+  it("streams Git stdin through the warm helper and keeps auth environment command-scoped", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-stdin-");
+    const stdinFile = path.join(fixture.tempDir, "paths");
+    await fsPromises.writeFile(stdinFile, "first.txt\0second.txt\0", "utf8");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLease = mocked.activate(fixture.repoDir);
+    try {
+      const firstResult = await mocked.isolatedRunner.run(
+        "git",
+        ["add", "--pathspec-from-file=-", "--pathspec-file-nul"],
+        {
+          cwd: fixture.repoDir,
+          stdinFile,
+          env: { CODE_UX_CONTAINERIZED_GIT: "1", GH_TOKEN: "project-one-token" },
+        },
+      );
+      const secondResult = await mocked.isolatedRunner.run("git", ["status", "--porcelain"], {
+        cwd: fixture.repoDir,
+        env: { CODE_UX_CONTAINERIZED_GIT: "1", GH_TOKEN: "project-two-token" },
+      });
+
+      expect(firstResult.ok).toBe(true);
+      expect(secondResult.ok).toBe(true);
+      expect(mocked.pool.ensure).toHaveBeenCalledTimes(2);
+      expect(mocked.pool.ensure.mock.calls[0]?.[0]).toBe(mocked.pool.ensure.mock.calls[1]?.[0]);
+      expect(mocked.spawnProcess).toHaveBeenCalledTimes(2);
+
+      const [firstCommand, firstOptions] = mocked.spawnProcess.mock.calls[0] ?? [];
+      expect(firstCommand).toMatchObject({ command: "docker", containerHostCwd: fixture.repoDir });
+      expect(firstCommand?.args).toEqual(expect.arrayContaining([
+        "exec",
+        "-i",
+        "--workdir",
+        "/workspace",
+        "-e",
+        "GH_TOKEN=project-one-token",
+        "git-helper-1",
+        "git",
+        "add",
+        "--pathspec-from-file=-",
+      ]));
+      expect(firstCommand?.args).not.toContain("GH_TOKEN=project-two-token");
+      expect(firstOptions).toMatchObject({ cwd: fixture.repoDir, stdinFile });
+
+      const [secondCommand] = mocked.spawnProcess.mock.calls[1] ?? [];
+      expect(secondCommand?.args).toEqual(expect.arrayContaining([
+        "exec",
+        "-e",
+        "GH_TOKEN=project-two-token",
+        "git-helper-1",
+        "git",
+        "status",
+      ]));
+      expect(secondCommand?.args).not.toContain("-i");
+      expect(secondCommand?.args).not.toContain("GH_TOKEN=project-one-token");
+      expect(mocked.getCapturedSpec()).toBeDefined();
+    } finally {
+      await releaseLease();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to a stdin-capable one-shot Git helper when warm helper startup fails", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-fallback-");
+    const stdinFile = path.join(fixture.tempDir, "paths");
+    await fsPromises.writeFile(stdinFile, "first.txt\0", "utf8");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLease = mocked.activate(fixture.repoDir);
+    mocked.pool.ensure.mockRejectedValueOnce(new Error("Docker daemon unavailable"));
+    try {
+      const result = await mocked.isolatedRunner.run(
+        "git",
+        ["add", "--pathspec-from-file=-", "--pathspec-file-nul"],
+        {
+          cwd: fixture.repoDir,
+          stdinFile,
+          env: { CODE_UX_CONTAINERIZED_GIT: "1", GH_TOKEN: "fallback-token" },
+        },
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mocked.spawnProcess).toHaveBeenCalledOnce();
+      const [fallbackCommand, fallbackOptions] = mocked.spawnProcess.mock.calls[0] ?? [];
+      expect(fallbackCommand?.command).toBe("docker");
+      expect(fallbackCommand?.args).toEqual(expect.arrayContaining([
+        "run",
+        "--rm",
+        "-i",
+        "GH_TOKEN=fallback-token",
+        "--entrypoint",
+        "git",
+        "alpine/git",
+      ]));
+      expect(fallbackCommand?.args).not.toContain("exec");
+      expect(fallbackOptions).toMatchObject({ stdinFile });
+    } finally {
+      await releaseLease();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an invalid Git stdin file before creating a warm helper", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-invalid-stdin-");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLease = mocked.activate(fixture.repoDir);
+    try {
+      await expect(mocked.isolatedRunner.run("git", ["hash-object", "--stdin"], {
+        cwd: fixture.repoDir,
+        stdinFile: path.join(fixture.tempDir, "missing-input"),
+        env: { CODE_UX_CONTAINERIZED_GIT: "1" },
+      })).rejects.toThrow(/stdinFile is not a readable file/);
+
+      expect(mocked.getCapturedSpec()).toBeUndefined();
+      expect(mocked.pool.ensure).not.toHaveBeenCalled();
+      expect(mocked.spawnProcess).not.toHaveBeenCalled();
+    } finally {
+      await releaseLease();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps commands needing an external Git path mount on the one-shot helper", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-external-path-");
+    const indexDir = path.join(fixture.tempDir, "indexes");
+    await fsPromises.mkdir(indexDir);
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLease = mocked.activate(fixture.repoDir);
+    try {
+      const result = await mocked.isolatedRunner.run("git", ["read-tree", "HEAD"], {
+        cwd: fixture.repoDir,
+        env: {
+          CODE_UX_CONTAINERIZED_GIT: "1",
+          GIT_INDEX_FILE: path.join(indexDir, "temporary.index"),
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mocked.pool.ensure).not.toHaveBeenCalled();
+      expect(mocked.spawnProcess).toHaveBeenCalledOnce();
+      expect(mocked.spawnProcess.mock.calls[0]?.[0]?.args).toEqual(expect.arrayContaining([
+        "run",
+        "--rm",
+        "--mount",
+        `type=bind,source=${indexDir},target=/mnt/code-ux/git-paths/0`,
+        "GIT_INDEX_FILE=/mnt/code-ux/git-paths/0/temporary.index",
+      ]));
+    } finally {
+      await releaseLease();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("invalidates only a vanished helper generation and retries with its replacement", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-retry-");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLease = mocked.activate(fixture.repoDir);
+    mocked.pool.ensure
+      .mockResolvedValueOnce("git-helper-old")
+      .mockResolvedValueOnce("git-helper-new");
+    mocked.spawnProcess
+      .mockResolvedValueOnce({
+        ok: false,
+        code: 1,
+        stdout: "",
+        stderr: "Error: No such container: git-helper-old",
+      })
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "clean", stderr: "" });
+    try {
+      const result = await mocked.isolatedRunner.run("git", ["status", "--porcelain"], {
+        cwd: fixture.repoDir,
+        env: { CODE_UX_CONTAINERIZED_GIT: "1" },
+      });
+
+      const poolKey = mocked.pool.ensure.mock.calls[0]?.[0];
+      expect(result).toMatchObject({ ok: true, stdout: "clean" });
+      expect(mocked.pool.invalidate).toHaveBeenCalledWith(poolKey, "git-helper-old");
+      expect(mocked.pool.ensure).toHaveBeenCalledTimes(2);
+      expect(mocked.spawnProcess.mock.calls[0]?.[0]?.args).toContain("git-helper-old");
+      expect(mocked.spawnProcess.mock.calls[1]?.[0]?.args).toContain("git-helper-new");
+      expect(mocked.spawnProcess.mock.calls.some(([command]) => command.args?.includes("run"))).toBe(false);
+    } finally {
+      await releaseLease();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses one-shot fallback after two vanished warm-helper generations", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-double-gone-");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLease = mocked.activate(fixture.repoDir);
+    mocked.pool.ensure
+      .mockResolvedValueOnce("git-helper-old")
+      .mockResolvedValueOnce("git-helper-replacement");
+    mocked.spawnProcess
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "No such container" })
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "container is not running" })
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "fallback", stderr: "" });
+    mocked.pool.isContainerGone.mockImplementation((result) => (
+      /no such container|not running/i.test(`${result.stderr ?? ""} ${result.stdout ?? ""}`)
+    ));
+    try {
+      const result = await mocked.isolatedRunner.run("git", ["status", "--porcelain"], {
+        cwd: fixture.repoDir,
+        env: { CODE_UX_CONTAINERIZED_GIT: "1" },
+      });
+
+      const poolKey = mocked.pool.ensure.mock.calls[0]?.[0];
+      expect(result).toMatchObject({ ok: true, stdout: "fallback" });
+      expect(mocked.pool.invalidate).toHaveBeenNthCalledWith(1, poolKey, "git-helper-old");
+      expect(mocked.pool.invalidate).toHaveBeenNthCalledWith(2, poolKey, "git-helper-replacement");
+      expect(mocked.spawnProcess).toHaveBeenCalledTimes(3);
+      expect(mocked.spawnProcess.mock.calls[2]?.[0]?.args).toEqual(expect.arrayContaining([
+        "run",
+        "--rm",
+        "--entrypoint",
+        "git",
+      ]));
+    } finally {
+      await releaseLease();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not fall back for ordinary Git failures from a live warm helper", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-git-failure-");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLease = mocked.activate(fixture.repoDir);
+    mocked.spawnProcess.mockResolvedValueOnce({
+      ok: false,
+      code: 128,
+      stdout: "",
+      stderr: "fatal: invalid reference",
+    });
+    try {
+      const result = await mocked.isolatedRunner.run("git", ["show", "missing-ref"], {
+        cwd: fixture.repoDir,
+        env: { CODE_UX_CONTAINERIZED_GIT: "1" },
+      });
+
+      expect(result).toMatchObject({ ok: false, code: 128 });
+      expect(mocked.pool.invalidate).not.toHaveBeenCalled();
+      expect(mocked.pool.ensure).toHaveBeenCalledOnce();
+      expect(mocked.spawnProcess).toHaveBeenCalledOnce();
+    } finally {
+      await releaseLease();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not replay a Git command when warm-helper execution throws unexpectedly", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-exec-error-");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLease = mocked.activate(fixture.repoDir);
+    mocked.spawnProcess.mockRejectedValueOnce(new Error("unexpected execution transport failure"));
+    try {
+      await expect(mocked.isolatedRunner.run("git", ["commit", "-m", "test"], {
+        cwd: fixture.repoDir,
+        env: { CODE_UX_CONTAINERIZED_GIT: "1" },
+      })).rejects.toThrow("unexpected execution transport failure");
+
+      expect(mocked.pool.ensure).toHaveBeenCalledOnce();
+      expect(mocked.spawnProcess).toHaveBeenCalledOnce();
+    } finally {
+      await releaseLease();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps one project helper for active sprint leases and bounds concurrent Git execs", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-active-sprint-");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLeaseA = mocked.activate(fixture.repoDir);
+    const releaseLeaseB = mocked.activate(fixture.repoDir);
+    let activeExecs = 0;
+    let peakExecs = 0;
+    let releaseExecs!: () => void;
+    const execGate = new Promise<void>((resolve) => {
+      releaseExecs = resolve;
+    });
+    mocked.spawnProcess.mockImplementation(async (command) => {
+      if (command.args?.includes("exec")) {
+        activeExecs += 1;
+        peakExecs = Math.max(peakExecs, activeExecs);
+        await execGate;
+        activeExecs -= 1;
+      }
+      return { ok: true, code: 0, stdout: "", stderr: "" };
+    });
+
+    try {
+      const commands = Array.from({ length: 8 }, (_, index) => mocked.isolatedRunner.run(
+        "git",
+        ["show", `ref-${index}`],
+        { cwd: fixture.repoDir, env: { CODE_UX_CONTAINERIZED_GIT: "1" } },
+      ));
+      await vi.waitFor(() => expect(activeExecs).toBe(4));
+      expect(mocked.pool.reserve).toHaveBeenCalledOnce();
+      expect(mocked.getCapturedSpec()).toBeDefined();
+
+      releaseExecs();
+      await Promise.all(commands);
+      expect(peakExecs).toBe(4);
+      expect(mocked.pool.ensure).toHaveBeenCalledTimes(8);
+
+      await releaseLeaseA();
+      expect(mocked.pool.release).not.toHaveBeenCalled();
+      await releaseLeaseB();
+      expect(mocked.pool.release).toHaveBeenCalledOnce();
+    } finally {
+      releaseExecs();
+      await releaseLeaseA();
+      await releaseLeaseB();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses one-shot Git outside an active sprint and leaves no persistent helper", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-no-active-sprint-");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    try {
+      const result = await mocked.isolatedRunner.run("git", ["status", "--porcelain"], {
+        cwd: fixture.repoDir,
+        env: { CODE_UX_CONTAINERIZED_GIT: "1" },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mocked.getCapturedSpec()).toBeUndefined();
+      expect(mocked.pool.ensure).not.toHaveBeenCalled();
+      expect(mocked.spawnProcess).toHaveBeenCalledOnce();
+      expect(mocked.spawnProcess.mock.calls[0]?.[0]?.args).toEqual(expect.arrayContaining([
+        "run",
+        "--rm",
+        "--entrypoint",
+        "git",
+      ]));
+    } finally {
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("releases a repo-local worktree through its shared project helper key and drains the pool", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-release-");
+    const worktreeDir = path.join(fixture.repoDir, ".worktrees", "session-1");
+    const worktreeGitDir = path.join(fixture.repoDir, ".git", "worktrees", "session-1");
+    await fsPromises.mkdir(worktreeDir, { recursive: true });
+    await fsPromises.mkdir(worktreeGitDir, { recursive: true });
+    await fsPromises.writeFile(path.join(worktreeGitDir, "HEAD"), "ref: refs/heads/session-1\n", "utf8");
+    await fsPromises.writeFile(path.join(worktreeGitDir, "commondir"), "../..\n", "utf8");
+    await fsPromises.writeFile(path.join(worktreeDir, ".git"), `gitdir: ${worktreeGitDir}\n`, "utf8");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLease = mocked.activate(fixture.repoDir);
+    try {
+      await mocked.isolatedRunner.run("git", ["status", "--porcelain"], {
+        cwd: fixture.repoDir,
+        env: { CODE_UX_CONTAINERIZED_GIT: "1" },
+      });
+      const projectPoolKey = mocked.pool.ensure.mock.calls[0]?.[0];
+
+      await mocked.commandRunnerModule.releaseGitHelperForCwd(worktreeDir);
+      await mocked.commandRunnerModule.shutdownGitHelperPool();
+
+      expect(mocked.pool.release).toHaveBeenCalledWith(projectPoolKey);
+      expect(mocked.pool.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      await releaseLease();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not recreate the warm Git helper pool after runtime shutdown begins", async () => {
+    const fixture = await createGitRepositoryFixture("code-ux-git-pool-shutdown-");
+    const mocked = await loadCommandRunnerWithMockedGitPool();
+    const releaseLease = mocked.activate(fixture.repoDir);
+    const shutdownState = await import("../../../../src/services/shutdown-state.js");
+    try {
+      const warmResult = await mocked.isolatedRunner.run("git", ["status", "--porcelain"], {
+        cwd: fixture.repoDir,
+        env: { CODE_UX_CONTAINERIZED_GIT: "1" },
+      });
+      shutdownState.beginRuntimeShutdown();
+      await mocked.commandRunnerModule.shutdownGitHelperPool();
+      const lateResult = await mocked.isolatedRunner.run("git", ["status", "--porcelain"], {
+        cwd: fixture.repoDir,
+        env: { CODE_UX_CONTAINERIZED_GIT: "1" },
+      });
+
+      expect(warmResult.ok).toBe(true);
+      expect(lateResult.ok).toBe(true);
+      expect(mocked.pool.ensure).toHaveBeenCalledOnce();
+      expect(mocked.pool.shutdown).toHaveBeenCalledOnce();
+      expect(mocked.spawnProcess).toHaveBeenCalledTimes(2);
+      expect(mocked.spawnProcess.mock.calls[0]?.[0]?.args).toContain("exec");
+      expect(mocked.spawnProcess.mock.calls[1]?.[0]?.args).toEqual(expect.arrayContaining([
+        "run",
+        "--rm",
+        "--entrypoint",
+        "git",
+      ]));
+      expect(mocked.spawnProcess.mock.calls[1]?.[0]?.args).not.toContain("exec");
+    } finally {
+      await releaseLease();
+      shutdownState.resetRuntimeShutdownForTests();
+      await mocked.cleanup();
+      await fsPromises.rm(fixture.tempDir, { recursive: true, force: true });
     }
   });
 

@@ -15,6 +15,7 @@ import { getDockerUserSpec } from "../services/cli-docker-utils.js";
 import { assertSafePathSegment } from "../utils/path-validator.js";
 import { managedRuntimeService } from "../services/managed-runtime-service.js";
 import { PROVIDER_TOOL_MOUNT, providerToolManager } from "../services/provider-tool-manager.js";
+import { getRuntimeOwnerDockerArgs, getRuntimeOwnerLabel } from "../shared/config/runtime-owner.js";
 
 interface TerminalSession {
   sessionId: string;
@@ -331,11 +332,20 @@ async function cleanupAllRunningLoginSessions(logger?: Logger): Promise<void> {
   // 2. Clean up any leftover docker containers labeled code-ux.login=true
   try {
     const cp = await import("child_process");
-    if (!cp || typeof cp.exec !== "function") {
+    if (!cp || typeof cp.execFile !== "function") {
       return;
     }
+    const execFile = cp.execFile;
     await new Promise<void>((resolve) => {
-      cp.exec("docker ps -a -q --filter 'label=code-ux.login=true'", (err, stdout) => {
+      execFile("docker", [
+        "ps",
+        "-a",
+        "-q",
+        "--filter",
+        "label=code-ux.login=true",
+        "--filter",
+        `label=${getRuntimeOwnerLabel()}`,
+      ], (err, stdout) => {
         if (err) {
           logger?.error(`[DEBUG] Failed to query leftover login containers: ${String(err)}`);
           resolve();
@@ -344,7 +354,7 @@ async function cleanupAllRunningLoginSessions(logger?: Logger): Promise<void> {
         const containerIds = stdout.trim().split(/\s+/).filter(Boolean);
         if (containerIds.length > 0) {
           logger?.info(`[DEBUG] Preemptively removing active/stray login containers: ${containerIds.join(", ")}`);
-          cp.exec(`docker rm -f -v ${containerIds.join(" ")}`, (rmErr) => {
+          execFile("docker", ["rm", "-f", "-v", ...containerIds], (rmErr) => {
             if (rmErr) {
               logger?.error(`[DEBUG] Failed to force-remove leftover login containers: ${String(rmErr)}`);
             }
@@ -356,7 +366,7 @@ async function cleanupAllRunningLoginSessions(logger?: Logger): Promise<void> {
       });
     });
   } catch (_) {
-    // Ignore in environments where child_process dynamic import or exec is unavailable
+    // Ignore in environments where child_process dynamic import or execFile is unavailable
   }
 }
 
@@ -590,6 +600,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         `code-ux-login-${providerId}-${sessionId}`,
         "--label",
         "code-ux.login=true",
+        ...getRuntimeOwnerDockerArgs(),
         "--label",
         `code-ux.session-id=${sessionId}`,
         "--label",

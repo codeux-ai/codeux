@@ -2,7 +2,7 @@ import { evaluateMergeReadiness } from "./feature-pr/merge-readiness-policy.js";
 import { deriveChecksFromCiRuns } from "../../../sprint/ci-status-utils.js";
 import { runCommandStrict } from "../../../services/cli-process-runner.js";
 import type { GuardrailService } from "../../../services/guardrail-service.js";
-import { createTemporaryWorktreeBranchMerger, deleteBranchLocally, findRecoverableWorkerBranch, mergeBranchLocallyInTemporaryWorktree, workerBranchHasMergeWork, workerBranchIsMergedIntoFeature } from "../../../infrastructure/git/local-merge.js";
+import { createTemporaryWorktreeBranchMerger, deleteBranchLocally, findRecoverableWorkerBranch, mergeBranchLocallyInTemporaryWorktree, resolveWorkerBranchMergeState, workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
 import { buildWorkerBranchPrefix } from "../../../services/cli-workflow-utils.js";
 import { matchMergedPrForTask, matchPrForTask } from "./feature-pr/pr-matcher.js";
 import { attemptAutoMerge } from "./feature-pr/automerge-policy.js";
@@ -116,6 +116,15 @@ export class FeaturePrGateService {
       error?: unknown;
     }
     const taskCiInfoMap = new Map<string, TaskCiInfo>();
+    const taskRecordIds = updatedSubtasks
+      .map((task) => task.record_id?.trim())
+      .filter((taskId): taskId is string => Boolean(taskId));
+    const listLatestTaskRuns = context.executionRepository
+      ? (context.executionRepository as Partial<Pick<ExecutionRepository, "listLatestTaskRuns">>).listLatestTaskRuns
+      : undefined;
+    const latestTaskRuns = context.executionRepository && context.sprintRunId && listLatestTaskRuns
+      ? listLatestTaskRuns.call(context.executionRepository, taskRecordIds, context.sprintRunId)
+      : null;
 
     for (const task of updatedSubtasks) {
       let pr: GitPullRequestStatus | undefined = undefined;
@@ -134,7 +143,9 @@ export class FeaturePrGateService {
       }
 
       const taskRun = context.executionRepository && context.sprintRunId && task.record_id
-        ? context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId)
+        ? latestTaskRuns
+          ? latestTaskRuns.get(task.record_id) ?? null
+          : context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId)
         : null;
       // All CLI git decisions below use the same immutable event snapshot. A
       // gate evaluation never appends git-finalization events, so rereading the
@@ -143,9 +154,15 @@ export class FeaturePrGateService {
       const listTaskRunEvents = taskRun?.id && context.executionRepository
         ? (taskRunId: string, limit?: number): TaskRunEventLike[] => {
             if (taskRunId !== taskRun.id) {
-              return context.executionRepository!.listTaskRunEvents(taskRunId, limit);
+              return context.executionRepository!.listTaskRunEvents(taskRunId, limit, {
+                eventTypes: ["cli_git_pushed", "cli_git_no_changes"],
+                skipValidation: true,
+              });
             }
-            taskRunEvents ??= context.executionRepository!.listTaskRunEvents(taskRun.id, limit);
+            taskRunEvents ??= context.executionRepository!.listTaskRunEvents(taskRun.id, limit, {
+              eventTypes: ["cli_git_pushed", "cli_git_no_changes"],
+              skipValidation: true,
+            });
             return taskRunEvents;
           }
         : undefined;
@@ -266,9 +283,10 @@ export class FeaturePrGateService {
         }
         context.logger?.info(`LOCAL Mode: Recovered worker branch ${recovered} for task ${task.id} from local refs.`);
         if (context.executionRepository && context.sprintRunId && task.record_id) {
-          const taskRun = context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId);
+          const taskRun = info.taskRun;
           if (taskRun && !taskRun.workerBranch) {
             context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: recovered });
+            taskRun.workerBranch = recovered;
           }
         }
       }
@@ -336,28 +354,25 @@ export class FeaturePrGateService {
           }
 
           const info = taskCiInfoMap.get(task.id)!;
-          const hasMergeWork = await workerBranchHasMergeWork({
+          const mergeResolution = await resolveWorkerBranchMergeState({
             repoPath: context.repoPath,
             featureBranch: context.featureBranch,
             workerBranch,
           });
-          if (!hasMergeWork) {
+          if (mergeResolution.state !== "unmerged") {
             const recoveredCompletedMerge = context.githubMode === "LOCAL"
               && info.cliGitPushed
               && !info.cliGitNoChanges
-              && await workerBranchIsMergedIntoFeature({
-                repoPath: context.repoPath,
-                featureBranch: context.featureBranch,
-                workerBranch,
-              });
+              && mergeResolution.state === "merged";
             task.status = "COMPLETED";
             task.is_merged = recoveredCompletedMerge;
             task.merge_indicator = recoveredCompletedMerge ? "MERGED" : undefined;
             task.worker_branch = undefined;
             if (context.executionRepository && context.sprintRunId && task.record_id) {
-              const taskRun = context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId);
+              const taskRun = info.taskRun;
               if (taskRun?.id) {
                 context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: null });
+                taskRun.workerBranch = null;
                 context.executionRepository.appendTaskRunEvent(taskRun.id, "ci_gate_status", "system", {
                   state: recoveredCompletedMerge ? "merged_branch" : "no_merge_work",
                   taskId: task.id,
@@ -429,9 +444,10 @@ export class FeaturePrGateService {
               task.intervention_owner = undefined;
               task.intervention_hint = undefined;
               if (context.executionRepository && context.sprintRunId && task.record_id) {
-                const taskRun = context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId);
+                const taskRun = info.taskRun;
                 if (taskRun?.id) {
                   context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: null });
+                  taskRun.workerBranch = null;
                   context.executionRepository.appendTaskRunEvent(taskRun.id, "ci_gate_status", "system", {
                     state: "merged_branch",
                     taskId: task.id,
@@ -512,7 +528,7 @@ export class FeaturePrGateService {
         if (info.error) {
           return Promise.resolve({ reportText: "", events: [], attentionItem: undefined });
         }
-        return this.processTask(task, context, info.pr, info.mergedPr).catch((err) => {
+        return this.processTask(task, context, info.pr, info.mergedPr, info.taskRun).catch((err) => {
           context.logger?.error(`Error processing task ${task.id}:`, { error: err });
           return { reportText: "", events: [], attentionItem: undefined };
         });
@@ -524,11 +540,12 @@ export class FeaturePrGateService {
 
     for (let i = 0; i < completedAwaitingMerge.length; i++) {
       const task = completedAwaitingMerge[i];
+      const info = taskCiInfoMap.get(task.id)!;
       const result = processResults[i];
       if (result) {
         reportText += result.reportText;
         for (const event of result.events) {
-          this.appendCiGateEvent(task, context, event.state, event.payload);
+          this.appendCiGateEvent(task, context, event.state, event.payload, info.taskRun);
         }
         if (result.attentionItem) {
           itemsToOpen.push({ task, payload: result.attentionItem });
@@ -548,7 +565,8 @@ export class FeaturePrGateService {
     task: Subtask,
     context: CiGateContext,
     cachedPr: GitPullRequestStatus | undefined,
-    cachedMergedPr: GitMergeStatus | undefined
+    cachedMergedPr: GitMergeStatus | undefined,
+    cachedTaskRun: TaskRunRecord | null,
   ): Promise<{
     reportText: string;
     events: Array<{ state: string; payload: Record<string, unknown> }>;
@@ -568,9 +586,10 @@ export class FeaturePrGateService {
       if (!workerBranch && context.executionRepository && context.sprintRunId && task.record_id) {
         const headRef = pr?.headRefName || mergedPr?.headRefName;
         if (headRef) {
-          const taskRun = context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId);
+          const taskRun = cachedTaskRun;
           if (taskRun && !taskRun.workerBranch) {
             context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: headRef });
+            taskRun.workerBranch = headRef;
           }
           task.worker_branch = headRef;
         }
@@ -591,10 +610,7 @@ export class FeaturePrGateService {
       }
 
       if (!pr) {
-        const taskRun = context.executionRepository && context.sprintRunId && task.record_id
-          ? context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId)
-          : null;
-        const isExecutionCompleted = isExecutionCompletedForCi(context, task, taskRun);
+        const isExecutionCompleted = isExecutionCompletedForCi(context, task, cachedTaskRun);
 
         if (isExecutionCompleted) {
           const qaGate = context.evaluateTaskQaGate?.(task);
@@ -625,8 +641,9 @@ export class FeaturePrGateService {
             task.status = "COMPLETED";
             task.merge_indicator = undefined;
             task.worker_branch = undefined;
-            if (taskRun?.id && context.executionRepository) {
-              context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: null });
+            if (cachedTaskRun?.id && context.executionRepository) {
+              context.executionRepository.updateTaskRun(cachedTaskRun.id, { workerBranch: null });
+              cachedTaskRun.workerBranch = null;
             }
             await this.persistMergedTask(task, context);
             events.push({ state: "no_merge_work", payload: {
@@ -900,12 +917,13 @@ export class FeaturePrGateService {
     context: CiGateContext,
     state: string,
     payload: Record<string, unknown>,
+    cachedTaskRun: TaskRunRecord | null,
   ): void {
     if (!context.executionRepository || !context.sprintRunId || !task.record_id) {
       return;
     }
 
-    const taskRun = context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId);
+    const taskRun = cachedTaskRun;
     if (!taskRun) {
       return;
     }

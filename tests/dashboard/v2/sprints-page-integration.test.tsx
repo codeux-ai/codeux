@@ -300,7 +300,7 @@ describe("SprintsPage Integration Regressions", () => {
     const moreTrigger = screen.getAllByRole("button", { name: /Open actions menu for sprint/i })[0];
     await userEvent.click(moreTrigger);
 
-    const editBtn = await screen.findByRole('button', { name: /Edit/i });
+    const editBtn = await screen.findByRole('menuitem', { name: /Edit/i });
 
     expect(editBtn.className).toContain("focus-visible:ring-offset-2");
   });

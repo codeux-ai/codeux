@@ -374,9 +374,13 @@ export class CliWorkflowService {
         },
       })
       : undefined;
+    let releaseWorkspaceHelperReservation = (): void => undefined;
 
     let preserveWorkspaceForShutdown = false;
     try {
+      releaseWorkspaceHelperReservation = this.workspaceManager.reserveWorkspaceHelper(
+        ctx.worktreePath,
+      );
       if (taskRun && invocationModel && this.deps.executionRepository) {
         const invocation = this.deps.executionRepository.createExecutionInvocation({
           projectId: taskRun.projectId,
@@ -455,7 +459,14 @@ export class CliWorkflowService {
           worktreePath: ctx.worktreePath,
         }, `cli:provider:completed:${ctx.worktreePath}`);
 
+        this.appendExecutionEvent(args, "cli_memory_capture_started", {
+          provider: args.provider,
+        }, `cli:memory:capture:started:${args.sessionId}`);
         const { memoriesCaptured } = await executeMemoryCaptureStage(ctx);
+        this.appendExecutionEvent(args, "cli_memory_capture_completed", {
+          provider: args.provider,
+          memoriesCaptured,
+        }, `cli:memory:capture:completed:${args.sessionId}`);
         if (memoriesCaptured > 0) {
           this.appendExecutionEvent(args, "cli_memory_captured", {
             provider: args.provider,
@@ -464,6 +475,10 @@ export class CliWorkflowService {
         }
       }
 
+      this.appendExecutionEvent(args, "cli_git_finalize_started", {
+        provider: args.provider,
+        worktreePath: ctx.worktreePath,
+      }, `cli:git:finalize:started:${ctx.worktreePath}`);
       const { hasChanges, committedChanges, pushedBranch, stats } = await executeGitFinalizeStage(ctx);
 
       if (!hasChanges) {
@@ -739,6 +754,7 @@ export class CliWorkflowService {
           worktreePath: ctx.worktreePath,
         }, `cli:cleanup:${cleanupResult.cleanedUp ? "cleaned" : "preserved"}:${ctx.worktreePath}`);
       } finally {
+        releaseWorkspaceHelperReservation();
         unregisterDispatch?.();
         const taskRun = this.resolveTaskRun(args);
         if (taskRun?.sprintRunId) {
@@ -793,10 +809,16 @@ export class CliWorkflowService {
       return null;
     }
 
-    const events = repository.listTaskRunEvents(providerInvocation.taskRunId, 200);
+    const events = repository.listTaskRunEvents(providerInvocation.taskRunId, 200, {
+      eventTypes: ["task_dispatch_reconciled", "cli_workspace_bound", "cli_workflow_completed"],
+      skipValidation: true,
+    });
     const recoveredCompletedProvider = events.some((event) => (
       event.eventType === "task_dispatch_reconciled"
-      && event.payload?.reason === "terminal_provider_active_dispatch_mismatch"
+      && (
+        event.payload?.reason === "terminal_provider_active_dispatch_mismatch"
+        || event.payload?.reason === "shutdown_interrupted_after_provider_completion"
+      )
       && event.payload?.providerStatus === "completed"
     ));
     const sameWorkspace = events.some((event) => (

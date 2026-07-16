@@ -16,6 +16,50 @@ export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
 export type TaskRunState = Exclude<SubtaskStatus, undefined>;
 export type JulesPlan = { steps?: Array<{ title?: string }> };
 
+const MAX_PROJECTED_ACTIVITY_TEXT_CHARS = 8 * 1024;
+const MAX_PROJECTED_ACTIVITY_ID_CHARS = 2 * 1024;
+const MAX_PROJECTED_PLAN_STEPS = 32;
+const MAX_PROJECTED_PLAN_TITLE_CHARS = 512;
+const MAX_PROJECTED_COMPLETION_JSON_CHARS = 8 * 1024;
+const MAX_RECENT_ACTIVITY_CACHE_ENTRIES = 32;
+const MAX_RECENT_ACTIVITY_CACHE_CHARS = 32 * 1024 * 1024;
+
+function asBoundedString(value: unknown, maxChars = MAX_PROJECTED_ACTIVITY_TEXT_CHARS): string | undefined {
+  const normalized = asString(value);
+  if (!normalized || normalized.length <= maxChars) {
+    return normalized;
+  }
+  const marker = "\n… [activity preview truncated] …\n";
+  const retainedChars = Math.max(maxChars - marker.length, 0);
+  const headChars = Math.ceil(retainedChars / 2);
+  const tailChars = retainedChars - headChars;
+  return `${normalized.slice(0, headChars)}${marker}${normalized.slice(-tailChars)}`.slice(0, maxChars);
+}
+
+function boundProjectedPlan(value: unknown): JulesPlan | undefined {
+  const plan = asRecord(value);
+  if (!plan) return undefined;
+  const steps = Array.isArray(plan.steps)
+    ? plan.steps.slice(0, MAX_PROJECTED_PLAN_STEPS).map((step) => ({
+        title: asBoundedString(asRecord(step)?.title, MAX_PROJECTED_PLAN_TITLE_CHARS),
+      }))
+    : undefined;
+  return steps ? { steps } : {};
+}
+
+function boundProjectedCompletion(value: unknown): unknown {
+  if (value === undefined) return undefined;
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized.length <= MAX_PROJECTED_COMPLETION_JSON_CHARS) {
+      return value;
+    }
+    return { truncated: true, originalChars: serialized.length };
+  } catch {
+    return { truncated: true, serializationFailed: true };
+  }
+}
+
 export interface ProjectRow {
   id: string;
   base_dir: string;
@@ -91,6 +135,7 @@ export interface MappedTask {
 interface RecentActivitiesCacheEntry {
   version: string;
   activitiesByTaskId: Map<string, JulesActivity[]>;
+  estimatedChars: number;
 }
 
 export function asString(value: unknown): string | undefined {
@@ -129,6 +174,7 @@ function resolveProjectedTaskStatus(row: TaskRow, run?: TaskRunRow): Subtask["st
 
 export class RuntimeStatusProjection {
   private readonly recentActivitiesCache = new Map<string, RecentActivitiesCacheEntry>();
+  private recentActivitiesCacheChars = 0;
 
   constructor(
     private readonly storage: AppDbStorage,
@@ -334,6 +380,7 @@ export class RuntimeStatusProjection {
     this.setRecentActivitiesCache(cacheKey, {
       version,
       activitiesByTaskId: this.cloneActivitiesByTaskId(activitiesByTaskId),
+      estimatedChars: this.estimateActivitiesChars(activitiesByTaskId),
     });
 
     return activitiesByTaskId;
@@ -361,15 +408,40 @@ export class RuntimeStatusProjection {
   }
 
   private setRecentActivitiesCache(cacheKey: string, entry: RecentActivitiesCacheEntry): void {
-    this.recentActivitiesCache.delete(cacheKey);
+    const replaced = this.recentActivitiesCache.get(cacheKey);
+    if (replaced) {
+      this.recentActivitiesCacheChars -= replaced.estimatedChars;
+      this.recentActivitiesCache.delete(cacheKey);
+    }
     this.recentActivitiesCache.set(cacheKey, entry);
-    while (this.recentActivitiesCache.size > 100) {
+    this.recentActivitiesCacheChars += entry.estimatedChars;
+    while (
+      this.recentActivitiesCache.size > MAX_RECENT_ACTIVITY_CACHE_ENTRIES
+      || (this.recentActivitiesCacheChars > MAX_RECENT_ACTIVITY_CACHE_CHARS && this.recentActivitiesCache.size > 1)
+    ) {
       const oldestKey = this.recentActivitiesCache.keys().next().value;
       if (typeof oldestKey !== "string") {
         return;
       }
+      const oldest = this.recentActivitiesCache.get(oldestKey);
       this.recentActivitiesCache.delete(oldestKey);
+      this.recentActivitiesCacheChars -= oldest?.estimatedChars ?? 0;
     }
+  }
+
+  private estimateActivitiesChars(activitiesByTaskId: Map<string, JulesActivity[]>): number {
+    let total = 0;
+    for (const [taskId, activities] of activitiesByTaskId) {
+      total += taskId.length;
+      for (const activity of activities) {
+        try {
+          total += JSON.stringify(activity).length;
+        } catch {
+          total += MAX_PROJECTED_ACTIVITY_TEXT_CHARS;
+        }
+      }
+    }
+    return total;
   }
 
   mapTaskActivityRow(row: TaskActivityRow): JulesActivity | null {
@@ -380,8 +452,10 @@ export class RuntimeStatusProjection {
     const planGenerated = asRecord(payload?.planGenerated);
     const planApproved = asRecord(payload?.planApproved);
     const sessionFailed = asRecord(payload?.sessionFailed);
-    const activityId = asString(row.activity_id) || asString(payload?.activityId);
-    const sessionName = asString(row.session_name) || asString(payload?.sessionName);
+    const activityId = asBoundedString(row.activity_id, MAX_PROJECTED_ACTIVITY_ID_CHARS)
+      || asBoundedString(payload?.activityId, MAX_PROJECTED_ACTIVITY_ID_CHARS);
+    const sessionName = asBoundedString(row.session_name, MAX_PROJECTED_ACTIVITY_ID_CHARS)
+      || asBoundedString(payload?.sessionName, MAX_PROJECTED_ACTIVITY_ID_CHARS);
 
     if (!activityId) {
       return null;
@@ -389,20 +463,24 @@ export class RuntimeStatusProjection {
 
     return {
       id: activityId,
-      name: asString(row.activity_name) || asString(payload?.activityName) || (sessionName ? `${sessionName}/activities/${activityId}` : `activities/${activityId}`),
+      name: asBoundedString(row.activity_name, MAX_PROJECTED_ACTIVITY_ID_CHARS)
+        || asBoundedString(payload?.activityName, MAX_PROJECTED_ACTIVITY_ID_CHARS)
+        || (sessionName ? `${sessionName}/activities/${activityId}` : `activities/${activityId}`),
       createTime: row.created_at,
-      originator: asString(row.originator) || asString(payload?.originator) || "provider",
-      description: asString(payload?.description),
-      agentMessaged: agentMessaged ? { agentMessage: asString(agentMessaged.agentMessage) } : undefined,
-      userMessaged: userMessaged ? { userMessage: asString(userMessaged.userMessage) } : undefined,
+      originator: asBoundedString(row.originator, MAX_PROJECTED_ACTIVITY_ID_CHARS)
+        || asBoundedString(payload?.originator, MAX_PROJECTED_ACTIVITY_ID_CHARS)
+        || "provider",
+      description: asBoundedString(payload?.description),
+      agentMessaged: agentMessaged ? { agentMessage: asBoundedString(agentMessaged.agentMessage) } : undefined,
+      userMessaged: userMessaged ? { userMessage: asBoundedString(userMessaged.userMessage) } : undefined,
       progressUpdated: progressUpdated ? {
-        title: asString(progressUpdated.title),
-        description: asString(progressUpdated.description),
+        title: asBoundedString(progressUpdated.title),
+        description: asBoundedString(progressUpdated.description),
       } : undefined,
-      planGenerated: planGenerated ? { plan: asRecord(planGenerated.plan) as JulesPlan | undefined } : undefined,
-      planApproved: planApproved ? { planId: asString(planApproved.planId) } : undefined,
-      sessionFailed: sessionFailed ? { reason: asString(sessionFailed.reason) } : undefined,
-      sessionCompleted: payload?.sessionCompleted ?? undefined,
+      planGenerated: planGenerated ? { plan: boundProjectedPlan(planGenerated.plan) } : undefined,
+      planApproved: planApproved ? { planId: asBoundedString(planApproved.planId, MAX_PROJECTED_ACTIVITY_ID_CHARS) } : undefined,
+      sessionFailed: sessionFailed ? { reason: asBoundedString(sessionFailed.reason) } : undefined,
+      sessionCompleted: boundProjectedCompletion(payload?.sessionCompleted),
     };
   }
 

@@ -22,6 +22,10 @@ export interface ClaudeUsageTotals {
 export interface ClaudeCodeLogResult extends ParsedProviderLogResult<ClaudeUsageTotals> {
   /** Raw object of the last usage seen, for telemetry storage. */
   rawUsageJson: Record<string, unknown> | null;
+  /** Monotonic revision for append-efficient downstream message mapping. */
+  conversationRevision?: number;
+  /** First normalized turn changed by the latest append. */
+  conversationChangedFromIndex?: number;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -246,138 +250,196 @@ function turnSignature(turns: ParsedConversationTurn[]): string {
  *   (matches codex / qwen conventions). Entries older than `sinceMs - 2000ms`
  *   are skipped so only the current invocation's turns are included.
  */
-export function parseClaudeCodeSessionJsonl(
-  jsonl: string,
-  sinceMs?: number,
-): ClaudeCodeLogResult {
-  const lines = jsonl.split("\n");
-  const usageByMessageId = new Map<string, ClaudeUsageTotals>();
-  const assistantMessageRanges = new Map<string, { start: number; count: number; signature: string }>();
-  const conversation: ParsedConversationTurn[] = [];
+interface ClaudeCodeParserState {
+  usageByMessageId: Map<string, ClaudeUsageTotals>;
+  assistantMessageRanges: Map<string, { start: number; count: number; signature: string }>;
+  conversation: ParsedConversationTurn[];
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheCreation: number;
+  totalCacheRead: number;
+  latestRawUsage: Record<string, unknown> | null;
+  nativeSessionId: string | null;
+  hasUsage: boolean;
+  minMs: number | null;
+  conversationRevision: number;
+  conversationChangedFromIndex: number | null;
+}
 
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
-  let totalCacheCreation = 0;
-  let totalCacheRead = 0;
-  let latestRawUsage: Record<string, unknown> | null = null;
-  let nativeSessionId: string | null = null;
-  let hasUsage = false;
-
-  const applyUsage = (messageId: string | null, usage: Record<string, unknown> | null): void => {
-    if (!usage || !claudeUsageHasTokens(usage)) return;
-    const next = {
-      inputTokens: toNumber(usage.input_tokens),
-      outputTokens: toNumber(usage.output_tokens),
-      cacheCreationTokens: toNumber(usage.cache_creation_input_tokens),
-      cacheReadTokens: toNumber(usage.cache_read_input_tokens),
-    };
-    const previous = messageId ? usageByMessageId.get(messageId) : undefined;
-    totalInputTokens += next.inputTokens - (previous?.inputTokens ?? 0);
-    totalOutputTokens += next.outputTokens - (previous?.outputTokens ?? 0);
-    totalCacheCreation += next.cacheCreationTokens - (previous?.cacheCreationTokens ?? 0);
-    totalCacheRead += next.cacheReadTokens - (previous?.cacheReadTokens ?? 0);
-    if (messageId) usageByMessageId.set(messageId, next);
-    latestRawUsage = usage;
-    hasUsage = true;
+function createClaudeCodeParserState(sinceMs?: number): ClaudeCodeParserState {
+  return {
+    usageByMessageId: new Map(),
+    assistantMessageRanges: new Map(),
+    conversation: [],
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalCacheCreation: 0,
+    totalCacheRead: 0,
+    latestRawUsage: null,
+    nativeSessionId: null,
+    hasUsage: false,
+    minMs: typeof sinceMs === "number" ? sinceMs - 2000 : null,
+    conversationRevision: 0,
+    conversationChangedFromIndex: null,
   };
+}
 
-  const upsertAssistantTurns = (messageId: string | null, turns: ParsedConversationTurn[]): void => {
-    if (!messageId || turns.length === 0) {
-      conversation.push(...turns);
-      return;
-    }
-    const signature = turnSignature(turns);
-    const existing = assistantMessageRanges.get(messageId);
-    if (!existing) {
-      assistantMessageRanges.set(messageId, { start: conversation.length, count: turns.length, signature });
-      conversation.push(...turns);
-      return;
-    }
-    if (existing.signature === signature) return;
-    conversation.splice(existing.start, existing.count, ...turns);
-    const delta = turns.length - existing.count;
-    for (const [id, range] of assistantMessageRanges.entries()) {
-      if (id !== messageId && range.start > existing.start) {
-        assistantMessageRanges.set(id, { ...range, start: range.start + delta });
-      }
-    }
-    assistantMessageRanges.set(messageId, { start: existing.start, count: turns.length, signature });
+function markClaudeConversationChanged(state: ClaudeCodeParserState, changedFrom: number): void {
+  state.conversationRevision += 1;
+  state.conversationChangedFromIndex = state.conversationChangedFromIndex === null
+    ? changedFrom
+    : Math.min(state.conversationChangedFromIndex, changedFrom);
+}
+
+function applyClaudeUsage(
+  state: ClaudeCodeParserState,
+  messageId: string | null,
+  usage: Record<string, unknown> | null,
+): void {
+  if (!usage || !claudeUsageHasTokens(usage)) return;
+  const next = {
+    inputTokens: toNumber(usage.input_tokens),
+    outputTokens: toNumber(usage.output_tokens),
+    cacheCreationTokens: toNumber(usage.cache_creation_input_tokens),
+    cacheReadTokens: toNumber(usage.cache_read_input_tokens),
   };
+  const previous = messageId ? state.usageByMessageId.get(messageId) : undefined;
+  state.totalInputTokens += next.inputTokens - (previous?.inputTokens ?? 0);
+  state.totalOutputTokens += next.outputTokens - (previous?.outputTokens ?? 0);
+  state.totalCacheCreation += next.cacheCreationTokens - (previous?.cacheCreationTokens ?? 0);
+  state.totalCacheRead += next.cacheReadTokens - (previous?.cacheReadTokens ?? 0);
+  if (messageId) state.usageByMessageId.set(messageId, next);
+  state.latestRawUsage = usage;
+  state.hasUsage = true;
+}
 
-  // 2-second grace window, same as codex / qwen parsers.
-  const minMs = typeof sinceMs === "number" ? sinceMs - 2000 : null;
+function appendClaudeTurns(state: ClaudeCodeParserState, turns: ParsedConversationTurn[]): void {
+  if (turns.length === 0) return;
+  const changedFrom = state.conversation.length;
+  state.conversation.push(...turns);
+  markClaudeConversationChanged(state, changedFrom);
+}
 
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim();
-    if (!trimmed.startsWith("{")) continue;
-
-    const entry = parseJsonObject(trimmed);
-    if (!entry) continue;
-
-    const entryType = typeof entry.type === "string" ? entry.type : null;
-
-    // Timestamp extraction and filtering (applied to all entry types).
-    const timestampMs = parseTimestampMs(entry.timestamp);
-    if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
-      continue;
-    }
-
-    // Capture the session id only from records eligible for this invocation.
-    if (!nativeSessionId) {
-      nativeSessionId = claudeSessionId(entry);
-    }
-
-    // ── Legacy bare-message format ───────────────────────────────────────────
-    // Older Claude Code sessions and container artifact dumps write
-    // `{ message: { usage, content } }` with no `type` wrapper. Treat these
-    // as assistant turns so we stay backwards-compatible.
-    if (!entryType && asRecord(entry.message)) {
-      const legacyMessage = asRecord(entry.message)!;
-      const messageId = typeof legacyMessage.id === "string" ? legacyMessage.id : null;
-      applyUsage(messageId, claudeMessageUsage(legacyMessage));
-      const role = typeof legacyMessage.role === "string" ? legacyMessage.role : "assistant";
-      if (role === "user") {
-        conversation.push(...claudeUserTurns(legacyMessage, timestampMs));
-      } else {
-        upsertAssistantTurns(messageId, claudeAssistantTurns(legacyMessage, timestampMs));
-      }
-      continue;
-    }
-
-    // ── Assistant turns ──────────────────────────────────────────────────────
-    if (entryType === "assistant") {
-      const message = asRecord(entry.message);
-      if (!message) continue;
-
-      const messageId = typeof message.id === "string" ? message.id : null;
-
-      // ── Token usage ─────────────────────────────────────────────────────
-      applyUsage(messageId, claudeMessageUsage(message));
-
-      // ── Conversation turns ───────────────────────────────────────────────
-      const turns = claudeAssistantTurns(message, timestampMs);
-      upsertAssistantTurns(messageId, turns);
-      continue;
-    }
-
-    // ── User turns (may carry tool results) ──────────────────────────────────
-    if (entryType === "user") {
-      const message = asRecord(entry.message);
-      if (!message) continue;
-
-      conversation.push(...claudeUserTurns(message, timestampMs));
-      continue;
+function upsertClaudeAssistantTurns(
+  state: ClaudeCodeParserState,
+  messageId: string | null,
+  turns: ParsedConversationTurn[],
+): void {
+  if (!messageId || turns.length === 0) {
+    appendClaudeTurns(state, turns);
+    return;
+  }
+  const signature = turnSignature(turns);
+  const existing = state.assistantMessageRanges.get(messageId);
+  if (!existing) {
+    const start = state.conversation.length;
+    state.assistantMessageRanges.set(messageId, { start, count: turns.length, signature });
+    state.conversation.push(...turns);
+    markClaudeConversationChanged(state, start);
+    return;
+  }
+  if (existing.signature === signature) return;
+  state.conversation.splice(existing.start, existing.count, ...turns);
+  const delta = turns.length - existing.count;
+  for (const [id, range] of state.assistantMessageRanges.entries()) {
+    if (id !== messageId && range.start > existing.start) {
+      state.assistantMessageRanges.set(id, { ...range, start: range.start + delta });
     }
   }
+  state.assistantMessageRanges.set(messageId, { start: existing.start, count: turns.length, signature });
+  markClaudeConversationChanged(state, existing.start);
+}
 
-  const usage: ClaudeUsageTotals | null = hasUsage
+function processClaudeCodeLine(state: ClaudeCodeParserState, rawLine: string): boolean {
+  const trimmed = rawLine.trim();
+  if (!trimmed.startsWith("{")) return false;
+  const entry = parseJsonObject(trimmed);
+  if (!entry) return false;
+
+  const entryType = typeof entry.type === "string" ? entry.type : null;
+  const timestampMs = parseTimestampMs(entry.timestamp);
+  if (state.minMs !== null && timestampMs !== null && timestampMs < state.minMs) return true;
+  if (!state.nativeSessionId) state.nativeSessionId = claudeSessionId(entry);
+
+  if (!entryType && asRecord(entry.message)) {
+    const message = asRecord(entry.message)!;
+    const messageId = typeof message.id === "string" ? message.id : null;
+    applyClaudeUsage(state, messageId, claudeMessageUsage(message));
+    if (message.role === "user") {
+      appendClaudeTurns(state, claudeUserTurns(message, timestampMs));
+    } else {
+      upsertClaudeAssistantTurns(state, messageId, claudeAssistantTurns(message, timestampMs));
+    }
+    return true;
+  }
+
+  if (entryType === "assistant") {
+    const message = asRecord(entry.message);
+    if (!message) return true;
+    const messageId = typeof message.id === "string" ? message.id : null;
+    applyClaudeUsage(state, messageId, claudeMessageUsage(message));
+    upsertClaudeAssistantTurns(state, messageId, claudeAssistantTurns(message, timestampMs));
+    return true;
+  }
+
+  if (entryType === "user") {
+    const message = asRecord(entry.message);
+    if (message) appendClaudeTurns(state, claudeUserTurns(message, timestampMs));
+  }
+  return true;
+}
+
+function processClaudeCodeChunk(state: ClaudeCodeParserState, chunk: string, pendingLine: string): string {
+  const lines = (pendingLine + chunk).split("\n");
+  const finalLine = lines.pop() ?? "";
+  for (const line of lines) processClaudeCodeLine(state, line);
+  if (!finalLine) return "";
+  return processClaudeCodeLine(state, finalLine) ? "" : finalLine;
+}
+
+function buildClaudeCodeLogResult(state: ClaudeCodeParserState): ClaudeCodeLogResult {
+  const usage: ClaudeUsageTotals | null = state.hasUsage
     ? {
-        inputTokens: totalInputTokens,
-        outputTokens: totalOutputTokens,
-        cacheCreationTokens: totalCacheCreation,
-        cacheReadTokens: totalCacheRead,
+        inputTokens: state.totalInputTokens,
+        outputTokens: state.totalOutputTokens,
+        cacheCreationTokens: state.totalCacheCreation,
+        cacheReadTokens: state.totalCacheRead,
       }
     : null;
+  return {
+    usage,
+    rawUsageJson: state.latestRawUsage,
+    conversation: state.conversation,
+    nativeSessionId: state.nativeSessionId,
+    conversationRevision: state.conversationRevision,
+    ...(state.conversationChangedFromIndex !== null
+      ? { conversationChangedFromIndex: state.conversationChangedFromIndex }
+      : {}),
+  };
+}
 
-  return { usage, rawUsageJson: latestRawUsage, conversation, nativeSessionId };
+/** Append-only parser used by live Claude telemetry to avoid full-history joins and reparses. */
+export class ClaudeCodeLogAccumulator {
+  private state: ClaudeCodeParserState;
+  private pendingLine = "";
+  private sourceId: string | null = null;
+
+  constructor(private readonly sinceMs?: number) {
+    this.state = createClaudeCodeParserState(sinceMs);
+  }
+
+  appendChunk(text: string, sourceId: string, reset = false): ClaudeCodeLogResult {
+    if (reset || (this.sourceId !== null && this.sourceId !== sourceId)) {
+      this.state = createClaudeCodeParserState(this.sinceMs);
+      this.pendingLine = "";
+    }
+    this.state.conversationChangedFromIndex = null;
+    this.pendingLine = processClaudeCodeChunk(this.state, text, this.pendingLine);
+    this.sourceId = sourceId;
+    return buildClaudeCodeLogResult(this.state);
+  }
+}
+
+export function parseClaudeCodeSessionJsonl(jsonl: string, sinceMs?: number): ClaudeCodeLogResult {
+  return new ClaudeCodeLogAccumulator(sinceMs).appendChunk(jsonl, "full");
 }

@@ -189,7 +189,51 @@ describe("start-ready-tasks-step", () => {
     }));
   });
 
+  it("starts only the effective adaptive capacity even when the configured limit is higher", async () => {
+    const subtasks: Subtask[] = Array.from({ length: 5 }, (_, index) => ({
+      id: String(index + 1),
+      title: `t${index + 1}`,
+      prompt: "p",
+      depends_on: [],
+      is_independent: true,
+      status: "PENDING" as const,
+    }));
+    const startTask = vi.fn().mockImplementation(async (task: Subtask) => ({
+      id: `session-${task.id}`,
+      provider: "codex",
+    }));
+    const getAvailableProviderCapacity = vi.fn().mockResolvedValue(2);
+    const info = vi.fn();
+
+    const result = await runStartReadyTasksStep(subtasks, {
+      action: "orchestrate",
+      getConsecutiveFailures: () => 0,
+      setConsecutiveFailures: vi.fn(),
+      maxFailures: 3,
+      startTask,
+      resolveSessionName: (session) => session.id,
+      extractSessionId: (session) => session.id,
+      logger: { info, error: vi.fn() } as any,
+      getProviderForTask: () => "codex",
+      getProviderSettings: () => ({ maxConcurrentTasks: 16 }),
+      getRunningCounts: () => ({ codex: 0 }),
+      getAvailableProviderCapacity,
+    });
+
+    expect(getAvailableProviderCapacity).toHaveBeenCalledOnce();
+    expect(startTask).toHaveBeenCalledTimes(2);
+    expect(result.subtasks.map((task) => task.status)).toEqual([
+      "RUNNING", "RUNNING", "PENDING", "PENDING", "PENDING",
+    ]);
+    expect(info).toHaveBeenCalledWith(
+      "Provider concurrency cap deferred ready tasks",
+      expect.objectContaining({ blockedTaskCount: 3, source: "pre_dispatch" }),
+    );
+  });
+
   it("coalesces unchanged provider-cap diagnostics across rapid orchestration cycles", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-15T00:00:00.000Z"));
     const subtasks: Subtask[] = [
       { id: "1", title: "t1", prompt: "p1", depends_on: [], is_independent: false, status: "PENDING" },
       { id: "2", title: "t2", prompt: "p2", depends_on: [], is_independent: false, status: "PENDING" },
@@ -219,6 +263,42 @@ describe("start-ready-tasks-step", () => {
       { id: "3", title: "t3", prompt: "p3", depends_on: [], is_independent: false, status: "PENDING" },
     ], options);
 
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(10_000);
+    await runStartReadyTasksStep(subtasks, options);
+
     expect(infoSpy).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it("coalesces provider-cap diagnostics when each cycle creates a new child logger", async () => {
+    const providerCapLogState = new Map<string, { loggedAt: number }>();
+    const infoSpy = vi.fn();
+    const subtasks: Subtask[] = [
+      { id: "1", title: "t1", prompt: "p1", depends_on: [], is_independent: false, status: "PENDING" },
+    ];
+    const runCycle = async (): Promise<void> => {
+      await runStartReadyTasksStep(subtasks, {
+        action: "orchestrate",
+        getConsecutiveFailures: () => 0,
+        setConsecutiveFailures: vi.fn(),
+        maxFailures: 3,
+        startTask: vi.fn(),
+        resolveSessionName: (session: any) => session.id,
+        extractSessionId: (session: any) => session.id,
+        logger: { info: infoSpy, error: vi.fn() } as any,
+        getProviderForTask: () => "codex",
+        getProviderSettings: () => ({ maxConcurrentTasks: 2 }),
+        getRunningCounts: () => ({ codex: 2 }),
+        providerCapLogState,
+        providerCapLogScope: "project:sprint:run",
+      });
+    };
+
+    await runCycle();
+    await runCycle();
+
+    expect(infoSpy).toHaveBeenCalledTimes(1);
   });
 });

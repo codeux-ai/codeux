@@ -200,6 +200,20 @@ describe("createLogger", () => {
     expect(output).toContain("keep this");
   });
 
+  it("drops console records while stderr is over the pending-write bound", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const writableLengthSpy = vi.spyOn(process.stderr, "writableLength", "get").mockReturnValue(9 * 1024 * 1024);
+    try {
+      const logger = createLogger({ environment: "development", consoleLogLevel: "debug" });
+
+      logger.error("do not queue another record");
+
+      expect(stderrSpy).not.toHaveBeenCalled();
+    } finally {
+      writableLengthSpy.mockRestore();
+    }
+  });
+
   it("filters console and debug file output independently", async () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-logger-"));

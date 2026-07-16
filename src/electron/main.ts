@@ -18,6 +18,7 @@ import { createDebouncedSaver, loadWindowState, saveWindowState } from "./window
 import { ElectronCredentialKeyPersistence } from "./credential-key-persistence.js";
 import { ElectronSafeStorageKeyProvider } from "../infrastructure/security/electron-safe-storage-key-provider.js";
 import { setProcessCredentialKeyProvider } from "../services/credentials/key-provider-registry.js";
+import { writeElectronStartupSmoke } from "./startup-smoke.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -292,6 +293,28 @@ function createMainWindow(url: string): BrowserWindow {
       openExternalUrl(targetUrl);
     }
   });
+
+  const startupSmokePath = process.env.CODE_UX_ELECTRON_STARTUP_SMOKE_FILE?.trim();
+  if (startupSmokePath) {
+    window.webContents.once("did-finish-load", () => {
+      void writeElectronStartupSmoke(startupSmokePath, {
+        version: app.getVersion(),
+        platform: process.platform,
+        arch: process.arch,
+        packaged: app.isPackaged,
+        dashboardOrigin: url,
+        rendererUrl: window.webContents.getURL(),
+      }).then(() => {
+        if (process.env.CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT === "1") {
+          app.quit();
+        }
+      }).catch((error: unknown) => {
+        process.exitCode = 1;
+        console.error("Failed to record Electron startup smoke readiness", error);
+        app.quit();
+      });
+    });
+  }
 
   void window.loadURL(url);
   return window;

@@ -184,6 +184,8 @@ describe("SprintPreviewDockerPlanBuilder", () => {
       bootstrapScript: "echo 'bootstrap'",
     });
 
-    expect(args).toMatchSnapshot();
+    expect(args.map((arg) => (
+      arg.startsWith("code-ux.runtime-owner=") ? "code-ux.runtime-owner=<runtime-owner>" : arg
+    ))).toMatchSnapshot();
   });
 });

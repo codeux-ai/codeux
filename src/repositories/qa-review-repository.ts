@@ -31,6 +31,13 @@ export interface QaReviewRunRecord {
   updatedAt: string;
 }
 
+export interface QaTaskReviewSnapshot {
+  latestRun: QaReviewRunRecord | null;
+  latestCycleRuns: QaReviewRunRecord[];
+  runsUsed: number;
+  decisiveRuns: number;
+}
+
 interface QaReviewRunRow {
   id: string;
   project_id: string;
@@ -69,9 +76,11 @@ function parsePayload(value: string | null): Record<string, unknown> | null {
 }
 
 export class QaReviewRepository {
+  private readonly storage: AppDbStorage;
   private readonly db: DatabaseAdapter;
 
   constructor(storage: AppDbStorage = new AppDbStorage()) {
+    this.storage = storage;
     this.db = storage.getDatabase();
   }
 
@@ -326,6 +335,78 @@ export class QaReviewRepository {
     `).all(taskId, taskId) as unknown as QaReviewRunRow[];
 
     return rows.map((row) => this.mapRow(row));
+  }
+
+  /**
+   * Load the merge-gate state for a whole DAG in one chunked query. This keeps
+   * the watch loop from issuing latest/count/decisive SQL separately for every
+   * task on every cycle while preserving the single-task ordering semantics.
+   */
+  listTaskReviewSnapshots(taskIds: string[]): Map<string, QaTaskReviewSnapshot> {
+    const uniqueTaskIds = [...new Set(taskIds.map((taskId) => taskId.trim()).filter(Boolean))];
+    const snapshots = new Map<string, QaTaskReviewSnapshot>(uniqueTaskIds.map((taskId) => [taskId, {
+      latestRun: null,
+      latestCycleRuns: [],
+      runsUsed: 0,
+      decisiveRuns: 0,
+    }]));
+    if (uniqueTaskIds.length === 0) {
+      return snapshots;
+    }
+
+    const rows = this.storage.executeChunkedInQuery<QaReviewRunRow>({
+      sqlPrefix: `SELECT *
+      FROM qa_review_runs
+      WHERE task_id`,
+      sqlSuffix: `AND trigger_type IN ('task_completion', 'completed_task_without_pr')
+      ORDER BY task_id ASC,
+        run_index DESC,
+        CASE
+          WHEN status = 'running' THEN 0
+          WHEN outcome = 'changes_requested' THEN 1
+          WHEN status = 'failed' THEN 2
+          WHEN outcome = 'pass' THEN 3
+          ELSE 4
+        END,
+        started_at DESC`,
+      items: uniqueTaskIds,
+    });
+    const rowsByTaskId = new Map<string, QaReviewRunRecord[]>();
+    for (const row of rows) {
+      if (!row.task_id) {
+        continue;
+      }
+      const mapped = this.mapRow(row);
+      const taskRows = rowsByTaskId.get(row.task_id) ?? [];
+      taskRows.push(mapped);
+      rowsByTaskId.set(row.task_id, taskRows);
+    }
+
+    for (const [taskId, taskRows] of rowsByTaskId) {
+      const latestRun = taskRows[0] ?? null;
+      const latestRunIndex = latestRun?.runIndex ?? 0;
+      const latestCycleRuns = taskRows
+        .filter((run) => run.runIndex === latestRunIndex)
+        .sort((left, right) => left.startedAt.localeCompare(right.startedAt) || left.id.localeCompare(right.id));
+      const terminalRunIndexes = new Set<number>();
+      const decisiveRunIndexes = new Set<number>();
+      for (const run of taskRows) {
+        if (["completed", "failed", "cancelled", "errored"].includes(run.status)) {
+          terminalRunIndexes.add(run.runIndex);
+        }
+        if (run.status === "completed") {
+          decisiveRunIndexes.add(run.runIndex);
+        }
+      }
+      snapshots.set(taskId, {
+        latestRun,
+        latestCycleRuns,
+        runsUsed: terminalRunIndexes.size,
+        decisiveRuns: decisiveRunIndexes.size,
+      });
+    }
+
+    return snapshots;
   }
 
   getLatestSprintRun(sprintId: string): QaReviewRunRecord | null {

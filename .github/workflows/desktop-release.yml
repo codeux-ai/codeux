@@ -19,6 +19,7 @@ jobs:
   build-desktop:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
 
     strategy:
       fail-fast: false
@@ -81,7 +82,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y libopenjp2-tools
+          sudo apt-get install --no-install-recommends -y libopenjp2-tools xvfb
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -94,6 +95,9 @@ jobs:
 
       - name: Build desktop package
         run: pnpm run ${{ matrix.script }}
+
+      - name: Install and start desktop package
+        run: pnpm run electron:smoke-installed
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4

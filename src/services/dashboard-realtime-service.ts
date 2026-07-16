@@ -424,6 +424,19 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     }
 
     if (options.shouldPublish && !options.shouldPublish()) {
+      // Keep an in-memory non-replayable watermark even when no current client needs the payload.
+      // A previously connected client may reconnect with an older cursor and must be told to
+      // refresh its REST snapshot. The repository does not persist these events, so this preserves
+      // recovery correctness without running the loader, serializing the payload, or growing WAL.
+      this.publishRawEvent({
+        scopeType: options.scopeType,
+        scopeId: options.scopeId,
+        eventType: options.eventType,
+        entityType: options.entityType,
+        entityId: options.entityId,
+        ...(options.projectId ? { projectId: options.projectId } : {}),
+        replayable: false,
+      });
       this.incrementMetric(options.eventType, "skipped");
       return { task: null, waitMs: 0 };
     }
@@ -554,6 +567,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         entityType: "project_collection",
         entityId: (id: string) => "projects",
         loader: () => loaders.getProjectsSnapshot(),
+        shouldPublish: () => this.hasScopeInterest("projects"),
         cacheKey: (id: string) => `${id}:projects.updated`,
         skipDuplicate: true,
         lastPublishedAt: (id: string) => this.projectsPublishedAt,
@@ -627,6 +641,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         entityId: (projectId: string) => projectId,
         projectId: (projectId: string) => projectId,
         loader: (projectId: string) => loaders.getProjectExecutionSnapshot(projectId),
+        shouldPublish: (projectId: string) => this.hasScopeInterest(`project:${projectId}`),
         cacheKey: (projectId: string) => `project:${projectId}:project.execution.updated`,
         skipDuplicate: true,
         lastPublishedAt: (projectId: string) => this.projectExecutionPublishedAt.get(projectId) ?? 0,
@@ -647,6 +662,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         entityId: (projectId: string) => projectId,
         projectId: (projectId: string) => projectId,
         loader: (projectId: string) => loaders.getProjectStatusSnapshot(projectId),
+        shouldPublish: (projectId: string) => this.hasScopeInterest(`project:${projectId}`),
         cacheKey: (projectId: string) => `project:${projectId}:project.runtime_status.updated`,
         skipDuplicate: true,
         lastPublishedAt: (projectId: string) => this.projectRuntimeStatusPublishedAt.get(projectId) ?? 0,
@@ -670,6 +686,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
           projectId,
           updatedAt: new Date().toISOString(),
         }),
+        shouldPublish: (projectId: string) => this.hasScopeInterest(`project:${projectId}`),
         lastPublishedAt: (projectId: string) => this.projectStructurePublishedAt.get(projectId) ?? 0,
         onPublished: (projectId: string, publishedAt: number) => {
           this.projectStructurePublishedAt.set(projectId, publishedAt);
@@ -722,6 +739,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         entityType: "overview",
         entityId: "overview",
         loader: () => loaders.getOverviewTelemetrySnapshot(),
+        shouldPublish: () => this.hasScopeInterest("overview"),
         cacheKey: `overview:overview:overview.telemetry.updated`,
         skipDuplicate: true,
         logType: "realtime_background_refresh",

@@ -5,6 +5,7 @@ import {
   toDockerMountArg,
 } from "./cli-docker-utils.js";
 import type { SprintPreviewPortMapping } from "../contracts/app-types.js";
+import { getRuntimeOwnerDockerArgs } from "../shared/config/runtime-owner.js";
 
 export const CONTAINER_PREVIEW_PROXY_PORT = 39000;
 export const CONTAINER_PREVIEW_RUNTIME_ROOT = "/code-ux-preview-runtime";
@@ -64,6 +65,7 @@ export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlan
     ]),
     "--workdir", args.containerWorkspacePath,
     "--label", "code-ux.managed=true",
+    ...getRuntimeOwnerDockerArgs(),
     "--label", "code-ux.preview=true",
     "--label", `code-ux.project-id=${args.projectId}`,
     "--label", `code-ux.sprint-id=${args.sprintId}`,

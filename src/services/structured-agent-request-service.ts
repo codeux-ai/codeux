@@ -61,6 +61,7 @@ export interface StructuredRequestArgs<T> {
   sessionIdPrefix: string;
   logicalSessionId?: string;
   continueSessionId?: string | null;
+  allowFreshSessionFallback?: boolean;
   openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
   invocationId?: string;
   systemRoutingMessage?: string;
@@ -195,6 +196,7 @@ export class StructuredAgentRequestService {
       signal: args.signal,
       invocationId,
       continueSessionId: args.continueSessionId,
+      allowFreshSessionFallback: args.allowFreshSessionFallback,
       openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
       onActivity: args.onActivity,
       agentMcpAccess: args.agentMcpAccess,

@@ -133,8 +133,10 @@ describe("AppDbStorage", () => {
     const taskRunEventIndexes = db.prepare("PRAGMA index_list('task_run_events')").all() as Array<{ name: string }>;
     expect(taskRunEventIndexes.some((idx) => idx.name === "idx_task_run_events_project_created")).toBe(true);
     expect(taskRunEventIndexes.some((idx) => idx.name === "idx_task_run_events_task_run_created_id")).toBe(true);
+    expect(taskRunEventIndexes.some((idx) => idx.name === "idx_task_run_events_task_run_type_created_id")).toBe(true);
     expect(getIndexColumns(db, "idx_task_run_events_project_created")).toEqual(["project_id", "created_at", "id"]);
     expect(getIndexColumns(db, "idx_task_run_events_task_run_created_id")).toEqual(["task_run_id", "created_at", "id"]);
+    expect(getIndexColumns(db, "idx_task_run_events_task_run_type_created_id")).toEqual(["task_run_id", "event_type", "created_at", "id"]);
   });
 
   it("uses the explicit dbPath when provided", async () => {
