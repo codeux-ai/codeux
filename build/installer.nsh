@@ -8,6 +8,14 @@
 !macroend
 
 Function CodeUxBetaPage
+  # Silent release and deployment installs do not have an interactive desktop. Skip the custom
+  # page before nsDialogs loads; normal installers continue into the beta notice below.
+  IfSilent CodeUxBetaPageSilent CodeUxBetaPageInteractive
+
+CodeUxBetaPageSilent:
+  Abort
+
+CodeUxBetaPageInteractive:
   nsDialogs::Create 1018
   Pop $0
 
