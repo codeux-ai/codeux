@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24-trixie-slim AS base
+FROM node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573 AS base
 
 LABEL org.opencontainers.image.source="https://github.com/codeux-ai/codeux"
 LABEL org.opencontainers.image.title="Code UX managed runtime"
@@ -20,8 +20,8 @@ RUN apt-get update -qy \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/* /tmp/*
 
-ARG NPM_VERSION=12.0.0
-ARG PNPM_VERSION=11.11.0
+ARG NPM_VERSION=12.0.1
+ARG PNPM_VERSION=11.13.1
 ARG YARN_VERSION=1.22.22
 ARG BUN_VERSION=1.3.14
 ARG SERVE_VERSION=14.2.6

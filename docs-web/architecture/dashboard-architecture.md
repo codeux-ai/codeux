@@ -8,14 +8,14 @@ This page describes its structure, build pipeline, real-time client, and state m
 
 | Layer | Technology |
 | --- | --- |
-| UI framework | Preact 10 with `@preact/signals` |
-| Routing | TanStack React Router 1.166 |
-| Styling | Tailwind CSS v4 (via `@tailwindcss/vite`) |
-| Iconography | `lucide-preact` + `lucide-react` |
-| Animation | GSAP 3.14 |
-| 3D background | Three.js 0.183 |
-| Markdown | `marked` 17 |
-| Build | Vite 8 with `@preact/preset-vite` |
+| UI framework | Preact 10.29 with `@preact/signals` 2.9 |
+| Routing | TanStack React Router 1.170 |
+| Styling | Tailwind CSS 4.3 (via `@tailwindcss/vite`) |
+| Iconography | `lucide-preact` + `lucide-react` 1.24 |
+| Animation | GSAP 3.15 |
+| 3D background | Three.js 0.185 |
+| Markdown | `marked` 18 |
+| Build | Vite 8.1 with `@preact/preset-vite` |
 
 The bundle is split for caching: a vendor chunk, a per-page chunk (lazy-loaded), and a small entry chunk.
 

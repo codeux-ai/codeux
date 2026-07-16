@@ -307,7 +307,7 @@ Use source builds when developing Code UX itself or when you need to inspect/mod
 ### Requirements
 
 - Node.js >=22.13.
-- pnpm 11.13.0.
+- pnpm 11.13.1.
 - Git 2.30 or newer.
 - Docker, recommended for virtual worker execution and required for preview containers.
 - Provider credentials are optional for installation and local startup; configure them later in the dashboard when you are ready to dispatch work.

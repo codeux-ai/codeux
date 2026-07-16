@@ -24,6 +24,9 @@ function onNodeModuleFile(filePath) {
 }
 
 module.exports = {
+  toolsets: {
+    nsis: "1.2.1",
+  },
   appId: "com.codeux.desktop",
   productName: "Code UX",
   artifactName: "Code-UX-${version}-${os}-${arch}.${ext}",
@@ -103,6 +106,17 @@ module.exports = {
     allowToChangeInstallationDirectory: true,
     allowElevation: true,
     perMachine: false,
+    // Electron Builder 26.15.6 points its unified NSIS 3.12 bundle back at
+    // NSISDIR/windows/Plugins on native Windows. makensis already searches
+    // that directory, so assisted installers see duplicate nsDialogs/System
+    // plugin commands and abort before producing the installer. Keep the
+    // NSIS 3.12 compiler and standard plugins, but source Electron Builder's
+    // extra plugins from its checksum-pinned standalone resource archive.
+    customNsisResources: {
+      version: "3.4.1",
+      url: "https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-resources-3.4.1/nsis-resources-3.4.1.7z",
+      checksum: "593a9a92ef958321293ac6a2ee61e64bf1bd543142a5bd6b3d310709cc924103",
+    },
     runAfterFinish: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,

@@ -1,8 +1,6 @@
 import type { FunctionComponent } from "preact";
 import {
   ExternalLink,
-  Github,
-  Gitlab,
   Link2,
   MessageSquare,
   MessageSquareOff,
@@ -12,6 +10,7 @@ import {
 } from "lucide-preact";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import type { LinkedIssueProvider } from "../../types.js";
+import { Github, Gitlab } from "../icons/GitHostIcons.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { useDashboardI18n } from "../../i18n/index.js";
 import { sprintsMessages } from "../../i18n/messages/sprints.js";
