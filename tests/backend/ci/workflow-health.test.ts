@@ -13,6 +13,7 @@ const WORKFLOWS = {
 } as const;
 
 const PLAYWRIGHT_CONFIG = "playwright.config.ts";
+const CORE_FACTORY = "src/app/dependency-factory/core-factory.ts";
 const RELEASE_INSTALL_VERIFIER = "scripts/verify-release-install.mjs";
 const ELECTRON_RUNTIME_PREPARER = "scripts/prepare-electron-runtime-deps.mjs";
 const ELECTRON_INSTALL_SMOKE = "pnpm run electron:smoke-installed";
@@ -373,6 +374,7 @@ describe("GitHub workflow health", () => {
 
   it("keeps Playwright config isolated, serialized, and failure-artifact friendly", async () => {
     const config = await readRepoFile(PLAYWRIGHT_CONFIG);
+    const coreFactory = await readRepoFile(CORE_FACTORY);
 
     expect(config).toContain("command: 'node ./node_modules/vite/bin/vite.js build && node dist/index.js'");
     expect(config).toContain("process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464'");
@@ -380,6 +382,7 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("url: `${dashboardBaseUrl}/health`");
     expect(config).toContain("CODE_UX_DIRECTORY_BROWSER_ROOTS: os.tmpdir()");
     expect(config).toContain("CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath");
+    expect(coreFactory).toContain("process.env.CODEUX_E2E_PROVIDER_CLI_SHIM?.trim()");
     expect(config).toContain("CODE_UX_DISABLE_MCP_STDIO: '1'");
     expect(config).toContain("MCP_HTTP_ENABLED: 'false'");
     expect(config).toContain("CODE_UX_CONTAINERIZED_GIT: '0'");

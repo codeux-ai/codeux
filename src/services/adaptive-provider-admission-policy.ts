@@ -99,9 +99,10 @@ export class AdaptiveProviderAdmissionPolicy implements ProviderClaimAdmissionPo
     const isInteractive = input.purpose ? INTERACTIVE_PURPOSES.has(input.purpose) : false;
 
     if (pressure === "healthy") {
-      // Leave one claim available for a human-facing reply instead of allowing background coding
-      // and CI to occupy every automatically calculated slot.
-      return isInteractive ? hardLimit : Math.max(1, hardLimit - 1);
+      // Leave one claim available for a human-facing reply when the host has enough capacity to
+      // retain useful background parallelism. Reserving half of a compact two-slot budget made an
+      // explicitly concurrent sprint run serially on common four-core hosts and CI runners.
+      return isInteractive || hardLimit <= 2 ? hardLimit : hardLimit - 1;
     }
 
     const running = this.deps.executionRepository.listRunningProviderInvocationUsages([input.provider]);

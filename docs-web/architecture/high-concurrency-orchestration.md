@@ -5,6 +5,9 @@ the dashboard, and interactive replies.
 
 - A positive `maxConcurrentTasks` is a hard cap.
 - Local-provider `0` uses adaptive CPU and memory admission; Jules `0` remains unlimited hosted work.
+- Healthy adaptive limits of three or more reserve one slot for interactive replies. Compact one-
+  and two-slot hosts keep their complete budget available to background work so a four-core machine
+  can still run two independent coding tasks concurrently.
 - Darwin admission ignores raw free-memory percentage because it excludes reclaimable cache, while
   retaining CPU/load pressure. A zero-running provider keeps one progress slot unless reliable
   critical memory requires a complete pause.
