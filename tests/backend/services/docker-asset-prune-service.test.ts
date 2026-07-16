@@ -204,6 +204,98 @@ describe("DockerAssetPruneService", () => {
     );
   });
 
+  it("preserves old hashed snapshot volumes by their durable logical-session label", async () => {
+    const activeSessionId = `cli-codex-${"a".repeat(60)}`;
+    const activeWorkspace = "code-ux-repo-aaaaaaaaaaaa-cli-codex-aaaaaaaaaaaaaaaaaaaaaaaaaaaa-deadbeef";
+    const orphanedWorkspace = "code-ux-repo-aaaaaaaaaaaa-cli-codex-bbbbbbbbbbbbbbbbbbbbbbbbbbbb-feedface";
+    const oldCreatedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => [
+        { id: activeSessionId, state: "FAILED", provider: "codex", repoPath: "/repo/a", updateTime: "" },
+      ]),
+    } as unknown as SessionTrackingRepository;
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace=true")) {
+        return {
+          ok: true,
+          stdout: [activeWorkspace, orphanedWorkspace].join("\n"),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace-runtime=true")) {
+        return {
+          ok: true,
+          stdout: [`${activeWorkspace}-runtime`, `${orphanedWorkspace}-runtime`].join("\n"),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      if (args[0] === "volume" && args[1] === "inspect") {
+        return {
+          ok: true,
+          stdout: JSON.stringify(args.slice(2).map((name) => ({
+            Name: name,
+            CreatedAt: oldCreatedAt,
+            Labels: name.startsWith(activeWorkspace)
+              ? { "code-ux.workspace-session": activeSessionId }
+              : { "code-ux.workspace-session": "cli-codex-orphaned" },
+          }))),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
+
+    expect(result.prunedWorkspaceVolumes).toEqual([
+      orphanedWorkspace,
+      `${orphanedWorkspace}-runtime`,
+    ]);
+    expect(result.prunedWorkspaceVolumes).not.toContain(activeWorkspace);
+    expect(result.prunedWorkspaceVolumes).not.toContain(`${activeWorkspace}-runtime`);
+  });
+
+  it("preserves active non-provider workspace sessions supplied by startup recovery", async () => {
+    const planningWorkspaceSessionId = `planning-${"a".repeat(36)}-${"b".repeat(36)}`;
+    const planningWorkspace = "code-ux-repo-aaaaaaaaaaaa-planning-aaaaaaaaaaaaaaaaaaaaaaaaaaaa-cafebabe";
+    const oldCreatedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => []),
+    } as unknown as SessionTrackingRepository;
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace=true")) {
+        return { ok: true, stdout: planningWorkspace, stderr: "", code: 0 } as any;
+      }
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace-runtime=true")) {
+        return { ok: true, stdout: `${planningWorkspace}-runtime`, stderr: "", code: 0 } as any;
+      }
+      if (args[0] === "volume" && args[1] === "inspect") {
+        return {
+          ok: true,
+          stdout: JSON.stringify(args.slice(2).map((name) => ({
+            Name: name,
+            CreatedAt: oldCreatedAt,
+            Labels: { "code-ux.workspace-session": planningWorkspaceSessionId },
+          }))),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    const result = await new DockerAssetPruneService(sessionTracking, undefined, {
+      protectedWorkspaceSessionIds: () => [planningWorkspaceSessionId],
+    }).cleanupOnStartup();
+
+    expect(result.prunedWorkspaceVolumes).toEqual([]);
+  });
+
   it("preserves completed tracked CLI workspace volumes until explicit cleanup", async () => {
     const sessionTracking = {
       listTrackedCliSessions: vi.fn(() => [

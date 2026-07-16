@@ -50,10 +50,10 @@ describe("ChatPageShell", () => {
     const container = screen.getByText("Dashboard Chat").closest(".min-h-0");
     expect(container).toBeInTheDocument();
 
-    // Verify grid stacks logically on mobile, breaking at lg
+    // Verify grid stacks logically on mobile, breaking at the current tablet layout.
     const gridContainer = screen.getByTestId("rail-slot").parentElement;
     expect(gridContainer?.className).toContain("flex flex-col");
-    expect(gridContainer?.className).toContain("lg:grid");
+    expect(gridContainer?.className).toContain("md:grid");
 
     // Check that we removed min-h-[70vh]
     expect(gridContainer?.className).not.toContain("min-h-[70vh]");

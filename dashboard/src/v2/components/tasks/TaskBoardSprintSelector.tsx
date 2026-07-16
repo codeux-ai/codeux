@@ -9,6 +9,7 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { clampSprintCompletion, formatSprintCompletion } from "../../lib/sprint-progress-display.js";
 import { useDashboardI18n } from "../../i18n/context.js";
 import { taskMessages } from "../../i18n/messages/tasks.js";
+import { formatTaskSprintDateRange } from "../../lib/tasks/task-presentation.js";
 
 export interface TaskBoardSprintSelectorProps {
   sprints: Sprint[];
@@ -57,10 +58,13 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
     },
     ...sprints.map((sprint) => {
       const completion = clampSprintCompletion(sprint.completion);
+      const hasStructuredDate = Boolean(sprint.startDate || sprint.endDate);
       const parsedDate = new Date(`${sprint.date}T00:00:00Z`);
-      const dateLabel = Number.isNaN(parsedDate.getTime())
-        ? sprint.date
-        : formatDate(parsedDate, { month: "short", day: "numeric", timeZone: "UTC" });
+      const dateLabel = hasStructuredDate
+        ? formatTaskSprintDateRange(sprint.startDate, sprint.endDate, locale)
+        : Number.isNaN(parsedDate.getTime())
+          ? sprint.date
+          : formatDate(parsedDate, { month: "short", day: "numeric", timeZone: "UTC" });
       return {
         id: sprint.id,
         label: formatSprintDisplay(sprint, sprintKeyPrefix),

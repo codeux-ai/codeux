@@ -34,6 +34,8 @@ export interface WorkflowStatusBadgeProps {
   scope: "task" | "sprint";
   status: string;
   completion?: number;
+  tasksCount?: number;
+  planningStatus?: string | null;
   review?: SprintReviewSummary | null;
   ciPresentation?: CiStatusPresentation | null;
   humanIntervention?: WorkflowHumanInterventionEvidence | null;
@@ -43,6 +45,7 @@ export interface WorkflowStatusBadgeProps {
 }
 
 const STAGE_ICONS: Record<WorkflowStageId, LucideIcon> = {
+  planning: Sparkles,
   coding: Code2,
   pull_request: GitPullRequest,
   qa: ListChecks,
@@ -295,6 +298,8 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   scope,
   status,
   completion,
+  tasksCount,
+  planningStatus = null,
   review = null,
   ciPresentation = null,
   humanIntervention = null,
@@ -309,15 +314,23 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   const activeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const pointerInsideRef = useRef(false);
+  const openedByHoverRef = useRef(false);
   const closeTimeoutRef = useRef<number | null>(null);
   const suppressFocusOpenRef = useRef<HTMLButtonElement | null>(null);
   const overlayId = useId();
   const reviewHeadingId = useId();
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const normalizedStatus = status.trim().toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
-  const effectiveCiPresentation = scope === "sprint" && normalizedStatus === "running" && completion !== 100
+  const normalizedPlanningStatus = planningStatus?.trim().toLowerCase().replaceAll("-", "_").replaceAll(" ", "_") ?? "";
+  const planningOwnsWorkflow = scope === "sprint"
+    && ["running", "paused", "failed", "cancelled"].includes(normalizedPlanningStatus);
+  const effectiveCiPresentation = scope === "sprint" && (
+    planningOwnsWorkflow
+    || (normalizedStatus === "running" && completion !== 100)
+  )
     ? null
     : ciPresentation;
+  const effectiveReview = planningOwnsWorkflow ? null : review;
   const localizedCiPresentation = useMemo(
     () => effectiveCiPresentation ? localizeCiStatusPresentation(effectiveCiPresentation, locale) : null,
     [effectiveCiPresentation, locale],
@@ -326,10 +339,12 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
     scope,
     status,
     completion,
-    review,
+    tasksCount,
+    planningStatus,
+    review: effectiveReview,
     ciPresentation: localizedCiPresentation,
     humanIntervention,
-  }, locale), [completion, humanIntervention, locale, localizedCiPresentation, review, scope, status]);
+  }, locale), [completion, effectiveReview, humanIntervention, locale, localizedCiPresentation, planningStatus, scope, status, tasksCount]);
   const MainIcon = presentation.tone === "qa_changes"
     ? PencilLine
     : presentation.state === "failed"
@@ -339,7 +354,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
         : presentation.state === "successful"
           ? Sparkles
           : Circle;
-  const currentReviewState = review ? reviewState(review) : null;
+  const currentReviewState = effectiveReview ? reviewState(effectiveReview) : null;
   const CurrentReviewIcon = currentReviewState ? REVIEW_META[currentReviewState].icon : null;
   const reviewTriggerTone = currentReviewState === "changes_requested"
     ? "qa_changes"
@@ -371,6 +386,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   }, [openOverlay]);
   const closeOverlay = useCallback((restoreFocus = false): void => {
     clearCloseTimeout();
+    openedByHoverRef.current = false;
     setOpen(false);
     if (restoreFocus) {
       const focusTarget = activeTriggerRef.current ?? triggerRef.current;
@@ -378,12 +394,32 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
       focusTarget?.focus({ preventScroll: true });
     }
   }, [clearCloseTimeout]);
+  const toggleFromTrigger = useCallback((trigger: HTMLButtonElement | null): void => {
+    if (openedByHoverRef.current) {
+      openedByHoverRef.current = false;
+      activeTriggerRef.current = trigger;
+      return;
+    }
+    if (open && activeTriggerRef.current !== trigger) {
+      activeTriggerRef.current = trigger;
+      return;
+    }
+    activeTriggerRef.current = trigger;
+    if (open) {
+      closeOverlay();
+      return;
+    }
+    openFromTrigger(trigger);
+  }, [closeOverlay, open, openFromTrigger]);
   const scheduleClose = useCallback((): void => {
     clearCloseTimeout();
-    closeTimeoutRef.current = window.setTimeout(() => {
+      closeTimeoutRef.current = window.setTimeout(() => {
       const active = document.activeElement;
       const focusedInside = Boolean(active && (triggerRef.current?.contains(active) || overlayRef.current?.contains(active)));
-      if (!pointerInsideRef.current && !focusedInside) setOpen(false);
+      if (!pointerInsideRef.current && !focusedInside) {
+        openedByHoverRef.current = false;
+        setOpen(false);
+      }
       closeTimeoutRef.current = null;
     }, 120);
   }, [clearCloseTimeout]);
@@ -448,6 +484,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
       data-human-needed={presentation.requiresHuman ? "true" : undefined}
       onMouseEnter={() => {
         pointerInsideRef.current = true;
+        if (!open) openedByHoverRef.current = true;
         openOverlay();
       }}
       onMouseLeave={() => {
@@ -460,16 +497,24 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
         type="button"
         aria-expanded={open}
         aria-controls={overlayId}
-        aria-label={translate(taskMessages, "workflowStatusAccessible", { status: triggerStatusLabel, details: presentation.accessibleLabel, evidence: localizedCiPresentation ? translate(taskMessages, "workflowCiEvidence", { evidence: localizedCiPresentation.accessibleLabel }) : "", action: translate(taskMessages, open ? "workflowHide" : "workflowShow") })}
-        onClick={() => openFromTrigger(triggerRef.current)}
-        onFocus={() => openFromTrigger(triggerRef.current)}
+        aria-label={translate(
+          taskMessages,
+          localizedCiPresentation ? "workflowStatusAccessible" : "workflowGenericStatusAccessible",
+          {
+            status: triggerStatusLabel,
+            details: presentation.accessibleLabel,
+            evidence: localizedCiPresentation ? translate(taskMessages, "workflowCiEvidence", { evidence: localizedCiPresentation.accessibleLabel }) : "",
+            action: translate(taskMessages, open ? "workflowHide" : "workflowShow"),
+          },
+        )}
+        onClick={() => toggleFromTrigger(triggerRef.current)}
         onBlur={(event) => handleBlur(event.relatedTarget)}
-        className={`inline-flex max-w-full items-center rounded-full border font-bold uppercase tracking-[0.12em] outline-none transition-[transform,box-shadow,background-color] hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-reduce:transform-none motion-reduce:transition-none dark:focus-visible:ring-offset-void-800 ${BADGE_TONES[presentation.tone]} ${review ? "rounded-r-xl" : ""} ${compact ? "gap-1.5 px-2.5 py-1 text-[9px] sm:text-[10px]" : "gap-2 px-3 py-1.5 text-[10px] sm:text-xs"}`}
+        className={`inline-flex max-w-full items-center rounded-full border font-bold uppercase tracking-[0.12em] outline-none transition-[transform,box-shadow,background-color] hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-reduce:transform-none motion-reduce:transition-none dark:focus-visible:ring-offset-void-800 ${BADGE_TONES[presentation.tone]} ${effectiveReview ? "rounded-r-xl" : ""} ${compact ? "gap-1.5 px-2.5 py-1 text-[9px] sm:text-[10px]" : "gap-2 px-3 py-1.5 text-[10px] sm:text-xs"}`}
       >
         <MainIcon className={`${compact ? "h-3 w-3" : "h-3.5 w-3.5"} shrink-0 ${presentation.state === "in_progress" && presentation.tone !== "qa_changes" ? "motion-safe:animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.4} aria-hidden={true} />
         <span className="min-w-0 truncate">{presentation.tone === "qa_changes" ? translate(taskMessages, "workflowQaEdits") : presentation.label}</span>
         {effectiveCiPresentation && effectiveCiPresentation.label !== presentation.label && <span className="sr-only">{effectiveCiPresentation.label}</span>}
-        {!review && <span className="sr-only">{translate(taskMessages, "qaNoReview")}</span>}
+        {!effectiveReview && <span className="sr-only">{translate(taskMessages, "qaNoReview")}</span>}
         {effectiveCiPresentation && (
           effectiveCiPresentation.state === "failed"
             ? <XCircle data-ci-icon="failure" className="sr-only text-status-red" aria-hidden={true} />
@@ -478,7 +523,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
               : <CheckCircle2 data-ci-icon={effectiveCiPresentation.state} className="sr-only text-status-green" aria-hidden={true} />
         )}
       </button>
-      {review && (
+      {effectiveReview && (
         <>
           {currentReviewState === "running" && <span role="status" aria-label={translate(taskMessages, "workflowQaReviewRunning")} className="sr-only">{translate(taskMessages, "workflowQaReviewRunning")}</span>}
           <span id={reviewDescriptionId} className="sr-only">
@@ -491,8 +536,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
             aria-describedby={reviewDescriptionId}
             aria-expanded={open}
             aria-controls={overlayId}
-            onClick={() => openFromTrigger(reviewTriggerRef.current)}
-            onFocus={() => openFromTrigger(reviewTriggerRef.current)}
+            onClick={() => toggleFromTrigger(reviewTriggerRef.current)}
             onBlur={(event) => handleBlur(event.relatedTarget)}
             className={`-ml-px inline-flex self-stretch items-center gap-0.5 rounded-r-full border border-l-0 px-1.5 outline-none transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-blue-500 motion-reduce:transition-none ${BADGE_TONES[reviewTriggerTone]}`}
           >
@@ -508,12 +552,12 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
           id={overlayId}
           ref={overlayRef}
           role="region"
-          aria-label={translate(taskMessages, "workflowCiDetails")}
-          aria-describedby={review ? reviewHeadingId : undefined}
+          aria-label={translate(taskMessages, localizedCiPresentation ? "workflowCiDetails" : "workflowDetails")}
+          aria-describedby={effectiveReview ? reviewHeadingId : undefined}
           tabIndex={-1}
           data-glass
           data-workflow-overlay-surface="translucent"
-          className={`fixed z-[99999] grid max-h-[calc(100vh-1.5rem)] w-[min(52rem,calc(100vw-1.5rem))] gap-3 overflow-y-auto rounded-[1.65rem] border border-white/70 bg-white/[0.82] p-2.5 shadow-[0_24px_70px_rgba(15,23,42,0.18)] backdrop-blur-xl motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 dark:border-white/[0.10] dark:bg-void-900/[0.82] ${review ? "md:grid-cols-[minmax(0,19rem)_2rem_minmax(0,1fr)] md:items-center" : "max-w-[20rem]"}`}
+          className={`fixed z-[99999] grid max-h-[calc(100vh-1.5rem)] w-[min(52rem,calc(100vw-1.5rem))] gap-3 overflow-y-auto rounded-[1.65rem] border border-white/70 bg-white/[0.82] p-2.5 shadow-[0_24px_70px_rgba(15,23,42,0.18)] backdrop-blur-xl motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 dark:border-white/[0.10] dark:bg-void-900/[0.82] ${effectiveReview ? "md:grid-cols-[minmax(0,19rem)_2rem_minmax(0,1fr)] md:items-center" : "max-w-[20rem]"}`}
           style={{ top: coords.top, left: coords.left }}
           onMouseEnter={() => {
             pointerInsideRef.current = true;
@@ -545,14 +589,14 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
               {presentation.stages.map((stage, index) => <WorkflowStageRow key={stage.id} stage={stage} isLast={index === presentation.stages.length - 1} />)}
             </ol>
           </section>
-          {review && (
+          {effectiveReview && (
             <>
               <span className="flex items-center justify-center text-blue-500" aria-hidden={true}>
                 <ChevronRight className="workflow-status__chevron hidden h-6 w-6 md:block" strokeWidth={2.5} />
                 <ChevronRight className="workflow-status__chevron h-6 w-6 rotate-90 md:hidden" strokeWidth={2.5} />
               </span>
               <div role="region" aria-label={translate(taskMessages, REVIEW_META[currentReviewState!].regionLabelKey)} tabIndex={-1} className="min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800">
-                <QaReviewCard summary={review} headingId={reviewHeadingId} />
+                <QaReviewCard summary={effectiveReview} headingId={reviewHeadingId} />
               </div>
             </>
           )}

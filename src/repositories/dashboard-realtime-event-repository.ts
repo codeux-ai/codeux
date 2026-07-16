@@ -69,6 +69,10 @@ function buildScope(scopeType: DashboardRealtimeScopeType, scopeId: string): str
   return `${scopeType}:${scopeId}`;
 }
 
+function isConversationRealtimeEvent(eventType: string): boolean {
+  return String(eventType || "").startsWith("conversation.");
+}
+
 export function parseDashboardRealtimeScope(scope: string): {
   scopeType: DashboardRealtimeScopeType;
   scopeId: string;
@@ -102,6 +106,58 @@ export function parseDashboardRealtimeScope(scope: string): {
   } as { scopeType: DashboardRealtimeScopeType; scopeId: string };
 }
 
+function getDashboardRealtimeEventRoutingScopes(
+  event: Pick<DashboardRealtimeEvent, "scope" | "eventType" | "projectId" | "threadId">,
+): string[] {
+  const scopes = new Set<string>([event.scope]);
+  if (isConversationRealtimeEvent(event.eventType)) {
+    if (event.projectId) {
+      scopes.add(`project:${event.projectId}`);
+    }
+    if (event.threadId) {
+      scopes.add(`thread:${event.threadId}`);
+    }
+  }
+  return [...scopes];
+}
+
+export function resolveDashboardRealtimeEventScope(
+  event: DashboardRealtimeEvent,
+  subscribedScopes: Iterable<string>,
+): string | null {
+  const subscriptions = subscribedScopes instanceof Set
+    ? subscribedScopes
+    : new Set(subscribedScopes);
+
+  for (const scope of getDashboardRealtimeEventRoutingScopes(event)) {
+    if (subscriptions.has(scope)) {
+      return scope;
+    }
+  }
+  return null;
+}
+
+export function routeDashboardRealtimeEventToScope(
+  event: DashboardRealtimeEvent,
+  scope: string,
+): DashboardRealtimeEvent {
+  if (event.scope === scope) {
+    return event;
+  }
+
+  const parsedScope = parseDashboardRealtimeScope(scope);
+  if (!parsedScope) {
+    return event;
+  }
+
+  return {
+    ...event,
+    scopeType: parsedScope.scopeType,
+    scopeId: parsedScope.scopeId,
+    scope,
+  };
+}
+
 export class DashboardRealtimeEventRepository {
   private readonly db: DatabaseAdapter;
 
@@ -127,9 +183,16 @@ export class DashboardRealtimeEventRepository {
     const sequence = ++this.nextSequence;
     const scope = buildScope(input.scopeType, input.scopeId);
 
-    this.latestSequenceByScope.set(scope, sequence);
-    if (!replayable) {
-      this.latestNonReplayableSequenceByScope.set(scope, sequence);
+    for (const routingScope of getDashboardRealtimeEventRoutingScopes({
+      scope,
+      eventType: input.eventType,
+      projectId: input.projectId ?? null,
+      threadId: input.threadId ?? null,
+    })) {
+      this.latestSequenceByScope.set(routingScope, sequence);
+      if (!replayable) {
+        this.latestNonReplayableSequenceByScope.set(routingScope, sequence);
+      }
     }
 
     if (replayable) {
@@ -191,16 +254,80 @@ export class DashboardRealtimeEventRepository {
     return toNumber(row.max_sequence);
   }
 
-  private buildScopePredicates(count: number): string {
-    return Array(count).fill("(scope_type = ? AND scope_id = ?)").join(" OR ");
+  private buildScopeQuery(scopes: Array<{ scopeType: DashboardRealtimeScopeType; scopeId: string }>): {
+    predicates: string;
+    values: string[];
+  } {
+    const predicates: string[] = [];
+    const values: string[] = [];
+
+    for (const scope of scopes) {
+      if (scope.scopeType === "thread") {
+        predicates.push(
+          "((scope_type = ? AND scope_id = ?) OR (event_type LIKE 'conversation.%' AND thread_id = ?))",
+        );
+        values.push(scope.scopeType, scope.scopeId, scope.scopeId);
+      } else {
+        predicates.push("(scope_type = ? AND scope_id = ?)");
+        values.push(scope.scopeType, scope.scopeId);
+      }
+    }
+
+    return {
+      predicates: predicates.join(" OR "),
+      values,
+    };
   }
 
-  private buildScopeValues(scopes: { scopeType: string; scopeId: string }[]): string[] {
-    const values: string[] = [];
-    for (const scope of scopes) {
-      values.push(scope.scopeType, scope.scopeId);
+  private deduplicateLegacyConversationScopeCopies(
+    rows: DashboardRealtimeEventRow[],
+  ): DashboardRealtimeEventRow[] {
+    const deduplicated: DashboardRealtimeEventRow[] = [];
+    const pendingProjectRows = new Map<string, {
+      index: number;
+      sequence: number;
+    }>();
+
+    for (const row of rows) {
+      if (!isConversationRealtimeEvent(row.event_type) || !row.thread_id) {
+        deduplicated.push(row);
+        continue;
+      }
+
+      const logicalKey = [
+        row.event_type,
+        row.entity_type,
+        row.entity_id,
+        row.project_id ?? "",
+        row.thread_id,
+        row.payload_json ?? "",
+      ].join("\u0000");
+      const sequence = toNumber(row.sequence);
+
+      if (row.scope_type === "project") {
+        pendingProjectRows.set(logicalKey, {
+          index: deduplicated.length,
+          sequence,
+        });
+        deduplicated.push(row);
+        continue;
+      }
+
+      const pendingProject = pendingProjectRows.get(logicalKey);
+      if (
+        row.scope_type === "thread"
+        && pendingProject
+        && sequence === pendingProject.sequence + 1
+      ) {
+        deduplicated[pendingProject.index] = row;
+        pendingProjectRows.delete(logicalKey);
+        continue;
+      }
+
+      deduplicated.push(row);
     }
-    return values;
+
+    return deduplicated;
   }
 
   listEventsSince(scopes: string[], afterSequence: number, limit: number = 200): DashboardRealtimeEvent[] {
@@ -210,11 +337,14 @@ export class DashboardRealtimeEventRepository {
       return [];
     }
 
-    const predicates = this.buildScopePredicates(parsedScopes.length);
+    const query = this.buildScopeQuery(parsedScopes);
+    const boundedLimit = Number.isFinite(limit)
+      ? Math.max(1, Math.floor(limit))
+      : 200;
     const values: Array<string | number> = [
       Math.max(0, afterSequence),
-      ...this.buildScopeValues(parsedScopes),
-      Math.max(1, limit),
+      ...query.values,
+      boundedLimit * 2,
     ];
 
     const rows = this.db.prepare(`
@@ -222,12 +352,19 @@ export class DashboardRealtimeEventRepository {
       FROM dashboard_realtime_events
       WHERE sequence > ?
         AND is_replayable = 1
-        AND (${predicates})
+        AND (${query.predicates})
       ORDER BY sequence ASC
       LIMIT ?
     `).all(...values) as unknown as DashboardRealtimeEventRow[];
 
-    return rows.map((row) => this.mapRow(row));
+    const requestedScopes = new Set(parsedScopes.map((scope) => buildScope(scope.scopeType, scope.scopeId)));
+    return this.deduplicateLegacyConversationScopeCopies(rows)
+      .map((row) => this.mapRow(row))
+      .map((event) => {
+        const matchedScope = resolveDashboardRealtimeEventScope(event, requestedScopes);
+        return matchedScope ? routeDashboardRealtimeEventToScope(event, matchedScope) : event;
+      })
+      .slice(0, boundedLimit);
   }
 
   getLatestSequenceForScopes(scopes: string[]): number | null {
@@ -247,13 +384,12 @@ export class DashboardRealtimeEventRepository {
 
     // Persisted (replayable) events from before a restart may have a higher sequence than
     // anything we've emitted this run, so fold in the persisted max for these scopes too.
-    const predicates = this.buildScopePredicates(parsedScopes.length);
-    const values = this.buildScopeValues(parsedScopes);
+    const query = this.buildScopeQuery(parsedScopes);
     const row = this.db.prepare(`
       SELECT MAX(sequence) AS max_sequence
       FROM dashboard_realtime_events
-      WHERE ${predicates}
-    `).get(...values) as { max_sequence?: number | string | null } | undefined;
+      WHERE ${query.predicates}
+    `).get(...query.values) as { max_sequence?: number | string | null } | undefined;
     if (row && row.max_sequence !== null && row.max_sequence !== undefined) {
       const persisted = toNumber(row.max_sequence);
       if (persisted > latest) {

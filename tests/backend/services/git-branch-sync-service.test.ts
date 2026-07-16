@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { syncRemoteBranchIfAvailable } from "../../../src/services/git-branch-sync-service.js";
+import { fetchOriginIfAvailable, syncRemoteBranchIfAvailable } from "../../../src/services/git-branch-sync-service.js";
 import { setProviderTokenResolverForTests } from "../../../src/services/git-http-auth.js";
 
 describe("git branch sync service", () => {
@@ -39,6 +39,23 @@ describe("git branch sync service", () => {
     expect(runner).toHaveBeenNthCalledWith(2, "git", ["fetch", "origin", "--prune"], "/repo", undefined, {
       timeoutMs: 120000,
     });
+  });
+
+  it("refreshes multiple snapshot branches in one targeted fetch", async () => {
+    const runner = vi.fn()
+      .mockResolvedValueOnce({ stdout: "git@github.com:owner/repo.git\n", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+
+    await expect(fetchOriginIfAvailable("/repo", { runner }, ["task/one", "dev"]))
+      .resolves.toBe(true);
+
+    expect(runner).toHaveBeenNthCalledWith(2, "git", [
+      "fetch",
+      "origin",
+      "--prune",
+      "+refs/heads/task/one:refs/remotes/origin/task/one",
+      "+refs/heads/dev:refs/remotes/origin/dev",
+    ], "/repo", undefined, { timeoutMs: 120000 });
   });
 
   it("fetches HTTPS GitHub remotes with a temporary auth header and non-interactive prompts", async () => {

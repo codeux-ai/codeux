@@ -42,6 +42,7 @@ import * as PlanningPromptBuilder from "./planning-prompt-builder.js";
 import { buildRelevantMemoryInjectionContext } from "./memory-injection-context.js";
 import { getDesignGuidanceCatalog } from "../domain/settings/design-guidance-catalog.js";
 import { resolveEffectiveDashboardSettings } from "./settings-resolution-service.js";
+import { acquireProjectGitHelper } from "../shared/subprocess/command-runner.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -55,6 +56,7 @@ interface PlanningAgentServiceDeps {
   logger?: Logger;
   providerExecutionService?: ProviderExecutionService;
   structuredAgentRequestService?: StructuredAgentRequestService;
+  acquireProjectGitHelper?: (repoPath: string) => () => Promise<void>;
 }
 
 interface ImprovePromptResult {
@@ -139,7 +141,8 @@ function finalizePlanningInvocationError(
 interface PlanningContinuationContext {
   promptOverride?: string;
   provider: Exclude<ProviderId, "jules">;
-  continueSessionId: string;
+  continueSessionId: string | null;
+  continueSessionWithoutNativeId?: boolean;
   logicalSessionId: string;
   openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
   requireExistingSession?: boolean;
@@ -161,8 +164,10 @@ export class PlanningAgentService {
   private readonly structuredAgentRequestService: StructuredAgentRequestService;
   private readonly workspaceManager = new WorkspaceManager();
   private readonly invocationWorkspacePreparer = new InvocationWorkspacePreparer(this.workspaceManager);
+  private readonly acquireProjectGitHelper: (repoPath: string) => () => Promise<void>;
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
+    this.acquireProjectGitHelper = deps.acquireProjectGitHelper ?? acquireProjectGitHelper;
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
     this.providerExecutionService = deps.providerExecutionService || new ProviderExecutionService({
       executionRepository: deps.executionRepository,
@@ -193,6 +198,20 @@ export class PlanningAgentService {
 
   async improveSprintPrompt(projectId: string, input: ImprovePromptInput, signal?: AbortSignal): Promise<ImprovePromptResult> {
     const project = this.requireProject(projectId);
+    const releaseGitHelper = this.acquireProjectGitHelper(project.baseDir);
+    try {
+      return await this.improveSprintPromptWithProjectHelper(projectId, input, project, signal);
+    } finally {
+      await releaseGitHelper();
+    }
+  }
+
+  private async improveSprintPromptWithProjectHelper(
+    projectId: string,
+    input: ImprovePromptInput,
+    project: NonNullable<ReturnType<ProjectManagementRepository["getProject"]>>,
+    signal?: AbortSignal,
+  ): Promise<ImprovePromptResult> {
     const runtime = this.resolvePlanningRuntime(projectId, input.overrides);
     const planningAgentPresetId = input.overrides?.planningAgentPresetId
       || input.planningAgentPresetId
@@ -325,8 +344,12 @@ export class PlanningAgentService {
     if (!providerUsage) {
       throw new Error("Failed planning invocation is not linked to provider session metadata.");
     }
-    const continueSessionId = providerUsage.nativeSessionId || (providerUsage.provider === "claude-code" ? null : providerUsage.sessionId);
-    if (!continueSessionId) {
+    const continueSessionId = providerUsage.nativeSessionId
+      || (providerUsage.provider === "claude-code" || providerUsage.provider === "codex"
+        ? null
+        : providerUsage.sessionId);
+    const continueSessionWithoutNativeId = providerUsage.provider === "codex" && !providerUsage.nativeSessionId;
+    if (!continueSessionId && !continueSessionWithoutNativeId) {
       throw new Error("Failed planning invocation does not have a resumable provider session id.");
     }
 
@@ -348,6 +371,7 @@ export class PlanningAgentService {
     }, signal, {
       provider: continuationProvider,
       continueSessionId,
+      continueSessionWithoutNativeId,
       logicalSessionId: providerUsage.sessionId,
       openCodeBaselineRawUsageJson: providerUsage.provider === "opencode" ? providerUsage.rawUsageJson : null,
       promptOverride: mode === "continue_session" ? "continue_session" : undefined,
@@ -382,9 +406,13 @@ export class PlanningAgentService {
       ? this.deps.executionRepository?.getProviderInvocationUsage(invocation.providerInvocationId)
       : null;
     const continueSessionId = providerUsage
-      ? providerUsage.nativeSessionId || (providerUsage.provider === "claude-code" ? null : providerUsage.sessionId)
+      ? providerUsage.nativeSessionId
+        || (providerUsage.provider === "claude-code" || providerUsage.provider === "codex"
+          ? null
+          : providerUsage.sessionId)
       : null;
-    if (mode === "continue_session" && providerUsage && !continueSessionId) {
+    const continueSessionWithoutNativeId = providerUsage?.provider === "codex" && !providerUsage.nativeSessionId;
+    if (mode === "continue_session" && providerUsage && !continueSessionId && !continueSessionWithoutNativeId) {
       throw new Error(
         `Interrupted ${providerUsage.provider} planning invocation does not have a resumable provider session id. Refusing to start a fresh session.`,
       );
@@ -392,10 +420,14 @@ export class PlanningAgentService {
     const continuationProvider = providerUsage
       ? this.requirePlanningContinuationProvider(providerUsage.provider)
       : null;
-    const continuation: PlanningContinuationContext | undefined = mode === "continue_session" && providerUsage && continueSessionId && continuationProvider
+    const continuation: PlanningContinuationContext | undefined = mode === "continue_session"
+      && providerUsage
+      && (continueSessionId || continueSessionWithoutNativeId)
+      && continuationProvider
       ? {
           provider: continuationProvider,
           continueSessionId,
+          continueSessionWithoutNativeId,
           logicalSessionId: providerUsage.sessionId,
           openCodeBaselineRawUsageJson: providerUsage.provider === "opencode" ? providerUsage.rawUsageJson : null,
           promptOverride: "continue_session",
@@ -458,8 +490,32 @@ export class PlanningAgentService {
     continuation?: PlanningContinuationContext,
     preconditions?: PlanSprintPreconditions,
   ): Promise<PlanSprintResult> {
-    const { project, sprint } = preconditions
+    const resolvedPreconditions = preconditions
       ?? this.validatePlanSprintPreconditions(projectId, sprintId, options);
+    const releaseGitHelper = this.acquireProjectGitHelper(resolvedPreconditions.project.baseDir);
+    try {
+      return await this.runPlanSprintWithProjectHelper(
+        projectId,
+        sprintId,
+        options,
+        resolvedPreconditions,
+        signal,
+        continuation,
+      );
+    } finally {
+      await releaseGitHelper();
+    }
+  }
+
+  private async runPlanSprintWithProjectHelper(
+    projectId: string,
+    sprintId: string,
+    options: PlanSprintOptions,
+    preconditions: PlanSprintPreconditions,
+    signal?: AbortSignal,
+    continuation?: PlanningContinuationContext,
+  ): Promise<PlanSprintResult> {
+    const { project, sprint } = preconditions;
     const runtime = this.resolvePlanningRuntime(projectId, options.overrides);
     const planningAgentPresetId = options.overrides?.planningAgentPresetId
       || options.planningAgentPresetId
@@ -988,6 +1044,7 @@ export class PlanningAgentService {
         sessionIdPrefix: "planning",
         logicalSessionId: args.continuation?.logicalSessionId,
         continueSessionId: args.continuation?.continueSessionId,
+        continueSessionWithoutNativeId: args.continuation?.continueSessionWithoutNativeId,
         allowFreshSessionFallback: args.continuation?.requireExistingSession !== true,
         openCodeBaselineRawUsageJson: args.continuation?.openCodeBaselineRawUsageJson,
         invocationId: args.invocationId,

@@ -54,7 +54,8 @@ vi.mock("../../../src/v2/hooks/use-project-effective-settings.js", () => ({
 }));
 
 vi.mock("../../../src/v2/hooks/use-reduced-motion.js", () => ({
-    useReducedMotion: () => true
+    useReducedMotion: () => true,
+    useResolvedMotionDuration: (duration: number | string) => typeof duration === "number" ? 0 : "0ms",
 }));
 
 // Mock GSAP
@@ -99,7 +100,7 @@ describe("Sidebar Mobile Accessibility", () => {
         render(<Sidebar isMobile={true} isOpen={true} onClose={() => {}} />);
         const aside = screen.getByRole("dialog", { name: /primary navigation/i });
         // The nav itself has overflow-y-auto, let's select it directly
-        const nav = screen.getByRole("navigation", { name: /main navigation/i });
+        const nav = screen.getByRole("navigation", { name: /mobile workspace navigation/i });
         expect(nav).toHaveClass("overflow-y-auto");
     });
 

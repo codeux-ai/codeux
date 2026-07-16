@@ -52,8 +52,8 @@ describe("DropdownMenu Accessibility & Keyboard Navigation", () => {
         from?.y === 4 &&
         to?.opacity === 1 &&
         to?.y === 0 &&
-        to?.stagger === Math.min(0.018, 0.18 / 5) &&
-        to?.duration === 0.12 &&
+        to?.stagger === 0.2 / 3 &&
+        to?.duration === 0.2 &&
         to?.ease === "power2.out"
       );
     });

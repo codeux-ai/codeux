@@ -100,7 +100,11 @@ import {
   type RuntimeProcessLockRelease,
 } from "../services/runtime-process-lock.js";
 import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/workspace-volume-helper.js";
-import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
+import {
+  disposeCommandSpawner,
+  setSelectedProjectGitHelper,
+  shutdownGitHelperPool,
+} from "../shared/subprocess/command-runner.js";
 import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
@@ -239,6 +243,7 @@ export class CodeUxServer {
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
   private walCheckpointInterval: ReturnType<typeof setInterval> | null = null;
   private readonly startupTaskTimers = new Set<ReturnType<typeof setTimeout>>();
+  private startupContainerCleanupPromise: Promise<void> | null = null;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private dashboardHandle: DashboardServerHandle | null = null;
   private mcpServiceBound = false;
@@ -1394,18 +1399,28 @@ export class CodeUxServer {
     this.scheduleStartupTask(
       "Startup recovery",
       CodeUxServer.STARTUP_RECOVERY_DELAY_MS,
-      () => this.runStartupRecovery(),
+      async () => {
+        await this.ensureStartupContainerCleanup();
+        await this.runStartupRecovery();
+      },
     );
     this.scheduleStartupTask(
       "Startup container cleanup",
       CodeUxServer.STARTUP_CONTAINER_CLEANUP_DELAY_MS,
-      () => this.runStartupContainerCleanup(),
+      () => this.ensureStartupContainerCleanup(),
     );
     this.scheduleStartupTask(
       "Startup maintenance",
       CodeUxServer.STARTUP_MAINTENANCE_DELAY_MS,
       () => this.runStartupMaintenance(),
     );
+  }
+
+  private ensureStartupContainerCleanup(): Promise<void> {
+    if (!this.startupContainerCleanupPromise) {
+      this.startupContainerCleanupPromise = this.runStartupContainerCleanup();
+    }
+    return this.startupContainerCleanupPromise;
   }
 
   private async runStartupRecovery(): Promise<void> {
@@ -1444,9 +1459,40 @@ export class CodeUxServer {
       await new DockerAssetPruneService(
         this.sessionTracking,
         this.logger.child({ component: "docker-asset-prune-service" }),
+        {
+          protectedWorkspaceSessionIds: () => {
+            const sessionIds = new Set(
+              this.executionRepository
+                .listRunningProviderInvocationUsages()
+                .map((invocation) => invocation.sessionId?.trim())
+                .filter((sessionId): sessionId is string => Boolean(sessionId)),
+            );
+            for (const invocation of this.executionRepository.listActiveExecutionInvocationsByTypes(["planning"])) {
+              sessionIds.add(`planning-${invocation.projectId}-${invocation.sprintId || "project"}`);
+            }
+            return sessionIds;
+          },
+        },
       ).cleanupOnStartup();
     } catch (error) {
       this.logger.error?.("Failed to prune stale Docker assets on startup", { error });
+    }
+
+    // Startup pruning removes helper generations left by a crashed process. Only create the
+    // selected project's persistent generation after that destructive pass has completed, then
+    // allow sprint/provider recovery to begin. This prevents a slow prune from deleting a newly
+    // recovered helper.
+    const selectedProjectId = this.projectManagementRepository.getSelectedProjectId();
+    const selectedProject = selectedProjectId
+      ? this.projectManagementRepository.getProject(selectedProjectId)
+      : null;
+    try {
+      await setSelectedProjectGitHelper(selectedProject?.baseDir || null);
+    } catch (error) {
+      this.logger.warn("Failed to prewarm selected-project Git helper after startup cleanup", {
+        projectId: selectedProjectId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

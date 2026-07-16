@@ -47,6 +47,8 @@ During orchestration, QA reconciliation and initial merge-gate evaluation load t
 
 Task QA runs in waves of at most four reviews per orchestration cycle, or a lower positive capacity when the providers routed to `qa_review` are configured more conservatively. The cycle settles that wave, merges ready branches, and starts newly unblocked coding before scheduling more reviews. Provider admission remains authoritative and may reduce effective concurrency further under host pressure.
 
+A hosted-provider QA coding follow-up is asynchronous after API acceptance. While its durable checkpoint is `awaiting_provider`, the task remains `RUNNING`/`QA_PENDING`, restart recovery observes the existing task run instead of resending it, and QA exhaustion is deferred. Final verification starts only after the matching task run completes after that dispatch.
+
 ## Troubleshooting
 
 If the saved setting does not appear to take effect:

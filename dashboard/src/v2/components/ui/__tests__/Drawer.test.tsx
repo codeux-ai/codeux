@@ -4,6 +4,7 @@ import { useState } from "preact/hooks";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import { Drawer } from "../Drawer.js";
 import { expect, test, describe, afterEach, vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
 
 vi.mock("gsap", () => {
   const gsap = {

@@ -311,6 +311,10 @@ export interface ExecutionProviderRunArgs {
   onActivity?: (description: string, originator?: string) => void;
   signal?: AbortSignal;
   continueSessionId?: string | null;
+  /** Requests provider continuation without claiming that a logical Code UX
+   *  session/workspace id is a native provider session id. Codex maps this to
+   *  its workspace-local `resume --last` fallback. */
+  continueSessionWithoutNativeId?: boolean;
   /** Defaults to true. Set false when recovery must fail rather than silently
    *  replacing a missing provider conversation with a fresh session. */
   allowFreshSessionFallback?: boolean;
@@ -424,7 +428,13 @@ export class ProviderExecutionService {
       persistentSkillRetrievalEnabled: Boolean(persistentSkillRuntime),
     });
 
-    const runProviderInner = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null, openCodeBaselineRawUsageJson?: Record<string, unknown> | null): Promise<ProviderRunResult> => {
+    const runProviderInner = async (
+      p: string,
+      retrySystemMessage?: string,
+      continueSessionId?: string | null,
+      openCodeBaselineRawUsageJson?: Record<string, unknown> | null,
+      continueSessionWithoutNativeId = false,
+    ): Promise<ProviderRunResult> => {
       messagePersistenceState = { preservedMessages: null, lastMessages: null };
       conversationMapperState = { revision: null, messages: [], messageCountByTurnPrefix: [0] };
       if (execInvocationId) {
@@ -581,6 +591,7 @@ export class ProviderExecutionService {
         gitlabToken: args.gitlabToken,
         signal: args.signal,
         continueSessionId,
+        continueSessionWithoutNativeId,
         allowFreshSessionFallback: args.allowFreshSessionFallback,
         nativeSessionOperation: args.nativeSessionOperation,
         openCodeBaselineUsage: openCodeBaselineRawUsageJson,
@@ -805,6 +816,7 @@ export class ProviderExecutionService {
     let providerResult: ProviderRunResult;
     let usedReadFileRetry = false;
     let continueSessionId: string | null = args.continueSessionId || null;
+    let continueSessionWithoutNativeId = args.continueSessionWithoutNativeId === true;
     let rateLimitRetryCount = 0;
     let openCodeBaselineRawUsageJson: Record<string, unknown> | null = args.openCodeBaselineRawUsageJson || null;
 
@@ -814,6 +826,7 @@ export class ProviderExecutionService {
         usedReadFileRetry ? "Retrying with file-discovery guidance." : undefined,
         continueSessionId,
         openCodeBaselineRawUsageJson,
+        continueSessionWithoutNativeId,
       );
       // Each attempt's raw export snapshot becomes the baseline for the next
       // retry, since a retry that resumes the same opencode session would
@@ -954,7 +967,16 @@ export class ProviderExecutionService {
               sourceEventKey: `cli:provider:quota-wait:${execInvocationId ?? args.sessionId}:${retryAfterIso}`,
             });
           }
-          continueSessionId = providerResult.nativeSessionId || (args.provider === "claude-code" ? null : args.sessionId);
+          if (providerResult.nativeSessionId) {
+            continueSessionId = providerResult.nativeSessionId;
+            continueSessionWithoutNativeId = false;
+          } else if (args.provider === "codex") {
+            continueSessionId = null;
+            continueSessionWithoutNativeId = true;
+          } else {
+            continueSessionId = args.provider === "claude-code" ? null : args.sessionId;
+            continueSessionWithoutNativeId = false;
+          }
           await this.sleepUntilInvocationRetryTimer({
             invocationId: execInvocationId,
             retryAtIso: retryAfterIso,

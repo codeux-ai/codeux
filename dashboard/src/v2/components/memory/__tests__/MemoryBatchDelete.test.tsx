@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { act, fireEvent, renderHook, screen, waitFor } from "@testing-library/preact";
+import { act, cleanup, fireEvent, renderHook, screen, waitFor } from "@testing-library/preact";
 import { DashboardI18nHookTestWrapper, renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -109,7 +109,7 @@ describe("Memory batch delete", () => {
     });
 
     afterEach(() => {
-        document.body.innerHTML = "";
+        cleanup();
         searchQuerySignal.value = "";
         activeTierSignal.value = "short_term";
         selectedSprintIdSignal.value = undefined;
@@ -191,7 +191,7 @@ describe("Memory batch delete", () => {
             "de",
         );
 
-        fireEvent.click(await screen.findByRole("button", { name: "2 ausgew��hlte löschen" }));
+        fireEvent.click(await screen.findByRole("button", { name: "2 ausgewählte löschen" }));
         expect(screen.getByRole("dialog", { name: "Ausgewählte Erinnerungen löschen" })).toBeInTheDocument();
         expect(screen.getByText(/2 ausgewählte Erinnerungen aus dem sichtbaren Umfang löschen/)).toBeInTheDocument();
 

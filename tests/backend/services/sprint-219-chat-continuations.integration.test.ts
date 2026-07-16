@@ -102,7 +102,9 @@ describe("SPR-219 scheduled chat continuation fan-in", () => {
     const chatThreadRuntimeService = new ChatThreadRuntimeService({
       connectionChatRepository,
       projectWorkerAssignmentRepository: assignmentRepository,
-      executionRepository: {},
+      executionRepository: {
+        getLatestProviderInvocationUsageBySession: () => null,
+      },
       taskService: {
         resolveInvocationProvider: () => ({
           provider: "codex",

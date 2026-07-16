@@ -78,6 +78,15 @@ describe("Dashboard Chat API", () => {
     const thread = connectionChatRepository.createThread(project.id, {
       title: "Test Thread",
     });
+    const nativeSessionId = "11111111-2222-7333-8444-555555555555";
+    executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sessionId: thread.id,
+      provider: "codex",
+      purpose: "dashboard_reply",
+      status: "completed",
+      nativeSessionId,
+    });
     connectionChatRepository.postDashboardMessage(project.id, {
       threadId: thread.id,
       bodyMarkdown: "Please keep the important context.",
@@ -199,12 +208,12 @@ describe("Dashboard Chat API", () => {
     const compactedThread = await compactResponse.json() as any;
     expect(compactedThread.runtimeState).toMatchObject({
       replayRequired: false,
-      sessionIds: [thread.id],
+      sessionIds: [nativeSessionId],
       compactionSummary: {
         markdown: "## Current Objective\nCompact thread",
         provider: "codex",
         model: "gpt-4",
-        nativeSessionId: thread.id,
+        nativeSessionId,
       },
     });
     expect(compactedThread.title).toBe("Manual Session Title");

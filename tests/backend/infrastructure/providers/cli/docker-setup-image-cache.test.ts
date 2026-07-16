@@ -1,9 +1,13 @@
 import * as fs from "fs/promises";
+import { setTimeout as delay } from "timers/promises";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { DockerSetupImageCache, type DockerSetupImageCacheProgress } from "../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js";
 import { runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
 
 vi.mock("fs/promises");
+vi.mock("timers/promises", () => ({
+  setTimeout: vi.fn(async () => undefined),
+}));
 vi.mock("../../../../../src/services/cli-process-runner.js", () => ({
   runStreamingCommand: vi.fn(),
 }));
@@ -15,7 +19,12 @@ describe("DockerSetupImageCache", () => {
     vi.mocked(fs.rm).mockResolvedValue(undefined);
     vi.mocked(fs.stat).mockResolvedValue({ mtimeMs: Date.now() } as any);
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
-    vi.mocked(fs.readFile).mockResolvedValue("#!/usr/bin/env bash\necho ready\n");
+    vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
+      if (String(filePath).includes("setup-image-cache")) {
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      }
+      return "#!/usr/bin/env bash\necho ready\n";
+    });
     vi.mocked(runStreamingCommand)
       .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "missing" })
       .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "missing" })
@@ -59,6 +68,57 @@ describe("DockerSetupImageCache", () => {
     expect(result.image).toMatch(/^code-ux-setup-cache-node-24-bookworm:/);
     expect(runStreamingCommand).toHaveBeenCalledTimes(1);
     expect(onActivity).toHaveBeenCalledWith(expect.stringContaining("Using cached Docker setup image"));
+  });
+
+  it("reuses a process-verified image without another Docker inspect or cache-file write", async () => {
+    vi.mocked(runStreamingCommand).mockReset();
+    vi.mocked(runStreamingCommand).mockResolvedValue({ ok: true, code: 0, stdout: "exists", stderr: "" });
+    const cache = new DockerSetupImageCache();
+    const input = {
+      baseImage: "node:24-bookworm",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
+      cacheEnabled: true,
+      runtimeRoot: "/runtime",
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+      mapSourcePathForDaemon: (sourcePath: string) => `/mapped${sourcePath}`,
+    };
+
+    const first = await cache.resolveImage(input);
+    const second = await cache.resolveImage(input);
+
+    expect(second).toEqual(first);
+    expect(runStreamingCommand).toHaveBeenCalledTimes(1);
+    expect(runStreamingCommand).toHaveBeenCalledWith(
+      "docker",
+      ["image", "inspect", first.image],
+      "/repo",
+      process.env,
+      expect.any(Object),
+    );
+    expect(fs.mkdir).not.toHaveBeenCalled();
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it("invalidates positive readiness so externally removed images are inspected again", async () => {
+    vi.mocked(runStreamingCommand).mockReset();
+    vi.mocked(runStreamingCommand).mockResolvedValue({ ok: true, code: 0, stdout: "exists", stderr: "" });
+    const cache = new DockerSetupImageCache();
+    const input = {
+      baseImage: "node:24-bookworm",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
+      cacheEnabled: true,
+      runtimeRoot: "/runtime",
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+      mapSourcePathForDaemon: (sourcePath: string) => `/mapped${sourcePath}`,
+    };
+
+    const first = await cache.resolveImage(input);
+    cache.invalidateImage(first.image);
+    await cache.resolveImage(input);
+
+    expect(runStreamingCommand).toHaveBeenCalledTimes(2);
   });
 
   it("builds the cached image on a cache miss", async () => {
@@ -116,6 +176,108 @@ describe("DockerSetupImageCache", () => {
     );
     expect(progressEvents.at(-1)?.progressPercent).toBe(100);
     expect(onActivity).toHaveBeenCalledWith(expect.stringContaining("first build may take a few minutes"));
+  });
+
+  it("does not rewrite unchanged setup build-context files on a rebuild", async () => {
+    const fileContents = new Map<string, string>();
+    const setupScript = "#!/usr/bin/env bash\necho ready\n";
+    vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
+      const normalizedPath = String(filePath);
+      if (normalizedPath === "/repo/.code-ux/container/setup.sh") {
+        return setupScript;
+      }
+      const content = fileContents.get(normalizedPath);
+      if (content === undefined) {
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      }
+      return content;
+    });
+    vi.mocked(fs.writeFile).mockImplementation(async (filePath, content) => {
+      fileContents.set(String(filePath), String(content));
+    });
+    vi.mocked(runStreamingCommand).mockReset();
+    vi.mocked(runStreamingCommand).mockImplementation(async (_command, args) => (
+      args[0] === "build"
+        ? { ok: true, code: 0, stdout: "built", stderr: "" }
+        : { ok: false, code: 1, stdout: "", stderr: "missing" }
+    ));
+    const cache = new DockerSetupImageCache();
+    const input = {
+      baseImage: "node:24-bookworm",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
+      cacheEnabled: true,
+      runtimeRoot: "/runtime",
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+      mapSourcePathForDaemon: (sourcePath: string) => `/mapped${sourcePath}`,
+    };
+
+    const first = await cache.resolveImage(input);
+    cache.invalidateImage(first.image);
+    await cache.resolveImage(input);
+
+    expect(vi.mocked(runStreamingCommand).mock.calls.filter(([, args]) => args[0] === "build")).toHaveLength(2);
+    expect(fs.writeFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts cross-process build-lock polling after 25ms instead of one second", async () => {
+    let lockAttempts = 0;
+    vi.mocked(fs.mkdir).mockImplementation(async (targetPath) => {
+      if (String(targetPath).endsWith(".build-lock") && lockAttempts++ === 0) {
+        throw Object.assign(new Error("locked"), { code: "EEXIST" });
+      }
+      return undefined;
+    });
+    vi.mocked(runStreamingCommand).mockReset();
+    vi.mocked(runStreamingCommand).mockImplementation(async (_command, args) => (
+      args[0] === "build"
+        ? { ok: true, code: 0, stdout: "built", stderr: "" }
+        : { ok: false, code: 1, stdout: "", stderr: "missing" }
+    ));
+
+    await new DockerSetupImageCache().resolveImage({
+      baseImage: "node:24-bookworm",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
+      cacheEnabled: true,
+      runtimeRoot: "/runtime",
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+      mapSourcePathForDaemon: (sourcePath) => `/mapped${sourcePath}`,
+    });
+
+    expect(delay).toHaveBeenCalledTimes(1);
+    expect(delay).toHaveBeenCalledWith(25, undefined, { signal: undefined });
+  });
+
+  it("recreates a setup-cache parent removed during restart before retrying the build lock", async () => {
+    let lockAttempts = 0;
+    vi.mocked(fs.mkdir).mockImplementation(async (targetPath) => {
+      if (String(targetPath).endsWith(".build-lock") && lockAttempts++ === 0) {
+        throw Object.assign(new Error("parent removed during restart"), { code: "ENOENT" });
+      }
+      return undefined;
+    });
+    vi.mocked(runStreamingCommand).mockReset();
+    vi.mocked(runStreamingCommand).mockImplementation(async (_command, args) => (
+      args[0] === "build"
+        ? { ok: true, code: 0, stdout: "built", stderr: "" }
+        : { ok: false, code: 1, stdout: "", stderr: "missing" }
+    ));
+
+    const result = await new DockerSetupImageCache().resolveImage({
+      baseImage: "node:24-bookworm",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
+      cacheEnabled: true,
+      runtimeRoot: "/runtime",
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+      mapSourcePathForDaemon: (sourcePath) => `/mapped${sourcePath}`,
+    });
+
+    expect(result.runSetupScriptAtRuntime).toBe(false);
+    expect(lockAttempts).toBe(2);
+    expect(fs.mkdir).toHaveBeenCalledWith("/runtime/setup-image-cache", { recursive: true });
+    expect(delay).toHaveBeenCalledWith(25, undefined, { signal: undefined });
   });
 
   it("bakes Playwright browser location into cached images when enabled", async () => {

@@ -333,6 +333,64 @@ describe("WorkspaceVolumeHelperPool", () => {
     expect(calls.filter((call) => call.args[0] === "run" && call.args.includes("--rm"))).toHaveLength(1);
   });
 
+  it("does not launch an uncapped fallback when helper creation loses a shutdown race", async () => {
+    let resolveCreation!: (result: RunnerResult) => void;
+    let markCreationStarted!: () => void;
+    const creationStarted = new Promise<void>((resolve) => {
+      markCreationStarted = resolve;
+    });
+    const { runner, calls } = makeRunner(({ args }) => {
+      if (args[0] === "run" && args.includes("-d")) {
+        markCreationStarted();
+        return new Promise((resolve) => {
+          resolveCreation = resolve;
+        });
+      }
+      return undefined;
+    });
+    const pool = new WorkspaceVolumeHelperPool(runner);
+    pools.push(pool);
+
+    const operation = pool.exec("vol-1", ["git", "status"]);
+    await creationStarted;
+    const shutdown = pool.shutdown();
+    resolveCreation({ ok: false, stderr: "runtime restart removed helper generation" });
+
+    await expect(operation).rejects.toThrow(/runtime restart removed helper generation|shutting down/);
+    await shutdown;
+    expect(calls.filter((call) => call.args[0] === "run" && call.args.includes("--rm"))).toHaveLength(0);
+  });
+
+  it("does not launch a fallback after the command signal is aborted", async () => {
+    let resolveCreation!: (result: RunnerResult) => void;
+    let markCreationStarted!: () => void;
+    const creationStarted = new Promise<void>((resolve) => {
+      markCreationStarted = resolve;
+    });
+    const { runner, calls } = makeRunner(({ args }) => {
+      if (args[0] === "run" && args.includes("-d")) {
+        markCreationStarted();
+        return new Promise((resolve) => {
+          resolveCreation = resolve;
+        });
+      }
+      return undefined;
+    });
+    const pool = new WorkspaceVolumeHelperPool(runner);
+    pools.push(pool);
+    const controller = new AbortController();
+
+    const operation = pool.exec("vol-1", ["git", "status"], undefined, {
+      signal: controller.signal,
+    });
+    await creationStarted;
+    controller.abort(new Error("restart cancellation"));
+    resolveCreation({ ok: false, stderr: "helper creation cancelled" });
+
+    await expect(operation).rejects.toThrow(/restart cancellation/);
+    expect(calls.filter((call) => call.args[0] === "run" && call.args.includes("--rm"))).toHaveLength(0);
+  });
+
   it("does not repeat a command when the host runner throws", async () => {
     const { runner, calls } = makeRunner(({ args }) => {
       if (args[0] === "exec") {

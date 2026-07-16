@@ -62,6 +62,8 @@ import {
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const SPRINT_GALLERY_VISIBILITY_STORAGE_KEY = "code_ux_sprints_show_gallery";
 const EMPTY_CI_STATUS_BY_SPRINT_ID = new Map<string, never>();
+const EMPTY_PLANNING_STATUS_BY_SPRINT_ID = new Map<string, never>();
+const EMPTY_WORKFLOW_INTERVENTION_BY_SPRINT_ID = new Map<string, never>();
 type RepositoryIssueImportProvider = "github" | "gitlab";
 
 const getImportedTaskKey = (task: SprintImportedTaskInput): string => (
@@ -237,6 +239,8 @@ export const SprintsPage: FunctionComponent = () => {
     pendingActionIds,
     activeRunsBySprintId,
     pauseResumeRunsBySprintId,
+    planningStatusBySprintId = EMPTY_PLANNING_STATUS_BY_SPRINT_ID,
+    workflowHumanInterventionBySprintId = EMPTY_WORKFLOW_INTERVENTION_BY_SPRINT_ID,
     interventionBySprintId,
     ciStatusBySprintId = EMPTY_CI_STATUS_BY_SPRINT_ID,
     showCreateComposer, setShowCreateComposer,
@@ -910,8 +914,9 @@ export const SprintsPage: FunctionComponent = () => {
                         updateBranchBusy={pendingActionIds.has(`sprint-update-branch:${sprint.id}`)}
                         isPaused={isPaused}
                         pauseResumeBusy={pauseResumeBusy}
-                        humanIntervention={interventionBySprintId.get(sprint.id) || null}
                         ciStatus={ciStatusBySprintId.get(sprint.id) || null}
+                        planningStatus={planningStatusBySprintId.get(sprint.id) || null}
+                        workflowHumanIntervention={workflowHumanInterventionBySprintId.get(sprint.id) || null}
                         onPrimaryAction={() => { handleSprintToggle(sprint.id); }}
                         onPauseResume={pauseResumeRun ? () => { handleSprintPauseResume(sprint.id); } : undefined}
                         onAddTasks={() => { void handleOpenAppendTasks(sprint); }}
@@ -1083,6 +1088,8 @@ export const SprintsPage: FunctionComponent = () => {
                 pauseResumeRunsBySprintId={pauseResumeRunsBySprintId}
                 interventionBySprintId={interventionBySprintId}
                 ciStatusBySprintId={ciStatusBySprintId}
+                planningStatusBySprintId={planningStatusBySprintId}
+                workflowHumanInterventionBySprintId={workflowHumanInterventionBySprintId}
                 pendingActionIds={pendingActionIds}
                 onToggleShowcase={handleToggleShowcaseWithSprint}
                 onSprintToggle={handleSprintToggle}

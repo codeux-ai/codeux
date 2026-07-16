@@ -77,7 +77,11 @@ export function isMainMergeAttentionItem(item: {
   const isMainMergeCiFix = item.attentionType === "ci_fix_required" && payload.mergeStage === "main";
   const isMainMergeHandoff = (
     (item.attentionType === "human_escalation_required" || item.attentionType === "dashboard_reply_required")
-    && (payload.sourceAttentionType === "merge_conflict" || payload.sourceAttentionType === "ci_fix_required")
+    && (
+      payload.sourceAttentionType === "merge_conflict"
+      || payload.sourceAttentionType === "ci_fix_required"
+      || payload.sourceAttentionType === "ci_fix"
+    )
     && payload.mergeStage === "main"
   );
   return isMainMergeConflict || isMainMergeCiFix || isMainMergeHandoff;

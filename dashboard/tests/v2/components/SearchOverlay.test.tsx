@@ -9,7 +9,8 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 vi.mock('../../../src/v2/hooks/use-reduced-motion.js', () => ({
-    useReducedMotion: () => false
+    useReducedMotion: () => false,
+    useResolvedMotionDuration: <T extends number | string>(duration: T) => duration,
 }));
 
 describe('SearchOverlay', () => {

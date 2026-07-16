@@ -5,12 +5,16 @@ import { createLogger } from "../../../../src/shared/logging/logger.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../src/repositories/settings-defaults.js";
 import * as path from "path";
 
-const commandRun = vi.hoisted(() => vi.fn());
+const { commandRun, setSelectedProjectGitHelper } = vi.hoisted(() => ({
+  commandRun: vi.fn(),
+  setSelectedProjectGitHelper: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("../../../../src/server/dashboard-server.js");
 vi.mock("../../../../src/shared/logging/logger.js");
 vi.mock("../../../../src/shared/subprocess/command-runner.js", () => ({
   commandRunner: { run: (...a: unknown[]) => commandRun(...a) },
+  setSelectedProjectGitHelper,
 }));
 vi.mock("../../../../src/server/memory-routes.js", () => ({
   registerMemoryRoutes: vi.fn(),
@@ -127,11 +131,12 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       projectManagementRepository: {
         getSelectedProjectId: vi.fn().mockReturnValue("project-1"),
-        setSelectedProjectId: vi.fn(),
+        setSelectedProjectId: vi.fn((projectId) => projectId),
         setSelectedSprintId: vi.fn(),
         getProject: vi.fn().mockReturnValue({
           id: "project-1",
           name: "Project 1",
+          baseDir: "/repos/project-1",
         }),
         getSprint: vi.fn().mockReturnValue({
           id: "sprint-1",
@@ -139,6 +144,7 @@ describe("dashboard-lifecycle-service", () => {
         }),
         getTask: vi.fn().mockReturnValue(null),
         updateTask: vi.fn(),
+        deleteProject: vi.fn(),
         listProjects: vi.fn().mockReturnValue({ projects: [], selectedProjectId: "project-1" }),
         notifyProjectsUpdated: vi.fn(),
       } as any,
@@ -149,6 +155,8 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       connectionChatRepository: {
         listConnections: vi.fn().mockReturnValue([]),
+        listThreads: vi.fn().mockReturnValue([]),
+        createThread: vi.fn().mockReturnValue({ id: "thread-1", projectId: "project-1" }),
       } as any,
       projectWorkerAssignmentRepository: {
         listAssignmentsForProject: vi.fn().mockReturnValue([]),
@@ -254,6 +262,15 @@ describe("dashboard-lifecycle-service", () => {
       chatProviderSessionRuntimeService: {
         start: vi.fn().mockResolvedValue(undefined),
         stop: vi.fn().mockResolvedValue(undefined),
+      } as any,
+      chatThreadRuntimeService: {
+        setQuicksprintLauncher: vi.fn(),
+        prewarmThreadWorkspace: vi.fn().mockResolvedValue(undefined),
+        updateConversationThread: vi.fn(),
+        updateThreadRoute: vi.fn(),
+        compactThreadSession: vi.fn(),
+        cancelInFlightTurn: vi.fn(),
+        postMessage: vi.fn(),
       } as any,
     };
 
@@ -402,6 +419,88 @@ describe("dashboard-lifecycle-service", () => {
         resolutionSummaryMarkdown: undefined,
       });
       expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith("task-1", "merge_conflict");
+    });
+
+    it("resets the recorded CI-fix subject when its deduplicated handoff is resolved", async () => {
+      const escalation = {
+        id: "attention-ci-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: null,
+        sprintRunId: "run-1",
+        dispatchId: null,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "CI autofix guardrail reached",
+        summaryMarkdown: "Five provider attempts completed.",
+        payload: {
+          sourceAttentionType: "ci_fix",
+          guardrailPurpose: "ci_fix",
+          guardrailSubject: "main-merge-ci-fix:run-1",
+          guardrailAction: "human_handoff",
+        },
+        openedAt: "2026-03-09T00:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-09T00:00:00.000Z",
+      };
+      vi.mocked(mockDeps.projectAttentionRepository.getAttentionItem).mockReturnValue(escalation as any);
+      vi.mocked(mockDeps.projectAttentionRepository.resolveAttentionItem).mockReturnValue({
+        ...escalation,
+        status: "resolved",
+        resolvedAt: "2026-03-09T00:01:00.000Z",
+      } as any);
+
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+      setupArgs.resolveAttentionItem!("project-1", "attention-ci-1", {
+        status: "resolved",
+        reason: "dashboard_resolved",
+      });
+
+      expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith(
+        "main-merge-ci-fix:run-1",
+        "ci_fix",
+      );
+    });
+
+    it("normalizes legacy CI-fix handoffs when resetting a task budget", async () => {
+      const escalation = {
+        id: "attention-ci-legacy",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: "run-1",
+        dispatchId: null,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "Virtual worker escalation",
+        summaryMarkdown: "Legacy CI repair handoff.",
+        payload: { sourceAttentionType: "ci_fix_required" },
+        openedAt: "2026-03-09T00:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-09T00:00:00.000Z",
+      };
+      vi.mocked(mockDeps.projectAttentionRepository.getAttentionItem).mockReturnValue(escalation as any);
+      vi.mocked(mockDeps.projectAttentionRepository.resolveAttentionItem).mockReturnValue({
+        ...escalation,
+        status: "resolved",
+      } as any);
+
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+      setupArgs.resolveAttentionItem!("project-1", "attention-ci-legacy", {
+        status: "resolved",
+      });
+
+      expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith("task-1", "ci_fix");
     });
 
     it("resets QA review history when a QA human escalation is resolved", async () => {
@@ -743,8 +842,58 @@ describe("dashboard-lifecycle-service", () => {
       it("does not throw on explicit invalidation during selectProject", async () => {
         await bootDashboard(mockDeps);
         const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
-        setupArgs.selectProject!("project-2");
+        await setupArgs.selectProject!("project-2");
         expect(mockDeps.projectManagementRepository.setSelectedProjectId).toHaveBeenCalledWith("project-2");
+        expect(setSelectedProjectGitHelper).toHaveBeenCalledWith("/repos/project-1");
+      });
+
+      it("prewarms the latest chat workspace after selecting a project", async () => {
+        vi.mocked(mockDeps.connectionChatRepository.listThreads).mockReturnValueOnce([
+          { id: "thread-latest", projectId: "project-2" },
+        ] as any);
+        await bootDashboard(mockDeps);
+        const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+
+        await setupArgs.selectProject!("project-2");
+        await vi.waitFor(() => {
+          expect(mockDeps.chatThreadRuntimeService.prewarmThreadWorkspace)
+            .toHaveBeenCalledWith("project-2", "thread-latest");
+        });
+      });
+
+      it("switches the Git helper to the repository selected after deleting the active project", async () => {
+        vi.mocked(mockDeps.projectManagementRepository.getSelectedProjectId)
+          .mockReturnValueOnce("project-1")
+          .mockReturnValue("project-2");
+        vi.mocked(mockDeps.projectManagementRepository.getProject).mockImplementation((projectId) => ({
+          id: projectId,
+          name: "Project",
+          baseDir: projectId === "project-2" ? "/repos/project-2" : "/repos/project-1",
+        } as any));
+        await bootDashboard(mockDeps);
+        const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+
+        setupArgs.deleteProject!("project-1");
+
+        expect(mockDeps.projectManagementRepository.deleteProject).toHaveBeenCalledWith("project-1");
+        await vi.waitFor(() => {
+          expect(setSelectedProjectGitHelper).toHaveBeenCalledWith("/repos/project-2");
+        });
+        expect(setSelectedProjectGitHelper).not.toHaveBeenCalledWith(null);
+      });
+
+      it("stops the selected-project Git helper when deleting the last project", async () => {
+        vi.mocked(mockDeps.projectManagementRepository.getSelectedProjectId)
+          .mockReturnValueOnce("project-1")
+          .mockReturnValue(null);
+        await bootDashboard(mockDeps);
+        const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+
+        setupArgs.deleteProject!("project-1");
+
+        await vi.waitFor(() => {
+          expect(setSelectedProjectGitHelper).toHaveBeenCalledWith(null);
+        });
       });
 
       it("does not throw on explicit invalidation during selectSprint", async () => {

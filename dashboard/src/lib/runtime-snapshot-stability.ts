@@ -100,6 +100,7 @@ function isEmptyExecutionSnapshot(snapshot: ExecutionDashboardSnapshot): boolean
     && snapshot.primaryAssignedWorker === null
     && snapshot.overflowAssignedWorkers.length === 0
     && snapshot.attentionItems.length === 0
+    && snapshot.sprintWorkflowProjections.length === 0
     && snapshot.recentEvents.length === 0
     && (snapshot.recentInvocations?.length ?? 0) === 0
   );
@@ -110,6 +111,10 @@ export function hasActiveExecutionSnapshot(snapshot: ExecutionDashboardSnapshot)
     snapshot.sprintRuns.some((run) => ACTIVE_SPRINT_RUN_STATUSES.has(run.status))
     || snapshot.taskDispatches.some((dispatch) => ACTIVE_TASK_DISPATCH_STATUSES.has(dispatch.status))
     || snapshot.attentionItems.some((item) => ACTIVE_ATTENTION_STATUSES.has(item.status))
+    || snapshot.sprintWorkflowProjections.some((projection) => (
+      projection.humanIntervention !== null
+      || ACTIVE_SPRINT_RUN_STATUSES.has(projection.planningStatus ?? "")
+    ))
   );
 }
 
@@ -117,6 +122,7 @@ type SprintRun = ExecutionDashboardSnapshot["sprintRuns"][number];
 type TaskDispatch = ExecutionDashboardSnapshot["taskDispatches"][number];
 type Connection = ExecutionDashboardSnapshot["connections"][number];
 type AttentionItem = ExecutionDashboardSnapshot["attentionItems"][number];
+type SprintWorkflowProjection = ExecutionDashboardSnapshot["sprintWorkflowProjections"][number];
 type RecentEvent = ExecutionDashboardSnapshot["recentEvents"][number];
 type RecentInvocation = NonNullable<ExecutionDashboardSnapshot["recentInvocations"]>[number];
 
@@ -157,8 +163,29 @@ const isConnectionEquivalent = (left: Connection, right: Connection): boolean =>
 const isAttentionItemEquivalent = (left: AttentionItem, right: AttentionItem): boolean => (
   leftDefined(left, right)
   && left.id === right.id
+  && left.sprintId === right.sprintId
+  && left.taskId === right.taskId
+  && left.ownerType === right.ownerType
   && left.status === right.status
+  && left.assignedWorkerEndpointId === right.assignedWorkerEndpointId
   && left.updatedAt === right.updatedAt
+);
+
+const isSprintWorkflowProjectionEquivalent = (
+  left: SprintWorkflowProjection,
+  right: SprintWorkflowProjection,
+): boolean => (
+  leftDefined(left, right)
+  && left.sprintId === right.sprintId
+  && left.planningStatus === right.planningStatus
+  && (
+    left.humanIntervention === right.humanIntervention
+    || (
+      left.humanIntervention !== null
+      && right.humanIntervention !== null
+      && isAttentionItemEquivalent(left.humanIntervention, right.humanIntervention)
+    )
+  )
 );
 
 const isRecentEventEquivalent = (left: RecentEvent, right: RecentEvent): boolean => (
@@ -271,6 +298,11 @@ export function areExecutionSnapshotsEquivalent(
     && areListsEquivalent(left.taskDispatches, right.taskDispatches, isTaskDispatchEquivalent)
     && areListsEquivalent(left.connections, right.connections, isConnectionEquivalent)
     && areListsEquivalent(left.attentionItems, right.attentionItems, isAttentionItemEquivalent)
+    && areListsEquivalent(
+      left.sprintWorkflowProjections,
+      right.sprintWorkflowProjections,
+      isSprintWorkflowProjectionEquivalent,
+    )
     && areListsEquivalent(left.recentEvents, right.recentEvents, isRecentEventEquivalent)
     && areListsEquivalent(left.recentInvocations ?? [], right.recentInvocations ?? [], isRecentInvocationEquivalent)
     && left.primaryAssignedWorker?.workerEndpointId === right.primaryAssignedWorker?.workerEndpointId
@@ -395,6 +427,14 @@ export function stabilizeExecutionSnapshot(
   reuse("taskDispatches", stabilizeList(previous.taskDispatches, next.taskDispatches, isTaskDispatchEquivalent));
   reuse("connections", stabilizeList(previous.connections, next.connections, isConnectionEquivalent));
   reuse("attentionItems", stabilizeList(previous.attentionItems, next.attentionItems, isAttentionItemEquivalent));
+  reuse(
+    "sprintWorkflowProjections",
+    stabilizeList(
+      previous.sprintWorkflowProjections,
+      next.sprintWorkflowProjections,
+      isSprintWorkflowProjectionEquivalent,
+    ),
+  );
   reuse("recentEvents", stabilizeList(previous.recentEvents, next.recentEvents, isRecentEventEquivalent));
   if (next.recentInvocations) {
     reuse(

@@ -2,16 +2,21 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { memo } from "preact/compat";
-import { Activity, AlertTriangle, CheckCircle2, Clock3, Code2, GitBranch, Hourglass, Sparkles, Timer, Workflow, XCircle } from "lucide-preact";
-import type { ExecutionTaskDispatchSummary, Subtask } from "../../types.js";
+import { Activity, CheckCircle2, Clock3, GitBranch, Sparkles, Timer, Workflow } from "lucide-preact";
+import type { ExecutionAttentionItemSummary, ExecutionRuntimeEventSummary, ExecutionTaskDispatchSummary, Subtask } from "../../types.js";
 import { buildSprintDagModel, type SprintDagEdgeModel, type SprintDagNodeModel } from "../lib/sprint-dag.js";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
 import { useLiveI18n } from "../i18n/messages/live.js";
+import { WorkflowStatusBadge } from "./ui/WorkflowStatusBadge.js";
+import type { CiStatusPresentation } from "../lib/ci-status-presentation.js";
+import { buildSprintDagWorkflowEvidenceByTaskId } from "../lib/sprint-dag-workflow-evidence.js";
 
 interface SprintDagProps {
   tasks?: Subtask[];
   dispatches?: ExecutionTaskDispatchSummary[];
+  events?: ExecutionRuntimeEventSummary[];
+  attentionItems?: ExecutionAttentionItemSummary[];
   hasSprintContext: boolean;
 }
 
@@ -28,10 +33,8 @@ type Tone = {
   accent: string;
   edge: string;
   glow: string;
-  badge: string;
   card: string;
   dim: string;
-  icon: FunctionComponent<any>;
 };
 
 function stableRand(seed: string): number {
@@ -49,40 +52,32 @@ function getNodeTone(node: SprintDagNodeModel): Tone {
         accent: "#00E0A0",
         edge: "#00E0A0",
         glow: "drop-shadow-[0_18px_34px_rgba(0,224,160,0.08)]",
-        badge: "border-signal-500/25 bg-signal-500/12 text-signal-600 dark:text-signal-300",
         card: "border-signal-500/20 bg-white/80 dark:bg-void-800/78",
         dim: "",
-        icon: Activity,
       };
     case "CODING_COMPLETED":
       return {
         accent: "#0F9FA8",
         edge: "#0F9FA8",
         glow: "drop-shadow-[0_16px_30px_rgba(15,159,168,0.08)]",
-        badge: "border-cyan-500/25 bg-cyan-500/12 text-cyan-600 dark:text-cyan-300",
         card: "border-cyan-500/18 bg-white/78 dark:bg-void-800/76",
         dim: "",
-        icon: Code2,
       };
     case "COMPLETED":
       return {
         accent: "#00AB84",
         edge: "#00AB84",
         glow: "drop-shadow-[0_16px_30px_rgba(0,171,132,0.07)]",
-        badge: "border-status-green/20 bg-status-green/12 text-status-green",
         card: "border-status-green/18 bg-white/78 dark:bg-void-800/76",
         dim: "",
-        icon: CheckCircle2,
       };
     case "FAILED":
       return {
         accent: "#E3000F",
         edge: "#E3000F",
         glow: "drop-shadow-[0_14px_26px_rgba(227,0,15,0.06)]",
-        badge: "border-status-red/20 bg-status-red/12 text-status-red",
         card: "border-status-red/16 bg-white/72 dark:bg-void-800/72",
         dim: "opacity-85",
-        icon: XCircle,
       };
     case "BLOCKED":
     case "QUOTA":
@@ -90,10 +85,8 @@ function getNodeTone(node: SprintDagNodeModel): Tone {
         accent: "#F59E0B",
         edge: "#F59E0B",
         glow: "drop-shadow-[0_14px_26px_rgba(245,158,11,0.06)]",
-        badge: "border-status-amber/20 bg-status-amber/12 text-status-amber",
         card: "border-status-amber/16 bg-white/72 dark:bg-void-800/72",
         dim: "opacity-90",
-        icon: AlertTriangle,
       };
     case "PENDING":
     default:
@@ -101,10 +94,8 @@ function getNodeTone(node: SprintDagNodeModel): Tone {
         accent: "#64748B",
         edge: "#64748B",
         glow: "shadow-none",
-        badge: "border-black/[0.07] bg-black/[0.04] text-slate-500 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-slate-400",
         card: "border-black/[0.06] bg-white/70 dark:border-white/[0.06] dark:bg-void-800/68",
         dim: "opacity-92",
-        icon: Hourglass,
       };
   }
 }
@@ -233,30 +224,93 @@ function renderDagNodeTooltipContent(node: SprintDagNodeModel, t: ReturnType<typ
 }
 
 
-const areDagNodePropsEqual = (
-  prevProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary },
-  nextProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary }
+function areReviewsEqual(
+  left: Subtask["latestReview"],
+  right: Subtask["latestReview"],
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.status === right.status
+    && left.outcome === right.outcome
+    && left.summary === right.summary
+    && left.reviewer === right.reviewer
+    && left.finishedAt === right.finishedAt
+    && left.fixInstructions === right.fixInstructions
+    && left.targetTaskKey === right.targetTaskKey
+    && left.findings.length === right.findings.length
+    && left.findings.every((finding, index) => finding === right.findings[index])
+    && JSON.stringify(left.followUpTasks ?? []) === JSON.stringify(right.followUpTasks ?? []);
+}
+
+function areCiPresentationsEqual(
+  left: CiStatusPresentation | null | undefined,
+  right: CiStatusPresentation | null | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.state === right.state
+    && left.label === right.label
+    && left.accessibleLabel === right.accessibleLabel
+    && left.failureKind === right.failureKind
+    && left.steps.every((step, index) => {
+      const other = right.steps[index];
+      return step.id === other.id
+        && step.state === other.state
+        && step.label === other.label
+        && step.statusLabel === other.statusLabel
+        && step.failureKind === other.failureKind;
+    });
+}
+
+function areStringListsEqual(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return left === right
+    || (left.length === right.length && left.every((value, index) => value === right[index]));
+}
+
+export const areDagNodePropsEqual = (
+  prevProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, ciPresentation?: CiStatusPresentation | null, humanIntervention?: ExecutionAttentionItemSummary | null },
+  nextProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, ciPresentation?: CiStatusPresentation | null, humanIntervention?: ExecutionAttentionItemSummary | null }
 ) => {
   return prevProps.node.task.id === nextProps.node.task.id &&
+         prevProps.node.task.title === nextProps.node.task.title &&
+         prevProps.node.task.status === nextProps.node.task.status &&
+         prevProps.node.task.pr_url === nextProps.node.task.pr_url &&
+         prevProps.node.task.merge_indicator === nextProps.node.task.merge_indicator &&
+         prevProps.node.task.is_merged === nextProps.node.task.is_merged &&
+         areReviewsEqual(prevProps.node.task.latestReview, nextProps.node.task.latestReview) &&
          prevProps.node.phase === nextProps.node.phase &&
          prevProps.node.isReady === nextProps.node.isReady &&
-         prevProps.node.incoming.length === nextProps.node.incoming.length &&
-         prevProps.node.outgoing.length === nextProps.node.outgoing.length &&
+         areStringListsEqual(prevProps.node.incoming, nextProps.node.incoming) &&
+         areStringListsEqual(prevProps.node.outgoing, nextProps.node.outgoing) &&
          prevProps.node.x === nextProps.node.x &&
          prevProps.node.y === nextProps.node.y &&
          prevProps.node.hover.counters.incoming === nextProps.node.hover.counters.incoming &&
          prevProps.node.hover.counters.outgoing === nextProps.node.hover.counters.outgoing &&
          prevProps.node.hover.prompt === nextProps.node.hover.prompt &&
+         prevProps.node.hover.dependencies.length === nextProps.node.hover.dependencies.length &&
+         prevProps.node.hover.dependencies.every((dependency, index) => (
+           dependency.id === nextProps.node.hover.dependencies[index]?.id
+           && dependency.title === nextProps.node.hover.dependencies[index]?.title
+         )) &&
          prevProps.dispatch?.executorType === nextProps.dispatch?.executorType &&
-         prevProps.dispatch?.provider === nextProps.dispatch?.provider;
+         prevProps.dispatch?.provider === nextProps.dispatch?.provider &&
+         areCiPresentationsEqual(prevProps.ciPresentation, nextProps.ciPresentation) &&
+         prevProps.humanIntervention?.id === nextProps.humanIntervention?.id &&
+         prevProps.humanIntervention?.updatedAt === nextProps.humanIntervention?.updatedAt &&
+         prevProps.humanIntervention?.ownerType === nextProps.humanIntervention?.ownerType &&
+         prevProps.humanIntervention?.status === nextProps.humanIntervention?.status &&
+         prevProps.humanIntervention?.assignedWorkerEndpointId === nextProps.humanIntervention?.assignedWorkerEndpointId &&
+         prevProps.humanIntervention?.title === nextProps.humanIntervention?.title;
 };
 
-const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, onNodeClick?: (node: SprintDagNodeModel & { x: number; y: number; }) => void }) => {
+const DagNode = memo(({ node, dispatch, ciPresentation, humanIntervention, onNodeClick }: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, ciPresentation?: CiStatusPresentation | null, humanIntervention?: ExecutionAttentionItemSummary | null, onNodeClick?: (node: SprintDagNodeModel & { x: number; y: number; }) => void }) => {
   const { t, tp, formatNumber } = useLiveI18n();
   const tone = getNodeTone(node);
   const executorLabel = formatExecutor(dispatch, t);
   const mergeLabel = getMergeLabel(node.task, t);
-  const phaseLabel = t(node.phase === "CODING_COMPLETED" ? "codingDone" : node.phase === "RUNNING" ? "running" : node.phase === "COMPLETED" ? "completed" : node.phase === "FAILED" ? "failed" : node.phase === "BLOCKED" ? "blocked" : node.phase === "QUOTA" ? "quota" : "pending");
 
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [tooltipSide, setTooltipSide] = useState<"right" | "left">("right");
@@ -362,10 +416,21 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
             </div>
 
             <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
-              <span className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] ${tone.badge}`}>
-                <tone.icon className="h-3 w-3 shrink-0" strokeWidth={2.5} />
-                <span className="truncate">{phaseLabel}</span>
-              </span>
+              <div
+                className="max-w-full"
+                onClick={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <WorkflowStatusBadge
+                  scope="task"
+                  status={node.task.status || node.phase}
+                  review={node.task.latestReview}
+                  ciPresentation={ciPresentation}
+                  humanIntervention={humanIntervention}
+                  compact
+                  align="left"
+                />
+              </div>
               {mergeLabel && (
                 <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
                   <GitBranch className="h-3 w-3 shrink-0" strokeWidth={2.5} />
@@ -392,7 +457,7 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
   );
 }, areDagNodePropsEqual);
 
-export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches, hasSprintContext }) => {
+export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches, events, attentionItems, hasSprintContext }) => {
   const { locale, t, formatNumber } = useLiveI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
@@ -401,6 +466,8 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
   const [isDraggingState, setIsDraggingState] = useState(false);
   const safeTasks = Array.isArray(tasks) ? tasks : [];
   const safeDispatches = Array.isArray(dispatches) ? dispatches : [];
+  const safeEvents = Array.isArray(events) ? events : [];
+  const safeAttentionItems = Array.isArray(attentionItems) ? attentionItems : [];
 
   const model = useMemo(() => buildSprintDagModel(safeTasks, locale), [locale, safeTasks]);
 
@@ -416,6 +483,16 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
     }
     return map;
   }, [safeDispatches]);
+
+  const workflowEvidenceByTaskId = useMemo(() => (
+    buildSprintDagWorkflowEvidenceByTaskId({
+      tasks: safeTasks,
+      dispatches: safeDispatches,
+      events: safeEvents,
+      attentionItems: safeAttentionItems,
+      locale,
+    })
+  ), [locale, safeAttentionItems, safeDispatches, safeEvents, safeTasks]);
 
   const maxDepth = model.columns.length - 1;
   const maxRows = Math.max(1, ...model.columns.map((column) => column.length));
@@ -775,8 +852,16 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
 
               {positionedNodes.map((node) => {
                 const dispatch = dispatchByTaskId.get(node.task.record_id || "") || dispatchByTaskId.get(node.task.id);
+                const workflowEvidence = workflowEvidenceByTaskId.get(node.task.record_id || "") || workflowEvidenceByTaskId.get(node.task.id);
                 return (
-                  <DagNode key={node.task.id} node={node} dispatch={dispatch} onNodeClick={handleNodeClick} />
+                  <DagNode
+                    key={node.task.id}
+                    node={node}
+                    dispatch={dispatch}
+                    ciPresentation={workflowEvidence?.ciPresentation}
+                    humanIntervention={workflowEvidence?.humanIntervention}
+                    onNodeClick={handleNodeClick}
+                  />
                 );
               })}
             </div>

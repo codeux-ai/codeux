@@ -99,22 +99,73 @@ describe("WorkflowStatusBadge", () => {
   it("remains interactive without a QA review or CI projection", () => {
     render(<WorkflowStatusBadge scope="sprint" status="running" compact />);
 
-    const trigger = screen.getByRole("button", { name: /CI status: Coding in progress/i });
+    const trigger = screen.getByRole("button", { name: /Workflow status: Coding in progress/i });
     expect(trigger).toBeVisible();
     fireEvent.click(trigger);
-    const workflow = screen.getByRole("region", { name: "CI workflow details" });
-    expect(workflow.querySelectorAll("[data-workflow-stage]")).toHaveLength(6);
+    const workflow = screen.getByRole("region", { name: "Workflow details" });
+    expect(workflow.querySelectorAll("[data-workflow-stage]")).toHaveLength(7);
     expect(screen.queryByRole("button", { name: "QA review details" })).not.toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    expect(screen.queryByRole("region", { name: "Workflow details" })).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("renders Planning first and places Pull Request between QA and CI for sprints", () => {
+    render(<WorkflowStatusBadge scope="sprint" status="idle" tasksCount={0} planningStatus="running" compact />);
+
+    const trigger = screen.getByRole("button", { name: /Workflow status: Planning in progress/i });
+    expect(trigger).toHaveTextContent("Planning in progress");
+    fireEvent.click(trigger);
+    const workflow = screen.getByRole("region", { name: "Workflow details" });
+    expect([...workflow.querySelectorAll("[data-workflow-stage]")].map((stage) => stage.getAttribute("data-workflow-stage"))).toEqual([
+      "planning",
+      "coding",
+      "qa",
+      "pull_request",
+      "checks",
+      "merge",
+      "completion",
+    ]);
   });
 
   it("does not expose task gate aggregation from a running sprint badge", () => {
     render(<WorkflowStatusBadge scope="sprint" status="running" ciPresentation={failedCi} compact />);
 
-    const trigger = screen.getByRole("button", { name: /CI status: Coding in progress/i });
+    const trigger = screen.getByRole("button", { name: /Workflow status: Coding in progress/i });
     expect(trigger).toHaveTextContent("Coding in progress");
     expect(trigger.closest("[data-workflow-state]")).toHaveAttribute("data-ci-state", "in_progress");
     expect(trigger).not.toHaveAccessibleName(/CI failed/i);
   });
+
+  it.each(["failed", "cancelled"] as const)(
+    "keeps %s planning authoritative over task inference and stale CI",
+    (planningStatus) => {
+      render(
+        <WorkflowStatusBadge
+          scope="sprint"
+          status="idle"
+          tasksCount={4}
+          planningStatus={planningStatus}
+          review={activeSprintReview}
+          ciPresentation={failedCi}
+          compact
+        />,
+      );
+
+      const expectedLabel = planningStatus === "failed" ? "Planning failed" : "Planning cancelled";
+      const trigger = screen.getByRole("button", { name: new RegExp(`Workflow status: ${expectedLabel}`, "i") });
+      expect(trigger).toHaveTextContent(expectedLabel);
+      expect(trigger).not.toHaveAccessibleName(/CI failed/i);
+      expect(trigger.closest("[data-workflow-state]")).toHaveAttribute("data-ci-state", "failed");
+      expect(screen.queryByRole("button", { name: "QA review details" })).not.toBeInTheDocument();
+
+      fireEvent.click(trigger);
+      const workflow = screen.getByRole("region", { name: "Workflow details" });
+      expect(workflow.querySelector('[data-workflow-stage="planning"]')).toHaveAttribute("data-workflow-stage-state", "failed");
+      expect(workflow.querySelector('[data-workflow-stage="checks"]')).toHaveAttribute("data-workflow-stage-state", "pending");
+    },
+  );
 
   it.each([
     ["en", "QA running", "Review in progress"],
@@ -126,7 +177,9 @@ describe("WorkflowStatusBadge", () => {
       locale,
     );
 
-    const trigger = screen.getByRole("button", { name: new RegExp(badgeLabel) });
+    const trigger = screen.getByRole("button", {
+      name: new RegExp(`${locale === "de" ? "Workflow-Status" : "Workflow status"}: ${badgeLabel}`),
+    });
     expect(trigger).toHaveTextContent(badgeLabel);
     expect(trigger.closest("[data-workflow-state]")).toHaveAttribute("data-qa-state", "running");
     fireEvent.click(trigger);

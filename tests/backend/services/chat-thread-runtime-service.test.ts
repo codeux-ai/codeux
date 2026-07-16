@@ -52,6 +52,7 @@ describe("ChatThreadRuntimeService", () => {
         updateExecutionInvocation: vi.fn(),
         createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "provider-invocation-1" }),
         updateProviderInvocationUsage: vi.fn(),
+        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue(null),
       },
       taskService: {
         resolveInvocationProvider: vi.fn(),
@@ -68,6 +69,7 @@ describe("ChatThreadRuntimeService", () => {
         updateSprint: vi.fn(),
       },
       providerRunner: {
+        prewarmWorkspace: vi.fn(),
         runProvider: vi.fn(),
         runProviderForText: vi.fn(),
       },
@@ -92,6 +94,38 @@ describe("ChatThreadRuntimeService", () => {
       getGithubToken: deps.getGithubToken,
     });
     service = new ChatThreadRuntimeService(deps);
+  });
+
+  it("prewarms a thread-specific reusable Docker snapshot", async () => {
+    deps.getDashboardSettings.mockReturnValue({
+      git: { githubMode: "REMOTE", defaultBranch: "main" },
+      cliWorkflow: { executionMode: "DOCKER" },
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({
+      id: "p1",
+      name: "test project",
+      baseDir: "/tmp/test-project",
+      defaultBranch: "stable",
+    });
+
+    await service.prewarmThreadWorkspace("p1", "thread-1");
+
+    expect(deps.providerRunner.prewarmWorkspace).toHaveBeenCalledWith({
+      cwd: "/tmp/test-project",
+      repoPath: "/tmp/test-project",
+      sessionId: "thread-1",
+      workspaceSessionId: "thread-1",
+      workflowSettings: { executionMode: "DOCKER" },
+      snapshotCheckout: { branch: "stable", fallbackBranch: undefined, remoteOnly: true },
+      gitPolicy: {
+        githubMode: "REMOTE",
+        defaultBranch: "stable",
+        githubToken: undefined,
+        gitlabToken: undefined,
+      },
+      githubToken: undefined,
+      gitlabToken: undefined,
+    });
   });
 
   const configureSingleFlightThread = () => {
@@ -1594,7 +1628,7 @@ describe("ChatThreadRuntimeService", () => {
           cliWorkflow: expect.objectContaining({ executionMode: "DOCKER" }),
         }),
         snapshotCheckout: { branch: "stable", fallbackBranch: undefined, remoteOnly: true },
-        workspaceLifecycle: "fresh",
+        workspaceLifecycle: "continue",
       }),
     );
   });
@@ -1736,6 +1770,64 @@ describe("ChatThreadRuntimeService", () => {
         sessionId: "t1",
         continueSessionId: "existing-session",
       })
+    );
+  });
+
+  it("uses Codex latest-session fallback when an early crash persisted only the logical chat thread id", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-codex-fallback", threadId: "t1", bodyMarkdown: "continue" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      connectionId: null,
+      runtimeState: { virtualProvider: "codex", sessionIds: ["t1"] },
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "key" } },
+    });
+    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-codex-fallback" });
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({ replyMarkdown: "continued", action: null, approvalRequired: false });
+
+    await service.postMessage("p1", { bodyMarkdown: "continue" });
+
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "codex",
+        sessionId: "t1",
+        continueSessionId: null,
+        continueSessionWithoutNativeId: true,
+      }),
+    );
+  });
+
+  it("continues the exact persisted Codex native session when telemetry recorded it", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-codex-native", threadId: "t1", bodyMarkdown: "continue" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      connectionId: null,
+      runtimeState: { virtualProvider: "codex", sessionIds: ["logical-thread-state"] },
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "key" } },
+    });
+    deps.executionRepository.getLatestProviderInvocationUsageBySession.mockReturnValue({
+      provider: "codex",
+      nativeSessionId: "11111111-2222-7333-8444-555555555555",
+    });
+    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-codex-native" });
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({ replyMarkdown: "continued", action: null, approvalRequired: false });
+
+    await service.postMessage("p1", { bodyMarkdown: "continue" });
+
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "codex",
+        sessionId: "t1",
+        continueSessionId: "11111111-2222-7333-8444-555555555555",
+        continueSessionWithoutNativeId: false,
+      }),
     );
   });
 
@@ -1960,7 +2052,8 @@ describe("ChatThreadRuntimeService", () => {
 
       expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
         nativeSessionOperation: "compact",
-        continueSessionId: "session-1",
+        continueSessionId: null,
+        continueSessionWithoutNativeId: true,
         workspaceLifecycle: "continue",
         googleDriveMount: {
           source: driveDir,

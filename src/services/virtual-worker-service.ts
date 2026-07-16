@@ -79,6 +79,13 @@ const VIRTUAL_WORKER_CLI_PROVIDER_POOL: ProviderId[] = [
   "mockup-cli",
 ];
 
+class NoCiRepairChangesError extends Error {
+  constructor() {
+    super("CI fix completed without producing a patch or unpublished branch commits; refusing to mark the fix as pushed.");
+    this.name = "NoCiRepairChangesError";
+  }
+}
+
 interface TaskCiFixContinuation {
   provider: Exclude<ProviderId, "jules">;
   providerConfigId: string;
@@ -86,6 +93,7 @@ interface TaskCiFixContinuation {
   sessionId: string;
   resumeSessionId: string;
   continueSessionId: string | null;
+  continueSessionWithoutNativeId: boolean;
   taskRunId: string | null;
   previousInvocation: ProviderInvocationUsageRecord | null;
   workerAgent: AgentPresetRecord | null;
@@ -916,7 +924,10 @@ export class VirtualWorkerService {
       sessionId,
       resumeSessionId: workspaceTarget?.sessionId || sessionId,
       continueSessionId: previousInvocation?.nativeSessionId
-        || (provider === "claude-code" ? null : sessionId),
+        || (provider === "claude-code" || provider === "codex" ? null : sessionId),
+      continueSessionWithoutNativeId: provider === "codex"
+        && Boolean(previousInvocation)
+        && !previousInvocation?.nativeSessionId,
       taskRunId: taskRun?.sessionId ? taskRun.id : workspaceTarget?.taskRunId || taskRun?.id || null,
       previousInvocation,
       workerAgent,
@@ -1545,6 +1556,9 @@ export class VirtualWorkerService {
             customBaseUrl: providerSettings.customBaseUrl,
             customModel: providerSettings.customModel,
             continueSessionId: repairRuntime.nativeSessionId,
+            continueSessionWithoutNativeId: provider === "codex"
+              && !repairRuntime.nativeSessionId
+              && Boolean(savedRuntime),
             openCodeBaselineRawUsageJson: provider === "opencode"
               ? previousInvocation?.rawUsageJson ?? null
               : null,
@@ -1912,15 +1926,24 @@ export class VirtualWorkerService {
     const maxRetries = ciFixEval?.cap ?? 0;
     const capLabel = maxRetries > 0 ? String(maxRetries) : "∞";
 
-    const isRestartContinuation = Boolean(savedRuntime?.activeAttemptId && savedRuntime.attemptRecorded);
+    const isRestartContinuation = Boolean(
+      savedRuntime?.activeAttemptId
+      || (savedRuntime && savedRuntime.publicationPhase !== "pending"),
+    );
     if (!isRestartContinuation && ciFixEval && !ciFixEval.allowed && ciFixEval.action !== "WARN_ONLY") {
-      this.escalateAttentionToHuman(workerEndpointId, item, `Virtual worker reached the CI autofix guardrail (${retryCount}/${capLabel}). Escalating to human.`);
+      this.escalateCiFixToHuman(
+        workerEndpointId,
+        item,
+        guardrailKey,
+        ciFixEval,
+        `Virtual worker reached the CI autofix guardrail (${retryCount}/${capLabel}). Escalating to human.`,
+      );
       return;
     }
 
-    // Record the attempt up-front so failed/crashed CI-fix runs also consume the retry
-    // budget — recording only on success let an unfixable failure retry until the
-    // provider API limit instead of escalating after `cap` attempts.
+    // A durable attempt id is checkpointed before provider execution. The ledger
+    // charge itself is recorded idempotently immediately before the provider starts,
+    // so publication-only scheduler replay cannot consume another attempt.
     const sessionId = savedRuntime?.sessionId || taskContinuation?.sessionId
       || `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const resumeTarget = taskContinuation
@@ -1940,16 +1963,13 @@ export class VirtualWorkerService {
       model: savedRuntime?.model || providerSettings.model,
       nativeSessionId: savedRuntime?.nativeSessionId || taskContinuation?.continueSessionId || null,
       activeAttemptId: savedRuntime?.activeAttemptId || randomUUID(),
-      attemptRecorded: true,
+      attemptRecorded: savedRuntime?.attemptRecorded === true,
       phase: "claimed",
       workspaceBaselineHead: savedRuntime?.workspaceBaselineHead || null,
       workspaceRepairHead: savedRuntime?.workspaceRepairHead || null,
       publicationPhase: savedRuntime?.publicationPhase || "pending",
       publishedHeadSha: savedRuntime?.publishedHeadSha || null,
     });
-    if (!isRestartContinuation) {
-      this.deps.guardrailService?.record(guardrailScope, guardrailKey, "ci_fix");
-    }
     let worktreePath = this.workspaceManager.buildWorkspaceRef(repoPath, workspaceOwnerSessionId, workflowSettings.executionMode);
     const title = item.title;
     let succeeded = false;
@@ -2045,6 +2065,26 @@ export class VirtualWorkerService {
           nativeSessionId: previousInvocation?.nativeSessionId || repairRuntime.nativeSessionId,
           phase: "provider_running",
         });
+        if (!repairRuntime.attemptRecorded && repairRuntime.activeAttemptId) {
+          const guardrailService = this.deps.guardrailService;
+          if (guardrailService) {
+            if (typeof guardrailService.recordOnce === "function") {
+              guardrailService.recordOnce(
+                guardrailScope,
+                guardrailKey,
+                "ci_fix",
+                `ci-fix-attempt:${repairRuntime.activeAttemptId}`,
+                "virtual_worker_provider_invocation",
+              );
+            } else {
+              guardrailService.record(guardrailScope, guardrailKey, "ci_fix");
+            }
+          }
+          repairRuntime = this.checkpointRepairRuntime(item, {
+            ...repairRuntime,
+            attemptRecorded: true,
+          });
+        }
         const nativeSessionId = await this.runProviderWithRetry({
           provider,
           providerPrompt,
@@ -2079,6 +2119,9 @@ export class VirtualWorkerService {
           customModel: providerSettings.customModel,
           taskRunId: taskContinuation?.taskRunId || undefined,
           continueSessionId: repairRuntime.nativeSessionId,
+          continueSessionWithoutNativeId: provider === "codex"
+            && !repairRuntime.nativeSessionId
+            && Boolean(savedRuntime || taskContinuation?.continueSessionWithoutNativeId),
           openCodeBaselineRawUsageJson: provider === "opencode"
             ? previousInvocation?.rawUsageJson ?? null
             : null,
@@ -2185,9 +2228,7 @@ export class VirtualWorkerService {
         }
       }
       if (!applyResult.hasChanges && !hasUnpushed) {
-        throw new Error(
-          "CI fix completed without producing a patch or unpublished branch commits; refusing to mark the fix as pushed.",
-        );
+        throw new NoCiRepairChangesError();
       }
       const headSha = applyResult.commitSha
         || ((hasUnpushed || hasAhead)
@@ -2257,9 +2298,12 @@ export class VirtualWorkerService {
         description: `Virtual worker failed to fix CI issues: ${message}`,
       });
       const retryEval = this.deps.guardrailService?.evaluate(guardrailScope, guardrailKey, "ci_fix") ?? null;
-      if (retryEval && (retryEval.allowed || retryEval.action === "WARN_ONLY")) {
+      const publicationOnlyFailure = repairRuntime.publicationPhase !== "pending"
+        && !(error instanceof NoCiRepairChangesError);
+      if (retryEval && (retryEval.allowed || retryEval.action === "WARN_ONLY" || publicationOnlyFailure)) {
         preserveWorkspace = true;
         const now = new Date().toISOString();
+        const retryAfterNoChanges = error instanceof NoCiRepairChangesError;
         this.deps.projectAttentionService.requeueItem(item.id, {
           repairRuntime: {
             ...repairRuntime,
@@ -2267,6 +2311,9 @@ export class VirtualWorkerService {
             activeAttemptId: null,
             attemptRecorded: false,
             phase: "interrupted",
+            workspaceRepairHead: retryAfterNoChanges ? null : repairRuntime.workspaceRepairHead,
+            publicationPhase: retryAfterNoChanges ? "pending" : repairRuntime.publicationPhase,
+            publishedHeadSha: retryAfterNoChanges ? null : repairRuntime.publishedHeadSha,
             updatedAt: now,
           },
           lastVirtualWorkerError: message,
@@ -2289,7 +2336,7 @@ export class VirtualWorkerService {
         });
         return;
       }
-      this.escalateAttentionToHuman(workerEndpointId, item, [
+      this.escalateCiFixToHuman(workerEndpointId, item, guardrailKey, retryEval, [
         `Virtual ${this.getProviderLabel(provider)} worker failed to fix CI issues automatically.`,
         "",
         `Attempts: ${retryEval?.count ?? retryCount + 1}/${(retryEval?.cap ?? maxRetries) > 0 ? retryEval?.cap ?? maxRetries : "∞"}`,
@@ -2539,6 +2586,7 @@ export class VirtualWorkerService {
     customModel?: string;
     taskRunId?: string;
     continueSessionId?: string | null;
+    continueSessionWithoutNativeId?: boolean;
     openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
     githubToken: string;
     agentMcpAccess?: AgentMcpAccessConfig | null;
@@ -2594,6 +2642,7 @@ export class VirtualWorkerService {
       customModel: args.customModel,
       sessionId: args.sessionId,
       continueSessionId: args.continueSessionId,
+      continueSessionWithoutNativeId: args.continueSessionWithoutNativeId,
       openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
       workflowSettings: args.workflowSettings,
       repoPath: args.repoPath,
@@ -2982,6 +3031,50 @@ export class VirtualWorkerService {
         return `${taskKey} ${title}\n\n${prompt}`.trim();
       })
       .filter(Boolean);
+  }
+
+  private escalateCiFixToHuman(
+    workerEndpointId: string,
+    item: ProjectAttentionItemRecord,
+    guardrailSubject: string,
+    evaluation: GuardrailEvaluation | null,
+    summaryMarkdown: string,
+  ): void {
+    const attempts = evaluation?.count ?? 0;
+    const cap = evaluation?.cap ?? 0;
+    this.deps.projectAttentionService.openItem({
+      projectId: item.projectId,
+      sprintId: item.sprintId,
+      taskId: item.taskId,
+      sprintRunId: item.sprintRunId,
+      dispatchId: item.dispatchId,
+      attentionType: "human_escalation_required",
+      deduplicationKey: `guardrail:ci_fix:${guardrailSubject}`,
+      severity: item.severity,
+      ownerType: "human",
+      title: `CI autofix guardrail reached for ${String(item.payload?.taskKey || item.title)}`,
+      summaryMarkdown,
+      payload: {
+        ...(item.payload || {}),
+        sourceAttentionItemId: item.id,
+        sourceAttentionType: "ci_fix",
+        guardrailPurpose: "ci_fix",
+        guardrailSubject,
+        guardrailAttempts: attempts,
+        guardrailCap: cap,
+        guardrailAction: "human_handoff",
+        escalatedBy: "virtual_worker",
+      },
+    });
+    this.deps.projectAttentionService.resolveItem(item.id, {
+      status: "resolved",
+      reason: "virtual_worker_escalated",
+      resolutionSummaryMarkdown: summaryMarkdown,
+      workerEndpointId,
+      payloadPatch: {
+        workerOutcome: "needs_human_escalation",
+      },
+    });
   }
 
   private escalateAttentionToHuman(workerEndpointId: string, item: ProjectAttentionItemRecord, summaryMarkdown: string): void {

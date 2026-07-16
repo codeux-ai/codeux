@@ -17,7 +17,15 @@ describe("cli workflow branch utilities", () => {
     expect(branch).toMatch(/^task\/[a-z0-9._-]+-[a-z0-9._-]+-mockup-cli-[a-f0-9]{8}-[a-z0-9]+$/);
     expect(branch.startsWith(prefix)).toBe(true);
     expect(prefix.length).toBeLessThanOrEqual(64);
-    expect(branch.length).toBeLessThanOrEqual(74);
+    expect(branch.length).toBeLessThanOrEqual(76);
+  });
+
+  it("allocates distinct worker branches for simultaneous launches of the same task", () => {
+    const first = buildWorkerBranch("feature/sprint", "T1", "mockup-cli");
+    const second = buildWorkerBranch("feature/sprint", "T1", "mockup-cli");
+
+    expect(first).not.toBe(second);
+    expect(first.slice(0, -12)).toBe(second.slice(0, -12));
   });
 
   it("uses a stable hash so truncated branch prefixes remain task-specific", () => {

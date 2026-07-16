@@ -32,6 +32,8 @@ export interface BranchPreflightOptions extends GitHttpAuthOptions {
   localOnly?: boolean;
   fastForwardFromDefault?: boolean;
   expectedFeatureCommitSha?: string | null;
+  /** The caller already refreshed origin, so tracking refs are authoritative for this preflight. */
+  remoteRefsFresh?: boolean;
 }
 
 const DEFAULT_GIT_NETWORK_TIMEOUT_MS = 30_000;
@@ -97,6 +99,9 @@ const hasRemoteBranch = async (
   branch: string,
   options?: BranchPreflightOptions,
 ): Promise<boolean> => {
+  if (options?.remoteRefsFresh) {
+    return await remoteTrackingRefExists(repoPath, branch);
+  }
   try {
     const result = await runGit(repoPath, ["ls-remote", "--heads", "origin", branch], options);
     if (result.ok) {
@@ -328,19 +333,22 @@ export const runBranchPreflightStep = async (
     return { existsLocal: false, existsRemote: false };
   }
 
-  const remoteUrl = shouldResolveAuthEnv(options) && !options?.authEnv
+  const remoteUrl = shouldResolveAuthEnv(options) && !options?.authEnv && !options?.remoteRefsFresh
     ? await getRemoteOriginUrl(repoPath)
     : null;
   const resolvedOptions = options?.localOnly
     ? options
+    : options?.remoteRefsFresh
+      ? options
     : shouldResolveAuthEnv(options)
       ? await withResolvedAuthEnv(remoteUrl, options)
       : undefined;
 
-  return {
-    existsLocal: await hasLocalBranch(repoPath, branch),
-    existsRemote: options?.localOnly ? false : await hasRemoteBranch(repoPath, branch, resolvedOptions),
-  };
+  const [existsLocal, existsRemote] = await Promise.all([
+    hasLocalBranch(repoPath, branch),
+    options?.localOnly ? Promise.resolve(false) : hasRemoteBranch(repoPath, branch, resolvedOptions),
+  ]);
+  return { existsLocal, existsRemote };
 };
 
 export const resolveUniqueSprintBranchName = async (
@@ -353,23 +361,27 @@ export const resolveUniqueSprintBranchName = async (
     return candidateBranch;
   }
 
-  const remoteUrl = shouldResolveAuthEnv(options) && !options?.authEnv
+  const remoteUrl = shouldResolveAuthEnv(options) && !options?.authEnv && !options?.remoteRefsFresh
     ? await getRemoteOriginUrl(repoPath)
     : null;
   const resolvedOptions = options?.localOnly
     ? options
+    : options?.remoteRefsFresh
+      ? options
     : shouldResolveAuthEnv(options)
       ? await withResolvedAuthEnv(remoteUrl, options)
       : undefined;
 
-  if (!options?.localOnly) {
+  if (!options?.localOnly && !options?.remoteRefsFresh) {
     await fetchOrigin(repoPath, resolvedOptions);
   }
 
   for (let index = 0; index < 1_000; index += 1) {
     const branch = index === 0 ? candidate : `${candidate}-${index}`;
-    const existsLocal = await hasLocalBranch(repoPath, branch);
-    const existsRemote = options?.localOnly ? false : await hasRemoteBranch(repoPath, branch, resolvedOptions);
+    const [existsLocal, existsRemote] = await Promise.all([
+      hasLocalBranch(repoPath, branch),
+      options?.localOnly ? Promise.resolve(false) : hasRemoteBranch(repoPath, branch, resolvedOptions),
+    ]);
     if (!existsLocal && !existsRemote) {
       return branch;
     }
@@ -384,19 +396,23 @@ export const prepareBranchForOrchestration = async (
   defaultBranch: string,
   options?: BranchPreflightOptions,
 ): Promise<BranchPreparationResult> => {
-  const remoteUrl = shouldResolveAuthEnv(options) && !options?.authEnv
+  const remoteUrl = shouldResolveAuthEnv(options) && !options?.authEnv && !options?.remoteRefsFresh
     ? await getRemoteOriginUrl(repoPath)
     : null;
   const resolvedOptions = options?.localOnly
     ? options
+    : options?.remoteRefsFresh
+      ? options
     : shouldResolveAuthEnv(options)
       ? await withResolvedAuthEnv(remoteUrl, options)
       : undefined;
-  if (!options?.localOnly) {
+  if (!options?.localOnly && !options?.remoteRefsFresh) {
     await fetchOrigin(repoPath, resolvedOptions);
   }
   const initial = await runBranchPreflightStep(repoPath, branch, resolvedOptions);
-  const remoteOrigin = options?.localOnly ? false : Boolean(remoteUrl) || await hasRemoteOrigin(repoPath);
+  const remoteOrigin = options?.localOnly
+    ? false
+    : options?.remoteRefsFresh === true || Boolean(remoteUrl) || await hasRemoteOrigin(repoPath);
 
   let createdLocal = false;
   let checkedOutLocal = false;
@@ -433,8 +449,14 @@ export const prepareBranchForOrchestration = async (
     && (defaultBranchSync === "advanced" || defaultBranchSync === "already_current")
     && !(await refsResolveToSameCommit(repoPath, branch, `origin/${branch}`));
   if (existsLocal && remoteOrigin && (!existsRemote || remoteNeedsUpdate)) {
-    pushedRemote = await pushRemoteBranch(repoPath, branch, resolvedOptions);
-    existsRemote = pushedRemote || await hasRemoteBranch(repoPath, branch, resolvedOptions);
+    const pushOptions = options?.remoteRefsFresh && shouldResolveAuthEnv(options) && !options.authEnv
+      ? await withResolvedAuthEnv(await getRemoteOriginUrl(repoPath), options)
+      : resolvedOptions;
+    pushedRemote = await pushRemoteBranch(repoPath, branch, pushOptions);
+    existsRemote = pushedRemote || await hasRemoteBranch(repoPath, branch, {
+      ...pushOptions,
+      remoteRefsFresh: false,
+    });
     if (remoteNeedsUpdate && !pushedRemote) {
       defaultBranchSync = "failed";
     } else if (remoteNeedsUpdate && pushedRemote) {

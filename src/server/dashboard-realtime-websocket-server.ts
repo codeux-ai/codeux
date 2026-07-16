@@ -8,7 +8,11 @@ import type {
 } from "../contracts/app-types.js";
 import type { Request } from "express";
 import { isHostileBrowserOrigin } from "./dashboard-security.js";
-import { parseDashboardRealtimeScope } from "../repositories/dashboard-realtime-event-repository.js";
+import {
+  parseDashboardRealtimeScope,
+  resolveDashboardRealtimeEventScope,
+  routeDashboardRealtimeEventToScope,
+} from "../repositories/dashboard-realtime-event-repository.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import {
@@ -167,11 +171,18 @@ function isRealtimeUpgradeRequest(req: IncomingMessage, pathName: string): boole
   return upgradeHeader === "websocket" && connectionHeader.includes("upgrade");
 }
 
-function selectSubscribedClients(clients: Iterable<RealtimeClientState>, scope: string): RealtimeClientState[] {
-  const subscribers: RealtimeClientState[] = [];
+function selectSubscribedClients(
+  clients: Iterable<RealtimeClientState>,
+  event: DashboardRealtimeEvent,
+): Array<{ client: RealtimeClientState; event: DashboardRealtimeEvent }> {
+  const subscribers: Array<{ client: RealtimeClientState; event: DashboardRealtimeEvent }> = [];
   for (const client of clients) {
-    if (client.subscriptions.has(scope)) {
-      subscribers.push(client);
+    const matchedScope = resolveDashboardRealtimeEventScope(event, client.subscriptions);
+    if (matchedScope) {
+      subscribers.push({
+        client,
+        event: routeDashboardRealtimeEventToScope(event, matchedScope),
+      });
     }
   }
   return subscribers;
@@ -236,34 +247,41 @@ export function bootDashboardRealtimeWebSocketServer(args: {
   ): boolean => writeFrame(client, encodeJsonFrame(payload), { eventType });
 
   const broadcastEvent = (event: DashboardRealtimeEvent): void => {
-    const subscribers = selectSubscribedClients(clients.values(), event.scope);
+    const subscribers = selectSubscribedClients(clients.values(), event);
     if (subscribers.length === 0) {
       return;
     }
 
-    // The serialized frame is identical for every subscriber of this scope, so encode it once
-    // after subscriber selection and reuse the same Buffer for all connected dashboards.
-    const frame = encodeEventFrame(event);
-    for (const client of subscribers) {
+    // Conversation events can route through both their project collection scope and their
+    // thread-detail alias. Cache one frame per matched scope so overlapping subscribers receive
+    // one logical event while clients on the same scope still share the serialized Buffer.
+    const framesByScope = new Map<string, Buffer>();
+    for (const subscriber of subscribers) {
+      const { client, event: routedEvent } = subscriber;
       try {
+        let frame = framesByScope.get(routedEvent.scope);
+        if (!frame) {
+          frame = encodeEventFrame(routedEvent);
+          framesByScope.set(routedEvent.scope, frame);
+        }
         if (writeFrame(client, frame, {
-          eventType: event.eventType,
-          sequence: event.sequence,
-          scope: event.scope,
-          projectId: event.projectId,
-          correlationId: event.correlationId,
+          eventType: routedEvent.eventType,
+          sequence: routedEvent.sequence,
+          scope: routedEvent.scope,
+          projectId: routedEvent.projectId,
+          correlationId: routedEvent.correlationId,
         })) {
-          client.lastPushedSequence = event.sequence;
+          client.lastPushedSequence = routedEvent.sequence;
         }
       } catch (error) {
         clients.delete(client.socket);
         args.logger.warn("dashboard_realtime_websocket_broadcast_failed", {
           logPurpose: "realtime",
-          eventType: event.eventType,
-          sequence: event.sequence,
-          scope: event.scope,
-          projectId: event.projectId,
-          correlationId: event.correlationId,
+          eventType: routedEvent.eventType,
+          sequence: routedEvent.sequence,
+          scope: routedEvent.scope,
+          projectId: routedEvent.projectId,
+          correlationId: routedEvent.correlationId,
           clientId: client.socket.remoteAddress || "unknown",
           error,
         });

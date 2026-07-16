@@ -48,6 +48,7 @@ import type { JulesUsageService } from "../domain/jules/jules-usage-service.js";
 import { buildSprintPrComposerInput } from "../domain/sprint/composer/sprint-pr-input-builder.js";
 import { composeSprintPrBody, composeSprintPrTitle } from "../domain/sprint/composer/pr-description-composer.js";
 import type { SprintRunLifecycleService } from "../services/sprint-run-lifecycle-service.js";
+import { acquireProjectGitHelper } from "../shared/subprocess/command-runner.js";
 
 
 const SPRINT_ORCHESTRATOR_OWNER_KEY = `sprint_orchestrator:${process.pid}`;
@@ -129,6 +130,7 @@ export interface SprintOrchestratorDependencies {
   workspaceManager: WorkspaceManager;
   /** Resolve the planning agent preset ID for a project (used for per-agent memory tagging). */
   resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
+  acquireProjectGitHelper?: (repoPath: string) => () => Promise<void>;
 }
 
 export class SprintOrchestrator {
@@ -555,6 +557,17 @@ export class SprintOrchestrator {
   async execute(args: SprintAgentArgs): Promise<any> {
     const fallbackDashboardSettings = this.deps.getDashboardSettings();
     const initialExecutionContext = this.deps.sprintExecutionStateService.resolveContext(args, fallbackDashboardSettings);
+    const releaseGitHelper = (this.deps.acquireProjectGitHelper ?? acquireProjectGitHelper)(initialExecutionContext.repoPath);
+    try {
+      return await this.executeWithProjectGitHelper(args);
+    } finally {
+      await releaseGitHelper();
+    }
+  }
+
+  private async executeWithProjectGitHelper(args: SprintAgentArgs): Promise<any> {
+    const fallbackDashboardSettings = this.deps.getDashboardSettings();
+    const initialExecutionContext = this.deps.sprintExecutionStateService.resolveContext(args, fallbackDashboardSettings);
     const dashboardSettings = this.deps.getDashboardSettings({
       projectId: initialExecutionContext.project.id,
       sprintId: initialExecutionContext.sprint.id,
@@ -628,9 +641,10 @@ export class SprintOrchestrator {
     }
 
     if (loopSteps.branchPreflight && (args.action === "plan" || args.action === "orchestrate")) {
+      let remoteRefsFresh = false;
       if (githubMode === "REMOTE") {
         try {
-          await fetchOriginIfAvailable(repoPath, gitAuthOptions);
+          remoteRefsFresh = await fetchOriginIfAvailable(repoPath, gitAuthOptions);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           this.deps.logger.warn("Origin refresh failed during branch preflight; continuing with local refs and direct remote checks.", {
@@ -648,7 +662,10 @@ export class SprintOrchestrator {
         && !args.feature_branch?.trim()
         && !executionContext.sprint.featureBranch?.trim();
       if (shouldAllocateFreshBranchName) {
-        const allocatedBranch = await resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, branchPreflightOptions);
+        const allocatedBranch = await resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, {
+          ...branchPreflightOptions,
+          remoteRefsFresh,
+        });
         if (allocatedBranch !== defaultFeatureBranch) {
           this.deps.logger.info("Allocated unique sprint feature branch because the generated branch already exists.", {
             projectId: executionContext.project.id,
@@ -663,10 +680,16 @@ export class SprintOrchestrator {
       }
 
       const branchPreparation = args.action === "orchestrate"
-        ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, branchPreflightOptions)
+        ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, {
+          ...branchPreflightOptions,
+          remoteRefsFresh,
+        })
         : null;
       const branchAvailability = branchPreparation
-        ?? await runBranchPreflightStep(repoPath, defaultFeatureBranch, branchPreflightOptions);
+        ?? await runBranchPreflightStep(repoPath, defaultFeatureBranch, {
+          ...branchPreflightOptions,
+          remoteRefsFresh,
+        });
 
       if (branchPreparation?.defaultBranchSync === "failed") {
         const text = [

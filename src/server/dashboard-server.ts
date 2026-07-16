@@ -276,7 +276,7 @@ export interface DashboardServerOptions {
   getProjectInitializationState?: (projectId: string) => Promise<ProjectInitializationState>;
   updateProject: (projectId: string, input: UpdateProjectInput) => ProjectSummary;
   deleteProject: (projectId: string) => void;
-  selectProject: (projectId: string | null) => string | null;
+  selectProject: (projectId: string | null) => string | null | Promise<string | null>;
   selectSprint: (projectId: string, sprintId: string | null) => string | null;
   listSprints: (projectId: string) => SprintCollectionResponse;
   getSprint: (sprintId: string) => SprintRecord | null;

@@ -10,6 +10,7 @@ import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
+import { DashboardExperienceModeProvider } from "../../../dashboard/src/v2/context/experience-mode.js";
 import { 
   createSprintRunFixture, 
   createManualPauseIntervention, 
@@ -253,6 +254,23 @@ describe("LiveSessionPage Status Regression", () => {
     expect(screen.getByRole("status", { name: /Waiting for Sprint Start/i })).toHaveTextContent("Launch a sprint to activate live task telemetry");
   });
 
+  it.each(["EASY", "STANDARD"] as const)("keeps %s Live focused on Stats, Race, and DAG", (mode) => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData());
+
+    render(
+      <DashboardExperienceModeProvider mode={mode}>
+        <LiveSessionPage />
+      </DashboardExperienceModeProvider>,
+    );
+
+    expect(screen.getByRole("tab", { name: "Stats" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Race" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "DAG" })).toBeInTheDocument();
+    expect(screen.queryByText("Task Pipeline")).not.toBeInTheDocument();
+    expect(screen.queryByText("Git / CI / PR")).not.toBeInTheDocument();
+    expect(screen.queryByText("Execution Runtime")).not.toBeInTheDocument();
+  });
+
   it("renders German idle and active Live presentation while preserving task content", () => {
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData());
 
@@ -313,6 +331,37 @@ describe("LiveSessionPage Status Regression", () => {
 
     expect(screen.getByText("Recovered implementation task")).toBeInTheDocument();
     expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("DAG view selected."))).toBe(true);
+  });
+
+  it("uses the task workflow badge inside DAG nodes and exposes real human intervention", async () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      tasksWithLiveActivities: [liveTask()],
+      execution: liveExecution({
+        attentionItems: [{
+          id: "attention-human-task",
+          sprintId: "sprint-1",
+          taskId: "task-100",
+          sprintRunId: "run-1",
+          dispatchId: "dispatch-100",
+          attentionType: "human_escalation_required",
+          severity: "high",
+          ownerType: "human",
+          status: "open",
+          assignedWorkerEndpointId: null,
+          title: "Operator decision required",
+          summaryMarkdown: "Only a person can decide this.",
+          payload: { taskKey: "T-100" },
+          openedAt: "2026-07-16T08:00:00.000Z",
+          claimedAt: null,
+          resolvedAt: null,
+          updatedAt: "2026-07-16T08:00:00.000Z",
+        }],
+      }),
+    }));
+
+    renderWithI18n(<LiveSessionPage />);
+
+    expect(await screen.findByRole("button", { name: /CI status: Human needed/i })).toHaveTextContent("Human needed");
   });
 
   it("renders legacy time-only status timestamps without crashing the active Live page", () => {

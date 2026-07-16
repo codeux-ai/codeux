@@ -1105,12 +1105,14 @@ CREATE INDEX IF NOT EXISTS idx_task_run_events_task_run_type_created_id ON task_
 CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_run_created ON task_run_events (task_run_id, created_at DESC, id DESC) WHERE event_type = 'provider_activity';
 CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_project_created ON task_run_events (project_id, created_at DESC, id DESC) WHERE event_type = 'provider_activity';
 CREATE INDEX IF NOT EXISTS idx_project_attention_items_project_owner_status ON project_attention_items (project_id, owner_type, status);
+CREATE INDEX IF NOT EXISTS idx_project_attention_items_workflow_projection ON project_attention_items (project_id, owner_type, status, assigned_worker_endpoint_id, sprint_id, updated_at DESC, opened_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_project_attention_items_project_status_updated ON project_attention_items (project_id, status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_project_attention_items_project_status_updated_opened ON project_attention_items (project_id, status, updated_at DESC, opened_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_project_attention_items_sprint_run_status_updated_opened ON project_attention_items (sprint_run_id, status, updated_at DESC, opened_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_sprint_run_events_sprint_run_created_id ON sprint_run_events (sprint_run_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_sprint_runs_project_lookup ON sprint_runs (project_id, id, sprint_id, status);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_started ON execution_invocations (project_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_type_sprint_started_created ON execution_invocations (project_id, type, sprint_id, started_at DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_sprint_started ON execution_invocations (project_id, sprint_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_sprint_run_started ON execution_invocations (project_id, sprint_run_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_status_started ON execution_invocations (status, started_at DESC);

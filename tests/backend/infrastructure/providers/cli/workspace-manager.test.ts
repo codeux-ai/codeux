@@ -6,6 +6,7 @@ import {
   buildPersistentSkillStorageContainerPath,
   buildPersistentSkillStorageHostPath,
   CONTAINER_PERSISTENT_SKILL_STORAGE_ROOT,
+  RuntimeVolumeRegistry,
   WorkspaceManager,
 } from "../../../../../src/infrastructure/providers/cli/workspace-manager.js";
 
@@ -34,7 +35,7 @@ describe("WorkspaceManager", () => {
   let manager: WorkspaceManager;
 
   beforeEach(() => {
-    manager = new WorkspaceManager();
+    manager = new WorkspaceManager(new RuntimeVolumeRegistry());
     vi.clearAllMocks();
     vi.mocked(fs.mkdtemp).mockResolvedValue("/tmp/code-ux-bundle-123");
     vi.mocked(fs.rm).mockResolvedValue(undefined);
@@ -47,6 +48,36 @@ describe("WorkspaceManager", () => {
   it("builds Docker volume handles for isolated workspaces", () => {
     const result = manager.buildWorktreePath("/repo/project", "session-1", "DOCKER");
     expect(result).toMatch(/^docker-volume:\/\/code-ux-project-[a-f0-9]{12}-session-1$/);
+  });
+
+  it("hashes long workspace keys so distinct sprint identifiers cannot truncate to one volume", () => {
+    const sharedPrefix = `planning-${"a".repeat(60)}`;
+    const first = manager.buildWorktreePath("/repo/project", `${sharedPrefix}-sprint-one`, "DOCKER");
+    const second = manager.buildWorktreePath("/repo/project", `${sharedPrefix}-sprint-two`, "DOCKER");
+
+    expect(first).not.toBe(second);
+    expect(first).toMatch(/-[a-f0-9]{8}$/);
+    expect(second).toMatch(/-[a-f0-9]{8}$/);
+    expect(first.slice("docker-volume://".length).length).toBeLessThanOrEqual(83);
+  });
+
+  it("labels hashed snapshot volumes with the original logical session id", async () => {
+    vi.mocked(runCommandStrict).mockResolvedValue(commandOk());
+    const sessionId = `planning-${"a".repeat(60)}`;
+    const workspace = manager.buildWorktreePath("/repo/project", `${sessionId}-snapshot`, "DOCKER");
+
+    await (manager as unknown as {
+      createVolume: (workspaceRef: string, workspaceSessionId: string) => Promise<void>;
+    }).createVolume(workspace, sessionId);
+
+    const volumeCreateCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) => (
+      call[0] === "docker" && call[1][0] === "volume" && call[1][1] === "create"
+    ));
+    expect(workspace).toMatch(/-[a-f0-9]{8}$/);
+    expect(volumeCreateCalls).toHaveLength(2);
+    expect(volumeCreateCalls.every((call) => (
+      call[1].includes(`code-ux.workspace-session=${sessionId}`)
+    ))).toBe(true);
   });
 
   it("builds host worktree paths when host execution mode is selected", () => {
@@ -172,14 +203,28 @@ describe("WorkspaceManager", () => {
     expect(workspace).toMatch(/^docker-volume:\/\/code-ux-project-[a-f0-9]{12}-session-1-snapshot$/);
     expect(runCommandStrict).toHaveBeenCalledWith(
       "docker",
-      expect.arrayContaining(["volume", "create", "--label", "code-ux.workspace=true"]),
+      expect.arrayContaining([
+        "volume",
+        "create",
+        "--label",
+        "code-ux.workspace=true",
+        "--label",
+        "code-ux.workspace-session=session-1",
+      ]),
       expect.any(String),
     );
     const bundlePath = path.join("/tmp/code-ux-bundle-123", "repo.bundle");
     expect(runCommandStrict).toHaveBeenCalledWith("git", ["bundle", "create", bundlePath, "--all"], "/repo/project");
     expect(runCommandStrict).toHaveBeenCalledWith(
       "docker",
-      expect.arrayContaining(["volume", "create", "--label", "code-ux.workspace-runtime=true"]),
+      expect.arrayContaining([
+        "volume",
+        "create",
+        "--label",
+        "code-ux.workspace-runtime=true",
+        "--label",
+        "code-ux.workspace-session=session-1",
+      ]),
       expect.any(String),
     );
     const bootstrapCall = vi.mocked(workspaceVolumeHelperPool.exec).mock.calls.find((call) =>
@@ -215,6 +260,27 @@ describe("WorkspaceManager", () => {
     }
   });
 
+  it("creates Git bundles under the repository metadata so the warm helper can write them", async () => {
+    vi.mocked(fs.mkdtemp).mockImplementation(async (prefix) => `${String(prefix)}fixture`);
+    vi.mocked(runCommandStrict).mockResolvedValue(commandOk());
+
+    const result = await (manager as unknown as {
+      createGitBundle: (
+        repoPath: string,
+        bundleRefArgs: string[],
+      ) => Promise<{ bundlePath: string; tempDir: string }>;
+    }).createGitBundle("/repo/project", ["refs/remotes/origin/dev"]);
+
+    const bundleRoot = path.join("/repo/project", ".git", "code-ux-bundles");
+    expect(fs.mkdir).toHaveBeenCalledWith(bundleRoot, { recursive: true, mode: 0o700 });
+    expect(result.bundlePath).toBe(path.join(bundleRoot, "bundle-fixture", "repo.bundle"));
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["bundle", "create", result.bundlePath, "refs/remotes/origin/dev"],
+      "/repo/project",
+    );
+  });
+
   it("reuses a snapshot workspace only when it has a valid Git HEAD", async () => {
     vi.mocked(workspaceVolumeHelperPool.exec).mockResolvedValue(commandOk("existing-head\n"));
     vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
@@ -230,11 +296,16 @@ describe("WorkspaceManager", () => {
       return { ok: true, stdout: "existing-head\n", stderr: "" } as any;
     });
 
-    const workspace = await manager.createOrReuseSnapshotWorkspace("/repo/project", "session-1", {
-      branch: "feature/task-1",
-    });
+    const beforeCreate = vi.fn(async () => undefined);
+    const workspace = await manager.createOrReuseSnapshotWorkspace(
+      "/repo/project",
+      "session-1",
+      { branch: "feature/task-1" },
+      beforeCreate,
+    );
 
     expect(workspace).toMatch(/^docker-volume:\/\/code-ux-project-[a-f0-9]{12}-session-1-snapshot$/);
+    expect(beforeCreate).not.toHaveBeenCalled();
     expect(workspaceVolumeHelperPool.exec).toHaveBeenCalledWith(
       expect.stringMatching(/^code-ux-project-[a-f0-9]{12}-session-1-snapshot$/),
       ["git", "rev-parse", "--verify", "HEAD"],
@@ -274,9 +345,16 @@ describe("WorkspaceManager", () => {
       return { ok: true, stdout: "", stderr: "" } as any;
     });
 
-    const workspace = await manager.createOrReuseSnapshotWorkspace("/repo/project", "session-1");
+    const beforeCreate = vi.fn(async () => undefined);
+    const workspace = await manager.createOrReuseSnapshotWorkspace(
+      "/repo/project",
+      "session-1",
+      undefined,
+      beforeCreate,
+    );
     const volumeName = workspace.replace("docker-volume://", "");
 
+    expect(beforeCreate).toHaveBeenCalledOnce();
     expect(runCommandStrict).toHaveBeenCalledWith(
       "docker",
       ["volume", "rm", "-f", volumeName],
@@ -292,6 +370,79 @@ describe("WorkspaceManager", () => {
       ["bundle", "create", path.join("/tmp/code-ux-bundle-123", "repo.bundle"), "--all"],
       "/repo/project",
     );
+  });
+
+  it("runs reusable snapshot refresh once inside the workspace creation lock", async () => {
+    let volumePresent = false;
+    let seeded = false;
+    let refreshStarted!: () => void;
+    const refreshStartedPromise = new Promise<void>((resolve) => { refreshStarted = resolve; });
+    let releaseRefresh!: () => void;
+    const releaseRefreshPromise = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+
+    vi.mocked(workspaceVolumeHelperPool.exec).mockImplementation(async (_volumeName, commandArgs, _runtime, options) => {
+      if (commandArgs[0] === "git" && commandArgs.includes("--verify") && commandArgs.includes("HEAD")) {
+        return seeded
+          ? commandOk(`${"a".repeat(40)}\n`)
+          : { ok: false, stdout: "", stderr: "missing HEAD", code: 128, signal: null };
+      }
+      if (options?.stdinFile) {
+        seeded = true;
+      }
+      return commandOk();
+    });
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return commandOk("/repo/project\n");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        if (!volumePresent) throw new Error("missing");
+        return commandOk("[]");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "create") {
+        if (args.includes("code-ux.workspace=true")) volumePresent = true;
+        return commandOk();
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        return commandOk();
+      }
+      if (command === "git" && args[0] === "remote") {
+        return commandOk("https://github.com/example/project.git\n");
+      }
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--verify") {
+        return commandOk(`${"a".repeat(40)}\n`);
+      }
+      return commandOk();
+    });
+
+    const firstBeforeCreate = vi.fn(async () => {
+      refreshStarted();
+      await releaseRefreshPromise;
+    });
+    const secondBeforeCreate = vi.fn(async () => undefined);
+    const first = manager.createOrReuseSnapshotWorkspace(
+      "/repo/project",
+      "session-1",
+      { branch: "feature/task-1" },
+      firstBeforeCreate,
+    );
+    await refreshStartedPromise;
+    const second = manager.createOrReuseSnapshotWorkspace(
+      "/repo/project",
+      "session-1",
+      { branch: "feature/task-1" },
+      secondBeforeCreate,
+    );
+
+    expect(firstBeforeCreate).toHaveBeenCalledOnce();
+    expect(secondBeforeCreate).not.toHaveBeenCalled();
+    releaseRefresh();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expect.stringContaining("session-1-snapshot"),
+      expect.stringContaining("session-1-snapshot"),
+    ]);
+    expect(firstBeforeCreate).toHaveBeenCalledOnce();
+    expect(secondBeforeCreate).not.toHaveBeenCalled();
   });
 
   it("uses a durable owner marker and skips repeated runtime-volume ownership helpers", async () => {
@@ -319,6 +470,67 @@ describe("WorkspaceManager", () => {
       call[0] === "docker" && call[1][0] === "volume" && call[1][1] === "create"
     ));
     expect(volumeCreateCalls).toHaveLength(1);
+  });
+
+  it("shares runtime-volume readiness across workspace manager instances", async () => {
+    const registry = new RuntimeVolumeRegistry();
+    const prepareManager = new WorkspaceManager(registry);
+    const providerManager = new WorkspaceManager(registry);
+    vi.mocked(runCommandStrict).mockResolvedValue(commandOk());
+
+    await prepareManager.ensureRuntimeVolume("docker-volume://workspace-shared", {
+      initializeOwnership: true,
+      ownerSpec: "1001:1002",
+    });
+    vi.clearAllMocks();
+    await providerManager.ensureRuntimeVolume("docker-volume://workspace-shared", {
+      initializeOwnership: true,
+      ownerSpec: "1001:1002",
+    });
+
+    expect(runCommandStrict).not.toHaveBeenCalled();
+  });
+
+  it("coalesces concurrent runtime-volume initialization across manager instances", async () => {
+    const registry = new RuntimeVolumeRegistry();
+    const firstManager = new WorkspaceManager(registry);
+    const secondManager = new WorkspaceManager(registry);
+    let releaseCreate!: () => void;
+    const createBlocked = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+    let markCreateStarted!: () => void;
+    const createStarted = new Promise<void>((resolve) => {
+      markCreateStarted = resolve;
+    });
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "docker" && args[0] === "volume" && args[1] === "create") {
+        markCreateStarted();
+        await createBlocked;
+      }
+      return commandOk();
+    });
+
+    const first = firstManager.ensureRuntimeVolume("docker-volume://workspace-shared", {
+      initializeOwnership: true,
+      ownerSpec: "1001:1002",
+    });
+    await createStarted;
+    const second = secondManager.ensureRuntimeVolume("docker-volume://workspace-shared", {
+      initializeOwnership: true,
+      ownerSpec: "1001:1002",
+    });
+    releaseCreate();
+    await Promise.all([first, second]);
+
+    const volumeCreates = vi.mocked(runCommandStrict).mock.calls.filter((call) => (
+      call[0] === "docker" && call[1][0] === "volume" && call[1][1] === "create"
+    ));
+    const ownershipInitializations = vi.mocked(runCommandStrict).mock.calls.filter((call) => (
+      call[0] === "docker" && call[1][0] === "run" && String(call[1].at(-1)).includes("chown -R")
+    ));
+    expect(volumeCreates).toHaveLength(1);
+    expect(ownershipInitializations).toHaveLength(1);
   });
 
   it("recreates and relabels an externally removed runtime volume before repairing ownership", async () => {
@@ -599,6 +811,9 @@ describe("WorkspaceManager", () => {
       "docker-volume://code-ux-project-abcd1234ef56-session-1",
       "feature/task-1",
       "feature/sprint-1",
+      undefined,
+      undefined,
+      { allowExistingWorkerBranch: true },
     );
 
     expect(runCommandStrict).toHaveBeenCalledWith(
@@ -654,6 +869,125 @@ describe("WorkspaceManager", () => {
     ]);
   });
 
+  it("skips remote fetches when local Git refs are authoritative", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/heads/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-local",
+      "feature/task-local",
+      "feature/sprint-1",
+      undefined,
+      undefined,
+      { refreshRemote: false },
+    );
+
+    expect(vi.mocked(runCommandStrict).mock.calls.some((call) => (
+      call[0] === "git" && call[1][0] === "fetch"
+    ))).toBe(false);
+  });
+
+  it("refreshes only the feature branch for fresh remote worktrees", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/remotes/origin/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-remote",
+      "feature/task-remote",
+      "feature/sprint-1",
+      undefined,
+      undefined,
+      { remoteOnly: true, refreshRemote: true },
+    );
+
+    const fetchCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) => (
+      call[0] === "git" && call[1][0] === "fetch"
+    ));
+    expect(fetchCalls.map((call) => call[1])).toEqual([[
+      "fetch",
+      "origin",
+      "+refs/heads/feature/sprint-1:refs/remotes/origin/feature/sprint-1",
+    ]]);
+  });
+
+  it("refreshes worker and feature branches for resumed remote worktrees", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/remotes/origin/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-resume",
+      "feature/task-resume",
+      "feature/sprint-1",
+      "resume-session",
+      undefined,
+      { remoteOnly: true, refreshRemote: true },
+    );
+
+    const fetchCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) => (
+      call[0] === "git" && call[1][0] === "fetch"
+    ));
+    expect(fetchCalls.map((call) => call[1])).toEqual([
+      [
+        "fetch",
+        "origin",
+        "+refs/heads/feature/task-resume:refs/remotes/origin/feature/task-resume",
+      ],
+      [
+        "fetch",
+        "origin",
+        "+refs/heads/feature/sprint-1:refs/remotes/origin/feature/sprint-1",
+      ],
+    ]);
+  });
+
   it("reseeds a Docker prepare worktree when the prepared volume has no HEAD", async () => {
     let headChecks = 0;
     vi.mocked(workspaceVolumeHelperPool.exec).mockImplementation(async (_volumeName, commandArgs) => {
@@ -699,6 +1033,9 @@ describe("WorkspaceManager", () => {
       "docker-volume://code-ux-project-abcd1234ef56-session-1",
       "feature/task-1",
       "feature/sprint-1",
+      undefined,
+      undefined,
+      { allowExistingWorkerBranch: true },
     );
 
     expect(headChecks).toBe(2);
@@ -960,6 +1297,9 @@ describe("WorkspaceManager", () => {
       "docker-volume://code-ux-project-abcd1234ef56-session-1",
       "feature/task-1",
       "feature/sprint-1",
+      undefined,
+      undefined,
+      { allowExistingWorkerBranch: true },
     );
 
     const seedCall = vi.mocked(workspaceVolumeHelperPool.exec).mock.calls.find((call) =>
@@ -1078,6 +1418,9 @@ describe("WorkspaceManager", () => {
       "/repo/project/.worktrees/session-1",
       "feature/task-1",
       "feature/sprint-1",
+      undefined,
+      undefined,
+      { allowExistingWorkerBranch: true },
     );
 
     expect(runCommandStrict).toHaveBeenCalledWith(
@@ -1085,6 +1428,55 @@ describe("WorkspaceManager", () => {
       ["worktree", "add", "--force", "-B", "feature/task-1", "/repo/project/.worktrees/session-1", "feature/task-1"],
       "/repo/project",
     );
+  });
+
+  it("atomically creates a fresh host worker branch without resetting an existing ref", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/heads/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    const result = await manager.prepareWorktree(
+      "/repo/project",
+      "/repo/project/.worktrees/session-fresh",
+      "feature/task-fresh",
+      "feature/sprint-1",
+      undefined,
+      undefined,
+      { refreshRemote: false, allowExistingWorkerBranch: false },
+    );
+
+    expect(result).toEqual({
+      worktreePath: "/repo/project/.worktrees/session-fresh",
+      resumed: false,
+      createdFreshWorkerBranch: true,
+    });
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      [
+        "worktree",
+        "add",
+        "--force",
+        "-b",
+        "feature/task-fresh",
+        "/repo/project/.worktrees/session-fresh",
+        "feature/sprint-1",
+      ],
+      "/repo/project",
+    );
+    expect(vi.mocked(runCommandStrict).mock.calls.some((call) => (
+      call[0] === "git"
+      && call[1][0] === "worktree"
+      && call[1].includes("-B")
+    ))).toBe(false);
   });
 
   it("reports missing worker and feature refs without broad branch enumeration", async () => {
@@ -1219,12 +1611,26 @@ describe("WorkspaceManager", () => {
         call[0] === "docker" && call[1][0] === "run"
       ));
       expect(runCall?.[1]).toEqual(expect.arrayContaining([
+        "--label",
+        "code-ux.managed=true",
+        "--label",
+        "code-ux.helper=network-git",
+        "--security-opt",
+        "no-new-privileges",
+        "--pull",
+        "never",
+        "--mount",
+        "type=tmpfs,target=/git",
         "--entrypoint",
         "git",
         "alpine/git",
         gitCommand,
         "origin",
       ]));
+      const nameIndex = runCall?.[1].indexOf("--name") ?? -1;
+      expect(nameIndex).toBeGreaterThanOrEqual(0);
+      expect(runCall?.[1][nameIndex + 1]).toMatch(/^code-ux-net-git-[a-f0-9]{24}$/);
+      expect(runCall?.[1].some((arg) => /^code-ux\.runtime-owner=/.test(arg))).toBe(true);
       expect(runCall?.[1].join(" ")).not.toContain("provider-secret");
     },
   );

@@ -16,6 +16,7 @@ const EMPTY_SNAPSHOT: ExecutionDashboardSnapshot = {
   primaryAssignedWorker: null,
   overflowAssignedWorkers: [],
   attentionItems: [],
+  sprintWorkflowProjections: [],
   recentEvents: [],
   updatedAt: null,
 };

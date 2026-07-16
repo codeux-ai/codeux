@@ -20,7 +20,7 @@ describe("MarkdownEditorField Accessibility", () => {
       />
     );
 
-    const tablist = screen.getByRole("tablist", { name: "Markdown Editor Mode" });
+    const tablist = screen.getByRole("tablist", { name: "Markdown editor mode" });
     expect(tablist).toBeInTheDocument();
 
     const tabs = screen.getAllByRole("tab");
@@ -59,7 +59,7 @@ describe("MarkdownEditorField Accessibility", () => {
       />
     );
 
-    const tablist = screen.getByRole("tablist", { name: "Markdown Editor Mode" });
+    const tablist = screen.getByRole("tablist", { name: "Markdown editor mode" });
     const tabs = screen.getAllByRole("tab");
 
     // Initially write is active

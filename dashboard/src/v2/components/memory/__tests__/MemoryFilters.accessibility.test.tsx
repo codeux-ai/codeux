@@ -218,7 +218,8 @@ describe("MemoryFilters Accessibility", () => {
         expect(getByRole("tab", { name: /Langzeit/ })).toBeInTheDocument();
         expect(getByRole("tab", { name: /Fähigkeiten/ })).toBeInTheDocument();
         expect(getByRole("group", { name: "Filter für den Erinnerungsumfang" })).toBeInTheDocument();
-        await user.selectOptions(getByRole("combobox", { name: "Erinnerungen nach Agentenvorlage filtern" }), "agent2");
+        await user.click(getByRole("button", { name: "Erinnerungen nach Agentenvorlage filtern" }));
+        await user.click(getByRole("option", { name: "Agent Omega" }));
         expect(getByText("Agentenfilter auf Agent Omega gesetzt.")).toBeInTheDocument();
         expect(getByText(/Kurzzeit:.*Agent Omega/)).toBeInTheDocument();
     });

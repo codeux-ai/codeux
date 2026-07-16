@@ -191,7 +191,25 @@ describe("SprintCell", () => {
         sprint={pausedSprint}
         isEven={true}
         accentColor="text-blue-500"
-        humanIntervention={mockIntervention}
+        workflowHumanIntervention={{
+          id: "attention-human",
+          sprintId: pausedSprint.id,
+          taskId: "task-1",
+          sprintRunId: "run-1",
+          dispatchId: "dispatch-1",
+          attentionType: "human_escalation_required",
+          severity: "high",
+          ownerType: "human",
+          status: "open",
+          assignedWorkerEndpointId: null,
+          title: mockIntervention.title,
+          summaryMarkdown: mockIntervention.reason,
+          payload: { instructions: mockIntervention.instructions },
+          openedAt: "2026-07-16T08:00:00.000Z",
+          claimedAt: null,
+          resolvedAt: null,
+          updatedAt: "2026-07-16T08:00:00.000Z",
+        }}
       />
     );
 
