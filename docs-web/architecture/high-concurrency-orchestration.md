@@ -43,7 +43,9 @@ the dashboard, and interactive replies.
   resumed REMOTE task refreshes both worker and feature branches. Fresh worker branches use random
   UUID-derived suffixes. HOST preparation creates them atomically with `git worktree add -b`, and
   finalization accepts the resulting local ref only when the exact registered worktree, branch,
-  tip, and ancestry prove invocation ownership. REMOTE preparation probes the exact origin ref
+  tip, and ancestry prove invocation ownership. Worktree paths are filesystem-canonicalized first,
+  so platform aliases such as macOS `/var` and `/private/var` cannot create a false self-collision.
+  REMOTE preparation probes the exact origin ref
   before provider work, while publication retains an expected-absent lease for the remaining race.
   An ambiguous first-push transport failure probes the exact remote ref: the matching local tip
   confirms publication, absence permits a safe retry, and a different tip fails as a

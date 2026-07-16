@@ -130,13 +130,15 @@ Fresh Docker snapshots use the smallest reproducible source:
 Fresh worker branches use a random UUID-derived suffix. HOST preparation creates the local ref
 atomically with `git worktree add -b`; it never resets an existing branch. Finalization accepts that
 fresh local ref only when the registered worktree path, branch, current tip, and ancestry prove it
-belongs to the same invocation. REMOTE preparation also probes the exact origin ref before provider
-work begins, and the first publication still uses an expected-absent `--force-with-lease`, so a
-branch created after the probe cannot be overwritten. If that push ends with an ambiguous retryable
-transport failure, publication probes the exact remote branch before retrying. A remote tip equal
-to the local tip confirms success, an absent ref permits another expected-absent attempt, and a
-different tip fails as an allocation collision. Feature-branch allocation performs its normal
-local and remote uniqueness probes before creation.
+belongs to the same invocation. Worktree paths are filesystem-canonicalized before comparison, so
+platform aliases such as macOS `/var` and `/private/var` cannot make an invocation reject its own
+branch while the branch, tip, and ancestry checks remain strict. REMOTE preparation also probes the
+exact origin ref before provider work begins, and the first publication still uses an
+expected-absent `--force-with-lease`, so a branch created after the probe cannot be overwritten. If
+that push ends with an ambiguous retryable transport failure, publication probes the exact remote
+branch before retrying. A remote tip equal to the local tip confirms success, an absent ref permits
+another expected-absent attempt, and a different tip fails as an allocation collision.
+Feature-branch allocation performs its normal local and remote uniqueness probes before creation.
 
 Runtime volume ownership uses a durable `.codeux-owner` marker and the actual volume-root UID/GID.
 The recursive ownership repair runs only for a new volume, an owner mismatch, or recovery from an

@@ -607,7 +607,7 @@ export class WorkspaceArtifactService {
     expectedWorkerTip: string;
     ownership: FreshWorkerBranchOwnership;
   }): Promise<boolean> {
-    const normalizedOwnedPath = this.normalizeWorktreePath(args.ownership.worktreePath);
+    const normalizedOwnedPath = await this.normalizeWorktreePath(args.ownership.worktreePath);
     let worktreeList: string;
     try {
       worktreeList = (await runCommandStrict(
@@ -622,28 +622,30 @@ export class WorkspaceArtifactService {
     }
 
     const expectedBranchRef = `refs/heads/${args.workerBranch}`;
-    const ownsRegisteredWorktree = worktreeList
-      .split(/\r?\n\r?\n/)
-      .some((record) => {
-        let worktreePath: string | null = null;
-        let head: string | null = null;
-        let branch: string | null = null;
-        for (const line of record.split(/\r?\n/)) {
-          if (line.startsWith("worktree ")) {
-            worktreePath = line.slice("worktree ".length);
-          } else if (line.startsWith("HEAD ")) {
-            head = line.slice("HEAD ".length);
-          } else if (line.startsWith("branch ")) {
-            branch = line.slice("branch ".length);
-          }
+    let ownsRegisteredWorktree = false;
+    for (const record of worktreeList.split(/\r?\n\r?\n/)) {
+      let worktreePath: string | null = null;
+      let head: string | null = null;
+      let branch: string | null = null;
+      for (const line of record.split(/\r?\n/)) {
+        if (line.startsWith("worktree ")) {
+          worktreePath = line.slice("worktree ".length);
+        } else if (line.startsWith("HEAD ")) {
+          head = line.slice("HEAD ".length);
+        } else if (line.startsWith("branch ")) {
+          branch = line.slice("branch ".length);
         }
-        return Boolean(
-          worktreePath
-          && this.normalizeWorktreePath(worktreePath) === normalizedOwnedPath
-          && head === args.expectedWorkerTip
-          && branch === expectedBranchRef,
-        );
-      });
+      }
+      if (
+        worktreePath
+        && head === args.expectedWorkerTip
+        && branch === expectedBranchRef
+        && await this.normalizeWorktreePath(worktreePath) === normalizedOwnedPath
+      ) {
+        ownsRegisteredWorktree = true;
+        break;
+      }
+    }
     if (!ownsRegisteredWorktree) {
       return false;
     }
@@ -655,8 +657,9 @@ export class WorkspaceArtifactService {
     );
   }
 
-  private normalizeWorktreePath(worktreePath: string): string {
-    const normalized = path.resolve(worktreePath);
+  private async normalizeWorktreePath(worktreePath: string): Promise<string> {
+    const resolved = path.resolve(worktreePath);
+    const normalized = await fs.realpath(resolved).catch(() => resolved);
     return process.platform === "win32" ? normalized.toLowerCase() : normalized;
   }
 
