@@ -20,8 +20,12 @@ The automatic local ceiling is the smaller of:
 - the memory budget after reserving the greater of 4 GiB or 15% of host memory, using 2.5 GiB as the
   planning estimate for one active provider/CI container.
 
-One slot is held back from ordinary background work for `worker_reply`, `dashboard_reply`, or
-`clarification_reply`. A configured positive provider ceiling remains an upper bound; adaptive CPU and memory admission can temporarily grant fewer new starts while the host is saturated.
+When the healthy automatic or configured limit is at least three, one slot is held back from
+ordinary background work for `worker_reply`, `dashboard_reply`, or `clarification_reply`. Compact
+one- and two-slot budgets remain fully available to background work; subtracting a reserved slot
+from a two-slot host would halve useful coding concurrency without leaving enough capacity for a
+separate third invocation. A configured positive provider ceiling remains an upper bound; adaptive
+CPU and memory admission can temporarily grant fewer new starts while the host is saturated.
 
 Admission samples one-minute load and free memory through a one-second in-process cache. When load
 per CPU reaches 0.9 or reliable free memory falls to 15%, background expansion freezes at the

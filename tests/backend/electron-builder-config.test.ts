@@ -131,8 +131,11 @@ describe("electron-builder packaged defaults", () => {
 
     expect(installerSmoke).toContain('findArtifact(".deb")');
     expect(installerSmoke).toContain('["/S", `/D=${installDirectory}`]');
+    expect(installerSmoke).toContain("windowsVerbatimArguments: true");
     expect(installerSmoke).toContain('findArtifact(".dmg")');
     expect(installerSmoke).toContain('run("hdiutil", ["attach"');
+    expect(installerSmoke).toContain('input: "Y\\n"');
+    expect(installerSmoke).toContain('stdio: ["pipe", "inherit", "inherit"]');
     expect(installerSmoke).toContain('const versionMarker = `-${packageJson.version}-`');
     expect(installerSmoke).toContain("entry.name.includes(versionMarker)");
     expect(installerSmoke).toContain("CODE_UX_ELECTRON_STARTUP_SMOKE_FILE");

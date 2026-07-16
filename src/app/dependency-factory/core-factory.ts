@@ -302,7 +302,10 @@ export function createCoreDependencies(
     projectManagementRepository,
     logger: logger.child({ component: "provider-concurrency-service" }),
     dockerService: new DockerService(),
-    admissionPolicy: process.env.VITEST
+    // The explicit E2E shim is a deterministic, lightweight local process. Let its configured
+    // concurrency exercise scheduler/DAG behavior independently of each CI runner's CPU count;
+    // production provider commands retain adaptive host admission.
+    admissionPolicy: process.env.VITEST || process.env.CODEUX_E2E_PROVIDER_CLI_SHIM?.trim()
       ? undefined
       : new AdaptiveProviderAdmissionPolicy({
           executionRepository,
