@@ -113,11 +113,11 @@ Published desktop artifacts are built by `.github/workflows/release.yml` when a 
 
 The workflow builds on native runners:
 
-- `ubuntu-latest` runs `pnpm run electron:dist:linux`
-- `windows-latest` runs `pnpm run electron:dist:win`
-- `macos-latest` runs `pnpm run electron:dist:mac`
+- `ubuntu-latest` runs Electron Builder with `--linux`
+- `windows-latest` runs Electron Builder with `--win`
+- `macos-latest` runs Electron Builder with `--mac`
 
-Each release job uploads its generated files as a workflow artifact and attaches the same files to the published GitHub Release. Diagnostic rebuilds only upload workflow artifacts.
+Each release job uploads its generated files as a workflow artifact and attaches the same files to the published GitHub Release. Diagnostic rebuilds only upload workflow artifacts. Both manual diagnostic workflows invoke Electron Builder directly with `--publish never`; forwarding that flag through the compound `electron:dist:*` package scripts is unsafe because pnpm can attach trailing arguments to the wrong command and let Electron Builder infer publishing from the CI environment.
 
 Release builds set `CSC_IDENTITY_AUTO_DISCOVERY=false`, so the default workflow produces unsigned desktop artifacts unless signing secrets and Electron Builder signing configuration are added later.
 
@@ -141,11 +141,13 @@ Developers can reproduce the main-PR desktop package portion locally with:
 pnpm run build
 node scripts/verify-release-install.mjs
 pnpm run electron:install-deps
-pnpm run electron:dist -- --publish never
+pnpm run build
+pnpm run electron:prepare-deps
+pnpm exec electron-builder --config electron-builder.config.cjs --linux --publish never
 pnpm run electron:smoke-installed
 ```
 
-Use `pnpm run electron:dist:linux -- --publish never`, `pnpm run electron:dist:mac -- --publish never`, or `pnpm run electron:dist:win -- --publish never` when matching a specific GitHub Actions matrix leg.
+Replace `--linux` with `--mac` or `--win` when matching another GitHub Actions matrix leg.
 
 ## Cross-Platform Compatibility Findings
 
