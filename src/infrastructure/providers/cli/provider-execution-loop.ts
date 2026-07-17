@@ -12,8 +12,10 @@ export interface ProviderExecutionLoopOptions {
   runCmd: (command: string, args: string[]) => Promise<CommandResult>;
   trackingOnActivity: (desc: string, originator?: string) => void;
   isTransientCodexTransportError: (result: CommandResult) => boolean;
+  isCodexRolloutNotFoundError: (result: CommandResult) => boolean;
   isClaudeConversationNotFoundError: (result: CommandResult) => boolean;
   isOpenCodeSessionNotFoundError: (result: CommandResult) => boolean;
+  buildFreshCodexSpec: () => { command: string; args: string[] };
   buildFreshClaudeSpec: () => { command: string; args: string[] };
   buildFreshOpenCodeSpec: () => { command: string; args: string[] };
   readAntigravityDiagnostics: () => Promise<string | null>;
@@ -23,17 +25,20 @@ export async function runProviderExecutionLoop(options: ProviderExecutionLoopOpt
   const {
     provider,
     continueSession,
-    allowFreshSessionFallback = true,
+    allowFreshSessionFallback,
     antigravityLogPath,
     runCmd,
     trackingOnActivity,
     isTransientCodexTransportError,
+    isCodexRolloutNotFoundError,
     isClaudeConversationNotFoundError,
     isOpenCodeSessionNotFoundError,
+    buildFreshCodexSpec,
     buildFreshClaudeSpec,
     buildFreshOpenCodeSpec,
     readAntigravityDiagnostics,
   } = options;
+  const freshSessionFallbackAllowed = allowFreshSessionFallback ?? provider !== "codex";
 
   let command = options.command;
   let args = options.args;
@@ -46,13 +51,30 @@ export async function runProviderExecutionLoop(options: ProviderExecutionLoopOpt
     result = await runCmd(command, args);
   }
 
+  // A persisted Codex thread id can outlive its workspace-local rollout file.
+  // Callers that provide a self-contained continuation prompt may safely keep
+  // the existing workspace and retry once as a fresh provider conversation.
+  if (
+    !result.ok
+    && provider === "codex"
+    && continueSession
+    && freshSessionFallbackAllowed
+    && isCodexRolloutNotFoundError(result)
+  ) {
+    trackingOnActivity("Codex could not resume the previous conversation (rollout not found). Retrying once with a fresh session...", "provider");
+    const freshSpec = buildFreshCodexSpec();
+    command = freshSpec.command;
+    args = freshSpec.args;
+    result = await runCmd(command, args);
+  }
+
   // `claude --resume <id>` fails with "No conversation found" when the prior
   // conversation is gone. Retry once with a fresh session instead.
   if (
     !result.ok
     && provider === "claude-code"
     && continueSession
-    && allowFreshSessionFallback
+    && freshSessionFallbackAllowed
     && isClaudeConversationNotFoundError(result)
   ) {
     trackingOnActivity("Claude Code could not resume the previous conversation (no conversation found). Retrying once with a fresh session...", "provider");
@@ -69,7 +91,7 @@ export async function runProviderExecutionLoop(options: ProviderExecutionLoopOpt
     !result.ok
     && provider === "opencode"
     && continueSession
-    && allowFreshSessionFallback
+    && freshSessionFallbackAllowed
     && isOpenCodeSessionNotFoundError(result)
   ) {
     trackingOnActivity("OpenCode could not resume the previous session (session not found). Retrying once with a fresh session...", "provider");

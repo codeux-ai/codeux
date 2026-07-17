@@ -24,6 +24,8 @@ import {
   readQwenLogData,
   readCodexLatestSessionJson,
   readCodexLatestSessionChunk,
+  readCodexSessionJson,
+  readCodexSessionChunk,
   readClaudeSessionJsonl,
   parseAntigravityConversationId,
   readAntigravityTranscript,
@@ -166,6 +168,55 @@ describe("readCodexLatestSessionChunk", () => {
       expect.stringContaining(".codex/sessions"),
       "*.jsonl",
       { sourceId: "1:22", offset: 128 },
+      2 * 1024 * 1024,
+    );
+  });
+});
+
+describe("exact Codex session reads", () => {
+  const nativeSessionId = "019f6df9-aaaf-7e71-a5f3-5fd7c6a88a3a";
+
+  it("selects the requested Docker rollout instead of the newest unrelated rollout", async () => {
+    const runner = { readLatestWorkspaceFile: vi.fn(async () => "exact rollout\n") };
+
+    const result = await readCodexSessionJson(
+      "/cwd",
+      nativeSessionId,
+      "DOCKER" as Mode,
+      runner as never,
+    );
+
+    expect(result).toBe("exact rollout\n");
+    expect(runner.readLatestWorkspaceFile).toHaveBeenCalledWith(
+      "/cwd",
+      expect.stringContaining(".codex/sessions/2026/07/17"),
+      `*-${nativeSessionId}.jsonl`,
+    );
+  });
+
+  it("binds incremental Docker reads to the requested rollout glob", async () => {
+    const chunk = {
+      sourceId: "1:22",
+      startOffset: 0,
+      nextOffset: 5,
+      totalBytes: 5,
+      contentBase64: Buffer.from("exact").toString("base64"),
+      reset: true,
+    };
+    const runner = { readLatestWorkspaceFileChunk: vi.fn(async () => chunk) };
+
+    expect(await readCodexSessionChunk(
+      "/cwd",
+      nativeSessionId,
+      "DOCKER" as Mode,
+      { sourceId: null, offset: 0 },
+      runner as never,
+    )).toEqual(chunk);
+    expect(runner.readLatestWorkspaceFileChunk).toHaveBeenCalledWith(
+      "/cwd",
+      expect.stringContaining(".codex/sessions/2026/07/17"),
+      `*-${nativeSessionId}.jsonl`,
+      { sourceId: null, offset: 0 },
       2 * 1024 * 1024,
     );
   });

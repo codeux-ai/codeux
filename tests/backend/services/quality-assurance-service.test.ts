@@ -4404,6 +4404,33 @@ describe("QualityAssuranceService", () => {
   });
 
   it("reuses an existing CLI QA follow-up workspace and syncs it with worker branch before running the fix", async () => {
+    const getLatestProviderInvocationUsageBySession = vi.fn((sessionId: string) => (
+      sessionId === "workspace-session"
+        ? {
+            id: "workspace-coding-invocation",
+            sessionId: "workspace-session",
+            provider: "gemini",
+            purpose: "task_coding",
+            status: "completed",
+            nativeSessionId: "workspace-native-session",
+            taskRunId: "workspace-task-run",
+            startedAt: "2026-07-16T10:00:00.000Z",
+            finishedAt: "2026-07-16T10:01:00.000Z",
+            updatedAt: "2026-07-16T10:01:00.000Z",
+          }
+        : {
+            id: "unrelated-logical-invocation",
+            sessionId: "session-1",
+            provider: "gemini",
+            purpose: "task_coding",
+            status: "completed",
+            nativeSessionId: "wrong-native-session",
+            taskRunId: "different-task-run",
+            startedAt: "2026-07-16T10:02:00.000Z",
+            finishedAt: "2026-07-16T10:03:00.000Z",
+            updatedAt: "2026-07-16T10:03:00.000Z",
+          }
+    ));
     const runProvider = vi.fn().mockResolvedValue({
       ok: true,
       stdout: "",
@@ -4426,8 +4453,9 @@ describe("QualityAssuranceService", () => {
         getSprint: vi.fn().mockReturnValue(null),
       } as any,
       executionRepository: {
-        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue(null),
+        getLatestProviderInvocationUsageBySession,
         getLatestTaskWorkspaceResumeTarget: vi.fn().mockReturnValue({
+          taskRunId: "workspace-task-run",
           provider: "gemini",
           sessionId: "workspace-session",
           workerBranch: "feature/task-1",
@@ -4535,7 +4563,16 @@ describe("QualityAssuranceService", () => {
       cwd: "/durable-worktree",
       workspaceSessionId: "workspace-session",
       workspaceLifecycle: "continue",
+      continueSessionId: "workspace-native-session",
     }));
+    expect(getLatestProviderInvocationUsageBySession).toHaveBeenCalledWith(
+      "session-1",
+      "task_coding",
+    );
+    expect(getLatestProviderInvocationUsageBySession).toHaveBeenCalledWith(
+      "workspace-session",
+      "task_coding",
+    );
     // initialHead (and thus the patch base) is the fast-forwarded tip.
     expect((service as any).workspaceArtifactService.exportBinaryPatch).toHaveBeenCalledWith("/durable-worktree", "pushed-worker-tip");
     expect(workspaceExists).toHaveBeenCalledWith("/durable-worktree");
@@ -4823,6 +4860,9 @@ describe("QualityAssuranceService", () => {
       followUpPrompt: "Address QA findings",
     });
 
+    expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      allowFreshSessionFallback: true,
+    }));
     expect((service as any).prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
       expect.objectContaining({
         taskId: "Task 1",

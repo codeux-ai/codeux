@@ -49,6 +49,8 @@ Task QA runs in waves of at most four reviews per orchestration cycle, or a lowe
 
 A hosted-provider QA coding follow-up is asynchronous after API acceptance. While its durable checkpoint is `awaiting_provider`, the task remains `RUNNING`/`QA_PENDING`, restart recovery observes the existing task run instead of resending it, and QA exhaustion is deferred. Final verification starts only after the matching task run completes after that dispatch.
 
+Codex QA coding follow-ups resolve the coding invocation associated with the task's durable workspace-binding run, then read that exact native thread's rollout from the paired runtime volume. This prevents another rollout in a reused runtime home, or a newer logical retry id, from separating the continuation thread from its saved `.codex` state. If a legacy or corrupt record still names a thread whose rollout is already unavailable, Code UX preserves the workspace and retries the self-contained QA fix prompt once in a fresh Codex conversation. Other resume failures remain failures, and strict recovery flows that require the exact recorded conversation do not use this fallback.
+
 ## Troubleshooting
 
 If the saved setting does not appear to take effect:
@@ -57,6 +59,7 @@ If the saved setting does not appear to take effect:
 - Check for a project or sprint override that takes precedence over the system value.
 - Refresh the affected dashboard page if the setting controls a rendered surface.
 - Restart the local runtime only when the setting explicitly controls startup, listener, or process-level behavior.
+- A newly created Codex invocation must persist the `thread.started` id from its own exec stream, and its telemetry must read `rollout-*-<thread-id>.jsonl` from the paired runtime volume rather than the directory's newest rollout. A legacy Task Coding invocation that reports `no rollout found for thread id` during a QA fix should emit one fresh-session retry while retaining the same task workspace. If it still fails, inspect the retry's provider error; Code UX does not loop or mask unrelated Codex failures.
 
 ## Related Documentation
 

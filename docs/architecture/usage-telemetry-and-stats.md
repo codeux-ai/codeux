@@ -119,6 +119,13 @@ Codex token estimation keeps process-local caches bounded for long-running worke
 
 Codex's rollout file (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) is cumulative for the whole session and keeps accumulating across `codex exec resume --last` (used for follow-up/QA-reopened runs and multi-turn retries). `parseCodexRolloutJsonl` isolates each run's own usage by treating the last `total_token_usage` snapshot *before* the run's time window as a baseline and subtracting it from the final cumulative snapshot — otherwise a follow-up would re-report every earlier turn's tokens too, inflating that run's persisted usage.
 
+Rollout discovery is native-thread-specific. For a new invocation, the `thread.started` id from the
+current exec stream is authoritative; for an exact continuation, the requested native id is the
+initial target. Code UX derives the rollout date from that id and reads only
+`rollout-*-<native-id>.jsonl` from the invocation's paired runtime volume. The generic newest-file
+lookup remains only as a compatibility fallback when a legacy caller has no native id, so prior
+sessions in the same runtime home cannot overwrite the persisted continuation identity.
+
 ### Qwen Code
 
 Qwen Code runs via its OpenAI-compatible request/response logging (`enableOpenAILoggingDir`), written to a directory that is reset at the start of every run so usage aggregation only ever sums the current invocation's own log files — unlike Codex/OpenCode, there is no cross-run cumulative counter to isolate.
@@ -192,6 +199,11 @@ Each `gen_metadata` row is **one model call**, not a running session total — c
 There is no official schema for this internal protobuf, so the field mapping is inferred rather than documented: input/output/reasoning/candidates are the same fields the original implementation used, and a new field (proto field 5) is treated as **cached/reused-context tokens** — it's present only on some rows (consistent with proto3 omitting zero-valued fields, i.e. "no cache hit this turn"), and where present its value closely tracks the *previous* row's input tokens (that turn's context, now served from cache on the next one).
 
 Because `agy --conversation=<id>` resumes the same conversation db across follow-up/retry invocations — accumulating `gen_metadata` rows across separate CLI runs just like Codex's rollout file or OpenCode's session store — a resumed run must not re-sum generations an earlier invocation already reported. There's no timestamp column to window by, so instead `ProviderRunner` peeks the db's current highest `idx` *before* a resumed run starts (a lightweight read-only query, self-contained to `provider-runner.ts`/`antigravity-log-parser.ts` — no cross-invocation baseline needs to be persisted or threaded through callers, unlike the OpenCode fix) and only sums rows past that cutoff afterward.
+
+Antigravity continuation distinguishes provider-native conversation ids from Code UX logical and
+workspace session ids. A known native id uses `--conversation=<id>`; when orchestration only has a
+logical continuation sentinel, Code UX uses Antigravity's `--continue` inside that workspace's
+paired runtime home. A logical Code UX id is never sent as an Antigravity conversation id.
 
 If the Antigravity database is missing, malformed, missing `gen_metadata`, or has no rows after the resume cutoff, `parseAntigravityDatabase` returns a structured result with `usage: null`, `rawUsageJson: null`, and `lastIdx: null` unless malformed rows were seen, in which case `lastIdx` records the highest inspected row. Transcript parsing separately returns `[]` for empty or malformed-only transcript files.
 

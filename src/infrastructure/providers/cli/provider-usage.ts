@@ -435,18 +435,17 @@ export async function collectProviderUsageTelemetry(args: {
   }
 
   if (args.provider === "codex") {
-    // The rollout JSONL session file is the richest source (usage + full
-    // conversation). The exec `--json` stdout stream is parsed as a fallback so
-    // the transcript is broken into proper turns even when the rollout file is
-    // unavailable — otherwise the raw JSON event stream would be persisted as a
-    // single unreadable message.
+    // The rollout JSONL session file is the richest source for usage and the
+    // full conversation. The exec `--json` stream is the authoritative identity
+    // source for this exact process invocation and supplies transcript/usage
+    // fallbacks when its rollout is not yet readable.
     const rollout = args.codexRollout ?? (args.codexSessionJson
       ? parseCodexRolloutJsonl(args.codexSessionJson, args.startTimeMs)
       : null);
-    const needsStdoutFallback = !rollout?.usage
-      || rollout.conversation.length === 0
-      || !rollout.nativeSessionId;
-    const stdout = needsStdoutFallback ? parseCodexExecStdout(args.stdout) : null;
+    // The exec stream belongs to this exact process invocation, while a rollout
+    // reader can observe an older file in a reused runtime home. Always parse
+    // stdout for identity even when rollout usage/conversation is complete.
+    const stdout = parseCodexExecStdout(args.stdout);
     const parsedConversation = (rollout?.conversation && rollout.conversation.length > 0)
       ? rollout.conversation
       : stdout?.conversation ?? [];
@@ -457,7 +456,10 @@ export async function collectProviderUsageTelemetry(args: {
     const transcriptText = args.capturedText?.trim() || lastAssistantText || fallbackOutput;
     const usage = rollout?.usage ?? stdout?.usage ?? null;
     const rawUsageJson = rollout?.usage ? rollout.rawUsageJson : stdout?.rawUsageJson ?? null;
-    const nativeSessionId = rollout?.nativeSessionId ?? stdout?.nativeSessionId ?? args.nativeSessionId ?? null;
+    const nativeSessionId = stdout.nativeSessionId
+      ?? args.nativeSessionId
+      ?? rollout?.nativeSessionId
+      ?? null;
     if (usage) {
       return {
         ...emptyTelemetry(),

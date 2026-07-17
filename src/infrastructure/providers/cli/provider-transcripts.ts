@@ -25,6 +25,50 @@ import type {
 
 const DEFAULT_TRANSCRIPT_CHUNK_BYTES = 2 * 1024 * 1024;
 
+interface CodexSessionDateParts {
+  year: string;
+  month: string;
+  day: string;
+}
+
+function codexSessionDateParts(date: Date, utc: boolean): CodexSessionDateParts {
+  const year = utc ? date.getUTCFullYear() : date.getFullYear();
+  const month = (utc ? date.getUTCMonth() : date.getMonth()) + 1;
+  const day = utc ? date.getUTCDate() : date.getDate();
+  return {
+    year: year.toString(),
+    month: month.toString().padStart(2, "0"),
+    day: day.toString().padStart(2, "0"),
+  };
+}
+
+function resolveCodexSessionDateCandidates(nativeSessionId: string): CodexSessionDateParts[] {
+  const compactId = nativeSessionId.replaceAll("-", "");
+  const timestampHex = compactId.slice(0, 12);
+  const timestampMs = /^[a-f0-9]{12}$/i.test(timestampHex)
+    ? Number.parseInt(timestampHex, 16)
+    : Number.NaN;
+  const sessionDate = Number.isFinite(timestampMs) ? new Date(timestampMs) : new Date();
+  const candidates = [
+    codexSessionDateParts(sessionDate, true),
+    codexSessionDateParts(sessionDate, false),
+  ];
+  return candidates.filter((candidate, index, all) => (
+    all.findIndex((item) => (
+      item.year === candidate.year
+      && item.month === candidate.month
+      && item.day === candidate.day
+    )) === index
+  ));
+}
+
+function codexRolloutGlob(nativeSessionId: string): string | null {
+  const normalized = nativeSessionId.trim();
+  return /^[A-Za-z0-9_-]+$/.test(normalized)
+    ? `*-${normalized}.jsonl`
+    : null;
+}
+
 async function resolveLatestCodexHostSessionPath(): Promise<string | null> {
   const now = new Date();
   const sessionsDir = path.join(
@@ -109,6 +153,61 @@ export async function readCodexLatestSessionChunk(
   return filePath ? readHostFileChunk(filePath, cursor) : null;
 }
 
+export async function readCodexSessionChunk(
+  cwd: string,
+  nativeSessionId: string,
+  executionMode: CliWorkflowSettings["executionMode"],
+  cursor: ProviderTranscriptCursor,
+  dockerRunner: Pick<IDockerRunner, "readLatestWorkspaceFileChunk">,
+): Promise<ProviderTranscriptChunk | null> {
+  const rolloutGlob = codexRolloutGlob(nativeSessionId);
+  if (!rolloutGlob) {
+    return null;
+  }
+  for (const date of resolveCodexSessionDateCandidates(nativeSessionId)) {
+    const sessionsDir = executionMode === "DOCKER"
+      ? pathPosix.join(
+          CONTAINER_RUNTIME_HOME,
+          ".codex",
+          "sessions",
+          date.year,
+          date.month,
+          date.day,
+        )
+      : path.join(
+          os.homedir(),
+          ".codex",
+          "sessions",
+          date.year,
+          date.month,
+          date.day,
+        );
+    if (executionMode === "DOCKER") {
+      const chunk = await dockerRunner.readLatestWorkspaceFileChunk?.(
+        cwd,
+        sessionsDir,
+        rolloutGlob,
+        cursor,
+        DEFAULT_TRANSCRIPT_CHUNK_BYTES,
+      ) ?? null;
+      if (chunk) {
+        return chunk;
+      }
+      continue;
+    }
+    try {
+      const rolloutFile = (await fs.readdir(sessionsDir))
+        .find((file) => file.endsWith(`-${nativeSessionId}.jsonl`));
+      if (rolloutFile) {
+        return await readHostFileChunk(path.join(sessionsDir, rolloutFile), cursor);
+      }
+    } catch {
+      // Try the next UTC/local date candidate.
+    }
+  }
+  return null;
+}
+
 export async function readClaudeSessionJsonlChunk(
   cwd: string,
   nativeSessionId: string,
@@ -185,45 +284,130 @@ export async function readQwenLogData(
 }
 
 export async function readCodexLatestSessionJson(
-    cwd: string,
-    executionMode: CliWorkflowSettings["executionMode"],
-    dockerRunner: Pick<IDockerRunner, "readLatestWorkspaceFile">
-  ): Promise<string | null> {
-    const now = new Date();
-    const year = now.getFullYear().toString();
-    const month = (now.getMonth() + 1).toString().padStart(2, "0");
-    const day = now.getDate().toString().padStart(2, "0");
+  cwd: string,
+  executionMode: CliWorkflowSettings["executionMode"],
+  dockerRunner: Pick<IDockerRunner, "readLatestWorkspaceFile">,
+): Promise<string | null> {
+  const now = new Date();
+  const year = now.getFullYear().toString();
+  const month = (now.getMonth() + 1).toString().padStart(2, "0");
+  const day = now.getDate().toString().padStart(2, "0");
 
+  if (executionMode === "DOCKER") {
+    const sessionsDir = pathPosix.join(
+      CONTAINER_RUNTIME_HOME,
+      ".codex",
+      "sessions",
+      year,
+      month,
+      day,
+    );
+    return (await dockerRunner.readLatestWorkspaceFile?.(cwd, sessionsDir, "*.jsonl").catch(() => null)) ?? null;
+  }
+
+  const sessionsDir = path.join(os.homedir(), ".codex", "sessions", year, month, day);
+  try {
+    const files = await fs.readdir(sessionsDir);
+    // Codex writes rollout transcripts as `rollout-<ts>-<uuid>.jsonl`.
+    const jsonFiles = files.filter(f => f.endsWith(".jsonl"));
+    if (jsonFiles.length === 0) return null;
+    const withMtimes = await Promise.all(
+      jsonFiles.map(async (f) => {
+        const filePath = path.join(sessionsDir, f);
+        const stat = await fs.stat(filePath).catch(() => null);
+        return { filePath, mtime: stat?.mtimeMs ?? 0 };
+      }),
+    );
+    withMtimes.sort((a, b) => b.mtime - a.mtime);
+    return await fs.readFile(withMtimes[0].filePath, "utf8").catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
+export async function readCodexSessionJson(
+  cwd: string,
+  nativeSessionId: string,
+  executionMode: CliWorkflowSettings["executionMode"],
+  dockerRunner: Pick<IDockerRunner, "readLatestWorkspaceFile">,
+): Promise<string | null> {
+  const rolloutGlob = codexRolloutGlob(nativeSessionId);
+  if (!rolloutGlob) {
+    return null;
+  }
+  for (const date of resolveCodexSessionDateCandidates(nativeSessionId)) {
+    const sessionsDir = executionMode === "DOCKER"
+      ? pathPosix.join(
+          CONTAINER_RUNTIME_HOME,
+          ".codex",
+          "sessions",
+          date.year,
+          date.month,
+          date.day,
+        )
+      : path.join(
+          os.homedir(),
+          ".codex",
+          "sessions",
+          date.year,
+          date.month,
+          date.day,
+        );
     if (executionMode === "DOCKER") {
-      const sessionsDir = pathPosix.join(
-        CONTAINER_RUNTIME_HOME,
-        ".codex",
-        "sessions",
-        year,
-        month,
-        day,
-      );
-      return (await dockerRunner.readLatestWorkspaceFile?.(cwd, sessionsDir, "*.jsonl").catch(() => null)) ?? null;
+      const contents = await dockerRunner.readLatestWorkspaceFile?.(
+        cwd,
+        sessionsDir,
+        rolloutGlob,
+      ).catch(() => null) ?? null;
+      if (contents) {
+        return contents;
+      }
+      continue;
     }
-
-    const sessionsDir = path.join(os.homedir(), ".codex", "sessions", year, month, day);
     try {
-      const files = await fs.readdir(sessionsDir);
-      // Codex writes rollout transcripts as `rollout-<ts>-<uuid>.jsonl`.
-      const jsonFiles = files.filter(f => f.endsWith(".jsonl"));
-      if (jsonFiles.length === 0) return null;
-      const withMtimes = await Promise.all(
-        jsonFiles.map(async (f) => {
-          const filePath = path.join(sessionsDir, f);
-          const stat = await fs.stat(filePath).catch(() => null);
-          return { filePath, mtime: stat?.mtimeMs ?? 0 };
-        }),
-      );
-      withMtimes.sort((a, b) => b.mtime - a.mtime);
-      return await fs.readFile(withMtimes[0].filePath, "utf8").catch(() => null);
+      const rolloutFile = (await fs.readdir(sessionsDir))
+        .find((file) => file.endsWith(`-${nativeSessionId}.jsonl`));
+      if (rolloutFile) {
+        return await fs.readFile(path.join(sessionsDir, rolloutFile), "utf8").catch(() => null);
+      }
     } catch {
-      return null;
+      // Try the next UTC/local date candidate.
     }
+  }
+  return null;
+}
+
+export async function readCodexHostSessionMetadata(
+  nativeSessionId: string,
+): Promise<string | null> {
+  if (!codexRolloutGlob(nativeSessionId)) {
+    return null;
+  }
+  for (const date of resolveCodexSessionDateCandidates(nativeSessionId)) {
+    const sessionsDir = path.join(
+      os.homedir(),
+      ".codex",
+      "sessions",
+      date.year,
+      date.month,
+      date.day,
+    );
+    try {
+      const rolloutFile = (await fs.readdir(sessionsDir))
+        .find((file) => file.endsWith(`-${nativeSessionId}.jsonl`));
+      if (!rolloutFile) {
+        continue;
+      }
+      const filePath = path.join(sessionsDir, rolloutFile);
+      const fileStat = await fs.stat(filePath).catch(() => null);
+      return fileStat
+        ? `${filePath}:${fileStat.size}:${Math.trunc(fileStat.mtimeMs)}`
+        : null;
+    } catch {
+      // Try the next UTC/local date candidate.
+    }
+  }
+  return null;
 }
 
 export async function readClaudeSessionJsonl(

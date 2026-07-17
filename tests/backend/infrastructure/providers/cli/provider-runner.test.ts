@@ -666,6 +666,57 @@ describe("ProviderRunner", () => {
     expect(args.at(-1)).toBe("continue the selected conversation");
   });
 
+  it("keeps the workspace and retries Codex without resume when its rollout is missing", async () => {
+    const nativeSessionId = "019f6df9-aaaf-7e71-a5f3-5fd7c6a88a3a";
+    dockerRunner.runProviderInDocker
+      .mockResolvedValueOnce({
+        ok: false,
+        stdout: "",
+        stderr: `Codex failed: Error: thread/resume: thread/resume failed: no rollout found for thread id ${nativeSessionId} (code -32600)`,
+        code: 1,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: JSON.stringify({ type: "thread.started", thread_id: "fresh-native-thread" }),
+        stderr: "",
+        code: 0,
+        signal: null,
+      });
+
+    const onActivity = vi.fn();
+    const result = await runner.runProvider({
+      provider: "codex",
+      prompt: "apply the QA fixes",
+      cwd: "/repo",
+      model: "gpt-5.3-codex",
+      apiKey: "key",
+      sessionId: "task-session-1",
+      workspaceSessionId: "task-workspace-1",
+      continueSessionId: nativeSessionId,
+      allowFreshSessionFallback: true,
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    const firstArgs: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    const secondArgs: string[] = dockerRunner.runProviderInDocker.mock.calls[1][0].args;
+    expect(firstArgs.slice(0, 2)).toEqual(["exec", "resume"]);
+    expect(firstArgs).toContain(nativeSessionId);
+    expect(secondArgs[0]).toBe("exec");
+    expect(secondArgs).not.toContain("resume");
+    expect(secondArgs).not.toContain(nativeSessionId);
+    expect(dockerRunner.runProviderInDocker.mock.calls[0][0].cwd).toBe("docker-volume://workspace-1");
+    expect(dockerRunner.runProviderInDocker.mock.calls[1][0].cwd).toBe("docker-volume://workspace-1");
+    expect(onActivity).toHaveBeenCalledWith(
+      "Codex could not resume the previous conversation (rollout not found). Retrying once with a fresh session...",
+      "provider",
+    );
+    expect(result.ok).toBe(true);
+    expect(result.nativeSessionId).toBe("fresh-native-thread");
+  });
+
   it("falls back to the latest Codex session without passing a logical id as the native resume target", async () => {
     await runner.runProvider({
       provider: "codex",
@@ -1054,6 +1105,26 @@ describe("ProviderRunner", () => {
       args: ["--auth-type", "openai", "--yolo", "--continue", "--model", "qwen3-coder-plus", "-p", "fix the JSON"],
     }));
     expect(result.nativeSessionId).toBeNull();
+  });
+
+  it("continues Antigravity locally instead of passing a Code UX workspace id as a conversation id", async () => {
+    await runner.runProvider({
+      provider: "antigravity",
+      prompt: "continue the repair",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "",
+      sessionId: "logical-repair-session",
+      workspaceSessionId: "durable-repair-workspace",
+      continueSessionId: "durable-repair-workspace",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    expect(args).toContain("--continue");
+    expect(args).not.toContain("--conversation=durable-repair-workspace");
   });
 
   it("preserves and reuses Docker-created Qwen workspaces so saved sessions survive short-lived containers", async () => {
