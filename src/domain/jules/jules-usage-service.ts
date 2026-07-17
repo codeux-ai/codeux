@@ -8,13 +8,25 @@ import type {
 } from "../../contracts/execution-types.js";
 import type { AppendExecutionInvocationMessageInput } from "../../contracts/invocation-types.js";
 import type { JulesActivity, JulesSession } from "../../contracts/app-types.js";
-import { estimateJulesUsage, type JulesUsageEstimate } from "./jules-usage-estimator.js";
+import {
+  estimateJulesUsage,
+  selectLatestJulesChangeSetArtifacts,
+  type JulesUsageEstimate,
+} from "./jules-usage-estimator.js";
 import {
   MAX_MESSAGE_CONTENT_CHARS,
   MAX_TOOL_PAYLOAD_CHARS,
   truncateForStorage,
 } from "../../services/invocation-message-limits.js";
 import { isNotFoundError } from "../../integrations/jules-api-client.js";
+import {
+  type JulesUsageConversation,
+  type JulesUsageProjectionDiagnostics,
+} from "./jules-activity-projection.js";
+import {
+  getNodeHeapPressure,
+  type NodeHeapPressureState,
+} from "../../shared/runtime/node-heap-pressure.js";
 
 type GitMetrics = { insertions?: number; deletions?: number; filesChanged?: number } | null | undefined;
 
@@ -22,6 +34,10 @@ type GitMetrics = { insertions?: number; deletions?: number; filesChanged?: numb
  *  the live conversation refreshes without hammering the Jules API on every
  *  sprint sync tick. Terminal syncs bypass this throttle. */
 const LIVE_SYNC_THROTTLE_MS = 8_000;
+const HEAP_PRESSURE_LOG_THROTTLE_MS = 60_000;
+const DEFERRED_TERMINAL_SYNC_MS = 30_000;
+const JULES_ESTIMATOR_VERSION = "activity-snapshot-v2";
+const MAX_JULES_PERSISTED_CONVERSATION_MESSAGES = 2_048;
 
 /**
  * Estimates and persists Jules token usage and the conversation transcript.
@@ -36,13 +52,17 @@ const LIVE_SYNC_THROTTLE_MS = 8_000;
 export class JulesUsageService {
   private encoder: Tiktoken | null = null;
   private readonly lastLiveSyncMsBySession = new Map<string, number>();
+  private readonly lastLiveRevisionBySession = new Map<string, string>();
   private readonly liveSyncBySession = new Map<string, Promise<void>>();
+  private readonly deferredTerminalSyncBySession = new Map<string, ReturnType<typeof setTimeout>>();
   private usageSyncTail: Promise<void> = Promise.resolve();
+  private lastHeapPressureLogMs = 0;
 
   constructor(
     private readonly julesClient: JulesClient,
     private readonly executionRepository: ExecutionRepository,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly readHeapPressure: () => NodeHeapPressureState = getNodeHeapPressure,
   ) {}
 
   private countTokens(text: string): number {
@@ -57,8 +77,9 @@ export class JulesUsageService {
 
   /**
    * Terminal sync: recomputes the authoritative usage estimate and rebuilds the
-   * conversation once a session reaches a terminal state. Skips work when a
-   * non-zero estimate was already saved (the previous behaviour callers rely on).
+   * conversation once a session reaches a terminal state. A completed record
+   * produced by the current snapshot-aware estimator is idempotent; legacy
+   * estimates are recalculated so repeated patch snapshots are corrected.
    */
   async calculateAndSaveUsageForTask(
     projectId: string,
@@ -87,22 +108,30 @@ export class JulesUsageService {
   ): Promise<void> {
     try {
       const existingRecord = this.executionRepository.getLatestProviderInvocationUsageBySession(sessionId, "task_coding");
-      if (existingRecord && existingRecord.totalTokens && existingRecord.totalTokens > 0) {
+      if (
+        existingRecord
+        && existingRecord.status === "completed"
+        && existingRecord.rawUsageJson?.estimator === JULES_ESTIMATOR_VERSION
+      ) {
         this.logger.info("Jules usage telemetry already calculated and saved for session", { sessionId });
+        return;
+      }
+      if (this.isHeapUnderPressure("terminal", sessionId)) {
+        this.deferTerminalSync(projectId, taskId, sessionId, passedPrompt, gitMetrics);
         return;
       }
 
       const hasSafeContext = Boolean(passedPrompt || existingRecord);
-      let activities: JulesActivity[];
+      let conversation: JulesUsageConversation;
       try {
-        activities = await this.julesClient.getFullConversation(sessionId);
+        conversation = await this.fetchUsageConversation(sessionId);
       } catch (error) {
         if (isNotFoundError(error)) {
           if (!hasSafeContext) {
             this.logger.info("Skipping Jules usage telemetry for missing session (no existing prompt/record)", { sessionId });
             return;
           }
-          activities = [];
+          conversation = { activities: [], diagnostics: emptyProjectionDiagnostics() };
         } else {
           throw error;
         }
@@ -114,7 +143,8 @@ export class JulesUsageService {
         projectId,
         taskId,
         sessionId,
-        activities,
+        activities: conversation.activities,
+        projectionDiagnostics: conversation.diagnostics,
         prompt: resolved.prompt,
         gitMetrics: resolved.gitMetrics,
         final: true,
@@ -139,7 +169,8 @@ export class JulesUsageService {
     taskId: string,
     sessionId: string,
     prompt?: string,
-    gitMetrics?: GitMetrics
+    gitMetrics?: GitMetrics,
+    sourceRevision?: string,
   ): Promise<void> {
     const inFlight = this.liveSyncBySession.get(sessionId);
     if (inFlight) {
@@ -148,6 +179,12 @@ export class JulesUsageService {
     }
 
     const now = Date.now();
+    if (
+      sourceRevision
+      && this.lastLiveRevisionBySession.get(sessionId) === sourceRevision
+    ) {
+      return;
+    }
     const last = this.lastLiveSyncMsBySession.get(sessionId) ?? 0;
     if (now - last < LIVE_SYNC_THROTTLE_MS) {
       return;
@@ -155,7 +192,14 @@ export class JulesUsageService {
 
     const pending = this.enqueueUsageSync(async () => {
       try {
-        await this.syncLiveInvocationSerial(projectId, taskId, sessionId, prompt, gitMetrics);
+        await this.syncLiveInvocationSerial(
+          projectId,
+          taskId,
+          sessionId,
+          prompt,
+          gitMetrics,
+          sourceRevision,
+        );
       } finally {
         this.lastLiveSyncMsBySession.set(sessionId, Date.now());
       }
@@ -176,9 +220,14 @@ export class JulesUsageService {
     sessionId: string,
     prompt?: string,
     gitMetrics?: GitMetrics,
+    sourceRevision?: string,
   ): Promise<void> {
     try {
-      const activities = await this.julesClient.getFullConversation(sessionId);
+      if (this.isHeapUnderPressure("live", sessionId)) {
+        return;
+      }
+      const conversation = await this.fetchUsageConversation(sessionId);
+      const activities = conversation.activities;
       if (activities.length === 0 && !prompt) {
         return;
       }
@@ -187,10 +236,14 @@ export class JulesUsageService {
         taskId,
         sessionId,
         activities,
+        projectionDiagnostics: conversation.diagnostics,
         prompt: prompt || "",
         gitMetrics,
         final: false,
       });
+      if (sourceRevision) {
+        this.lastLiveRevisionBySession.set(sessionId, sourceRevision);
+      }
     } catch (error) {
       if (isNotFoundError(error)) {
         this.logger.debug("Live Jules session is not available (404), skipping live sync", { sessionId });
@@ -204,6 +257,59 @@ export class JulesUsageService {
     const pending = this.usageSyncTail.then(work, work);
     this.usageSyncTail = pending.catch(() => undefined);
     return pending;
+  }
+
+  private async fetchUsageConversation(sessionId: string): Promise<JulesUsageConversation> {
+    if (this.julesClient.getUsageConversation) {
+      return await this.julesClient.getUsageConversation(sessionId);
+    }
+    return {
+      activities: await this.julesClient.getFullConversation(sessionId),
+      diagnostics: emptyProjectionDiagnostics(),
+    };
+  }
+
+  private isHeapUnderPressure(kind: "live" | "terminal", sessionId: string): boolean {
+    const pressure = this.readHeapPressure();
+    if (!pressure.underPressure) {
+      return false;
+    }
+    const now = Date.now();
+    if (now - this.lastHeapPressureLogMs >= HEAP_PRESSURE_LOG_THROTTLE_MS) {
+      this.lastHeapPressureLogMs = now;
+      this.logger.warn("Deferred Jules usage telemetry because the Node.js heap is under pressure", {
+        kind,
+        sessionId,
+        heapUsedMb: Math.round(pressure.heapUsedBytes / 1024 / 1024),
+        heapLimitMb: Math.round(pressure.heapLimitBytes / 1024 / 1024),
+        heapUsagePercent: Math.round(pressure.usageRatio * 100),
+      });
+    }
+    return true;
+  }
+
+  private deferTerminalSync(
+    projectId: string,
+    taskId: string,
+    sessionId: string,
+    prompt: string | undefined,
+    gitMetrics: GitMetrics,
+  ): void {
+    if (this.deferredTerminalSyncBySession.has(sessionId)) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.deferredTerminalSyncBySession.delete(sessionId);
+      void this.calculateAndSaveUsageForTask(
+        projectId,
+        taskId,
+        sessionId,
+        prompt,
+        gitMetrics,
+      );
+    }, DEFERRED_TERMINAL_SYNC_MS);
+    timer.unref?.();
+    this.deferredTerminalSyncBySession.set(sessionId, timer);
   }
 
   /** Resolves the session prompt and PR git stats, fetching the session only
@@ -247,11 +353,21 @@ export class JulesUsageService {
     taskId: string;
     sessionId: string;
     activities: JulesActivity[];
+    projectionDiagnostics: JulesUsageProjectionDiagnostics;
     prompt: string;
     gitMetrics: GitMetrics;
     final: boolean;
   }): void {
-    const { projectId, taskId, sessionId, activities, prompt, gitMetrics, final } = args;
+    const {
+      projectId,
+      taskId,
+      sessionId,
+      activities,
+      projectionDiagnostics,
+      prompt,
+      gitMetrics,
+      final,
+    } = args;
 
     let estimate!: JulesUsageEstimate;
     let conversationMessages!: AppendExecutionInvocationMessageInput[];
@@ -302,7 +418,8 @@ export class JulesUsageService {
       transcriptChars: estimate.transcriptChars,
       invocationSource: "EXTERNAL_API",
       rawUsageJson: {
-        estimator: "turn-accumulation-v1",
+        estimator: JULES_ESTIMATOR_VERSION,
+        projection: projectionDiagnostics,
         gitMetrics: {
           insertions: gitMetrics?.insertions ?? 0,
           deletions: gitMetrics?.deletions ?? 0,
@@ -392,6 +509,7 @@ export class JulesUsageService {
     const sorted = activities
       .slice()
       .sort((a, b) => new Date(a.createTime || 0).getTime() - new Date(b.createTime || 0).getTime());
+    const latestChangeSetArtifacts = selectLatestJulesChangeSetArtifacts(sorted);
 
     for (const activity of sorted) {
       const createdAt = activity.createTime || undefined;
@@ -407,7 +525,12 @@ export class JulesUsageService {
         push({ role: "assistant", contentMarkdown: cap(activity.agentMessaged.agentMessage), metadata: base });
       } else if (activity.planGenerated?.plan?.steps) {
         const stepsMarkdown = activity.planGenerated.plan.steps
-          .map((step, index) => `- Step ${index + 1}: ${step.title || "Untitled step"}`)
+          .map((step, index) => {
+            const title = step.title || "Untitled step";
+            return step.description
+              ? `- Step ${index + 1}: ${title}\n  ${step.description}`
+              : `- Step ${index + 1}: ${title}`;
+          })
           .join("\n");
         push({
           role: "assistant",
@@ -443,7 +566,7 @@ export class JulesUsageService {
       // Code artifacts render as tool results (the patch the agent produced).
       for (const art of activity.artifacts || []) {
         const patch = art.changeSet?.gitPatch?.unidiffPatch;
-        if (patch) {
+        if (patch && latestChangeSetArtifacts.has(art)) {
           const contentPatch = truncateForStorage(
             patch,
             Math.max(0, MAX_MESSAGE_CONTENT_CHARS - 12),
@@ -455,11 +578,70 @@ export class JulesUsageService {
             metadata: { ...base, kind: "tool_result", toolName: "apply_patch" },
           });
         }
+        if (art.bashOutput) {
+          const command = art.bashOutput.command || "";
+          const output = art.bashOutput.output || "";
+          if (command && !activity.progressUpdated) {
+            push({
+              role: "tool",
+              contentMarkdown: cap(`\`${command}\``),
+              toolCallsJson: { arguments: truncateForStorage(command, MAX_TOOL_PAYLOAD_CHARS) },
+              metadata: { ...base, kind: "tool_call", toolName: "shell" },
+            });
+          }
+          if (output || typeof art.bashOutput.exitCode === "number") {
+            const exitLabel = typeof art.bashOutput.exitCode === "number"
+              ? `\n\nExit code: ${art.bashOutput.exitCode}`
+              : "";
+            push({
+              role: "tool",
+              contentMarkdown: cap(`${output}${exitLabel}`),
+              toolCallsJson: { output: truncateForStorage(output, MAX_TOOL_PAYLOAD_CHARS) },
+              metadata: {
+                ...base,
+                kind: "tool_result",
+                toolName: "shell",
+                toolStatus: art.bashOutput.exitCode === 0 ? "completed" : "failed",
+              },
+            });
+          }
+        }
+        if (art.media) {
+          push({
+            role: "tool",
+            contentMarkdown: art.media.mimeType
+              ? `Jules produced a ${art.media.mimeType} media artifact.`
+              : "Jules produced a media artifact.",
+            metadata: { ...base, kind: "tool_result", toolName: "media" },
+          });
+        }
       }
     }
 
-    return messages;
+    if (messages.length <= MAX_JULES_PERSISTED_CONVERSATION_MESSAGES) {
+      return messages;
+    }
+    const first = prompt ? messages[0] : null;
+    const tailCount = MAX_JULES_PERSISTED_CONVERSATION_MESSAGES - (first ? 1 : 0);
+    return first
+      ? [first, ...messages.slice(-tailCount)]
+      : messages.slice(-MAX_JULES_PERSISTED_CONVERSATION_MESSAGES);
   }
+}
+
+function emptyProjectionDiagnostics(): JulesUsageProjectionDiagnostics {
+  return {
+    activitiesSeen: 0,
+    activitiesRetained: 0,
+    activitiesOmitted: 0,
+    changeSetSnapshotsSeen: 0,
+    changeSetSnapshotsRetained: 0,
+    duplicateChangeSetSnapshots: 0,
+    supersededChangeSetSnapshots: 0,
+    mediaPayloadCharsDiscarded: 0,
+    textCharsOmitted: 0,
+    patchCharsOmitted: 0,
+  };
 }
 
 function cap(text: string): string {

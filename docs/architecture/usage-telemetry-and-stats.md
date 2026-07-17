@@ -229,9 +229,18 @@ Stats pricing still prefers configured model-pricing overrides and catalogue tok
 
 Jules does not expose a compatible native token contract. Instead of excluding it, Code UX computes
 **estimated** tokens from the cumulative activity stream. The estimator models replayed input
-context, generated messages, progress/tool turns, and added lines from patch artifacts. It uses the
-`cl100k_base` tokenizer in slices of at most 64 KiB so a multi-megabyte patch cannot create one
-unbounded tokenizer allocation.
+context, generated messages, every progress/tool activity, bash commands and output, media
+presence, and added lines from the delivered patch. It uses the `cl100k_base` tokenizer in slices
+of at most 64 KiB so a multi-megabyte patch cannot create one unbounded tokenizer allocation.
+
+Jules activity artifacts are snapshots, not a provider token ledger. In real histories the complete
+current Git patch can be attached byte-for-byte to dozens of consecutive progress activities. The
+usage parser therefore preserves every activity and tool operation but retains only the newest
+change-set snapshot per source. Earlier identical and superseded snapshots are not counted as new
+model output. Bash artifacts preserve command, combined stdout/stderr, and exit status. Media
+artifacts retain MIME type and presence only; base64 bytes are never copied into the usage model.
+Plan step descriptions are included alongside titles. Provider-only metadata outside the documented
+activity union is dropped.
 
 Full-conversation usage synchronization is process-wide serialized. Calls for the same session join
 the existing in-flight sync, while different sessions wait on a one-at-a-time queue. Once bounded
@@ -239,6 +248,19 @@ invocation messages and numeric usage have been derived, Code UX releases the ra
 array before reconciling SQLite rows. This prevents a wide set of hosted sessions from retaining and
 tokenizing multiple large histories concurrently without changing the persisted message or usage
 contract.
+
+History pages contain at most ten activities and are projected before the next page is requested.
+Individual API responses are limited to 64 MiB; retained ordinary text, patch snapshots, activity
+count, and persisted transcript messages each have explicit independent bounds. Projection
+diagnostics record duplicate/superseded patch snapshots and omitted characters in `raw_usage_json`,
+so a safety truncation remains auditable. Live sync also skips an unchanged Jules `updateTime`.
+
+All provider telemetry is best-effort under V8 heap pressure. At 50% heap usage, or when the
+process falls below its proportional headroom reserve, live provider readers pause before reading
+more logs or histories. Jules terminal usage is deferred and retried after pressure subsides.
+Codex final collection returns the already parsed bounded accumulator instead of forcing another
+rollout read. Telemetry can therefore become temporarily stale, but it cannot compete with sprint
+cancellation or runtime control for the final portion of the JavaScript heap.
 
 During live synchronization (`syncLiveInvocation`), expected 404 responses indicating that a session or activity stream is unavailable are handled gracefully: they are logged at the debug level and skipped to avoid spamming the logs with warnings. For terminal sync (`calculateAndSaveUsageForTask`), the system is conservative: if the session returns a 404, it skips creating a new usage record to prevent saving "fake" empty records unless an existing prompt or usage record is already present to allow safe estimation.
 

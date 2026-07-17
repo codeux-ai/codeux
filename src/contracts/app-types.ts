@@ -31,6 +31,7 @@ export interface JulesSession {
   provider?: ProviderId;
   prompt: string;
   createTime?: string;
+  updateTime?: string;
   outputs?: SessionOutput[];
 }
 
@@ -57,6 +58,13 @@ export interface JulesActivityArtifact {
   };
   media?: {
     data?: string;
+    mimeType?: string;
+    [key: string]: unknown;
+  };
+  bashOutput?: {
+    command?: string;
+    output?: string;
+    exitCode?: number;
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -70,7 +78,7 @@ export interface JulesActivity {
   agentMessaged?: { agentMessage?: string };
   userMessaged?: { userMessage?: string };
   progressUpdated?: { title?: string; description?: string };
-  planGenerated?: { plan?: { steps?: Array<{ title?: string }> } };
+  planGenerated?: { plan?: { steps?: Array<{ title?: string; description?: string }> } };
   planApproved?: { planId?: string };
   sessionFailed?: { reason?: string };
   sessionCompleted?: unknown;

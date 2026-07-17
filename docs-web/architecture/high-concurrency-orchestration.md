@@ -107,6 +107,11 @@ the dashboard, and interactive replies.
 - Jules full-history telemetry is serialized process-wide, joins duplicate in-flight session reads,
   tokenizes text in slices of at most 64 KiB, and releases raw activities before SQLite
   reconciliation. Wide hosted-session syncs therefore cannot multiply large patch payloads in heap.
+- Jules usage pages are projected ten activities at a time. Every activity/tool event is counted,
+  bash output is modeled explicitly, base64 media is discarded, and only the newest cumulative
+  patch snapshot per source is retained. API responses and retained history have hard size bounds.
+- Provider telemetry pauses under V8 heap pressure. Terminal Jules estimation retries later, while
+  Codex cancellation uses its already bounded accumulator instead of forcing another rollout read.
 - Antigravity sends `--conversation` only for provider-native ids. Logical/workspace continuation
   markers use `--continue` inside the isolated paired runtime volume instead.
 

@@ -1,4 +1,7 @@
-import type { JulesActivity } from "../../contracts/app-types.js";
+import type { JulesActivity, JulesActivityArtifact } from "../../contracts/app-types.js";
+import type {
+  JulesUsageActivityProjection,
+} from "./jules-activity-projection.js";
 
 /**
  * Token-usage estimation for Jules sessions.
@@ -45,6 +48,7 @@ export const JULES_TOKENIZER_CHUNK_CHARS = 64 * 1024;
 
 /** Fallback tokens-per-added-line when a diff isn't available but PR git stats are. */
 export const JULES_TOKENS_PER_ADDED_LINE = 12;
+export const JULES_APPROXIMATE_PATCH_CHARS_PER_TOKEN = 4;
 
 export interface JulesUsageEstimate {
   inputTokens: number;
@@ -157,7 +161,12 @@ function planToMarkdown(activity: JulesActivity): string {
     return "";
   }
   return steps
-    .map((step, index) => `- Step ${index + 1}: ${step.title || "Untitled step"}`)
+    .map((step, index) => {
+      const title = step.title || "Untitled step";
+      return step.description
+        ? `- Step ${index + 1}: ${title}\n  ${step.description}`
+        : `- Step ${index + 1}: ${title}`;
+    })
     .join("\n");
 }
 
@@ -165,6 +174,42 @@ function sortByCreateTime(activities: JulesActivity[]): JulesActivity[] {
   return activities
     .slice()
     .sort((a, b) => new Date(a.createTime || 0).getTime() - new Date(b.createTime || 0).getTime());
+}
+
+function readUsageProjection(activity: JulesActivity): JulesUsageActivityProjection | null {
+  const value = activity.codeUxUsageProjection;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as JulesUsageActivityProjection;
+}
+
+function changeSetSourceKey(artifact: JulesActivityArtifact): string {
+  return artifact.changeSet?.source || "default";
+}
+
+/**
+ * Jules commonly attaches the complete current patch snapshot to every later
+ * progress activity. Only the newest snapshot per source represents the
+ * delivered code state; older and byte-identical snapshots are not additional
+ * model/tool output.
+ */
+export function selectLatestJulesChangeSetArtifacts(
+  activities: JulesActivity[],
+): Set<JulesActivityArtifact> {
+  const latestBySource = new Map<string, JulesActivityArtifact>();
+  for (const activity of activities) {
+    for (const artifact of activity.artifacts || []) {
+      if (typeof artifact.changeSet?.gitPatch?.unidiffPatch === "string") {
+        latestBySource.set(changeSetSourceKey(artifact), artifact);
+      }
+    }
+  }
+  return new Set(
+    [...latestBySource.values()].filter(
+      (artifact) => Boolean(artifact.changeSet?.gitPatch?.unidiffPatch),
+    ),
+  );
 }
 
 /**
@@ -175,6 +220,7 @@ export function estimateJulesUsage(input: JulesUsageEstimateInput): JulesUsageEs
   const { countTokens, gitMetrics } = input;
   const countBoundedTokens = (text: string) => countJulesTokensInChunks(text, countTokens);
   const activities = sortByCreateTime(input.activities || []);
+  const latestChangeSetArtifacts = selectLatestJulesChangeSetArtifacts(activities);
 
   let inputTokens = 0;
   let outputTokens = 0;
@@ -183,21 +229,54 @@ export function estimateJulesUsage(input: JulesUsageEstimateInput): JulesUsageEs
   let transcriptChars = 0;
   let promptChars = 0;
 
-  // Running input context, seeded with the harness prompt + the initial prompt.
-  let context = JULES_SYSTEM_PROMPT_TOKENS;
+  // Running non-code context plus the current patch snapshot per source.
+  // Keeping these separate lets a cumulative patch snapshot replace its
+  // predecessor instead of making context grow once per progress event.
+  let nonPatchContext = JULES_SYSTEM_PROMPT_TOKENS;
+  const patchContextBySource = new Map<string, number>();
+  let patchContextTokens = 0;
   const prompt = input.prompt || "";
   if (prompt) {
     promptChars += prompt.length;
-    context = Math.min(JULES_CONTEXT_TOKEN_CAP, context + countBoundedTokens(prompt));
+    nonPatchContext = Math.min(
+      JULES_CONTEXT_TOKEN_CAP,
+      nonPatchContext + countBoundedTokens(prompt),
+    );
   }
 
   const addContext = (tokens: number) => {
-    context = Math.min(JULES_CONTEXT_TOKEN_CAP, context + tokens);
+    nonPatchContext = Math.min(JULES_CONTEXT_TOKEN_CAP, nonPatchContext + tokens);
+  };
+  const replacePatchContext = (source: string, tokens: number) => {
+    const previous = patchContextBySource.get(source) ?? 0;
+    patchContextTokens = Math.max(0, patchContextTokens - previous) + Math.max(0, tokens);
+    patchContextBySource.set(source, Math.max(0, tokens));
+  };
+  const currentContext = () => Math.min(
+    JULES_CONTEXT_TOKEN_CAP,
+    nonPatchContext + patchContextTokens,
+  );
+  const approximatePatchTokens = (patchChars: number) => Math.ceil(
+    Math.max(0, patchChars) / JULES_APPROXIMATE_PATCH_CHARS_PER_TOKEN,
+  );
+
+  const applyProjectedPatchContexts = (
+    activity: JulesActivity,
+    exactSources: Set<string>,
+  ) => {
+    for (const snapshot of readUsageProjection(activity)?.patchSnapshots || []) {
+      if (!exactSources.has(snapshot.source)) {
+        replacePatchContext(
+          snapshot.source,
+          approximatePatchTokens(snapshot.patchChars),
+        );
+      }
+    }
   };
 
   // An agent turn: the model reads the whole context, then emits `genTokens`.
   const billAgentTurn = (genTokens: number) => {
-    inputTokens += Math.min(context, JULES_CONTEXT_TOKEN_CAP);
+    inputTokens += currentContext();
     outputTokens += genTokens;
     addContext(genTokens);
   };
@@ -205,6 +284,13 @@ export function estimateJulesUsage(input: JulesUsageEstimateInput): JulesUsageEs
   let sawUnidiffPatch = false;
 
   for (const activity of activities) {
+    const usageProjection = readUsageProjection(activity);
+    let activityHasToolOperation = Boolean(
+      activity.progressUpdated
+      || usageProjection?.patchSnapshots?.length,
+    );
+    let activityHasAgentTurn = false;
+
     // User-side / context-growing events: consumed by the next agent turn's input.
     if (activity.userMessaged?.userMessage) {
       const text = activity.userMessaged.userMessage;
@@ -222,11 +308,13 @@ export function estimateJulesUsage(input: JulesUsageEstimateInput): JulesUsageEs
       const text = activity.agentMessaged.agentMessage;
       transcriptChars += text.length;
       billAgentTurn(countBoundedTokens(text));
+      activityHasAgentTurn = true;
     }
     if (activity.planGenerated?.plan?.steps) {
       const text = `Proposed plan:\n\n${planToMarkdown(activity)}`;
       transcriptChars += text.length;
       billAgentTurn(countBoundedTokens(text));
+      activityHasAgentTurn = true;
     }
     if (activity.progressUpdated?.title || activity.progressUpdated?.description) {
       // Progress updates are short status lines the agent emits while driving
@@ -235,40 +323,85 @@ export function estimateJulesUsage(input: JulesUsageEstimateInput): JulesUsageEs
       const desc = activity.progressUpdated.description || "";
       const text = `${title}\n${desc}`;
       transcriptChars += text.length;
-      toolCallCount += 1;
       billAgentTurn(countBoundedTokens(text));
+      activityHasAgentTurn = true;
     }
     if (activity.sessionCompleted !== undefined && activity.sessionCompleted !== null) {
       billAgentTurn(countBoundedTokens("Jules session completed successfully."));
+      activityHasAgentTurn = true;
     }
     if (activity.sessionFailed?.reason) {
       billAgentTurn(countBoundedTokens(`Jules session failed: ${activity.sessionFailed.reason}`));
+      activityHasAgentTurn = true;
+    }
+    if (
+      !activityHasAgentTurn
+      && activity.description
+      && !activity.userMessaged
+      && !activity.planApproved
+    ) {
+      const descriptionTokens = countBoundedTokens(activity.description);
+      if (activity.originator === "agent") {
+        transcriptChars += activity.description.length;
+        billAgentTurn(descriptionTokens);
+        activityHasAgentTurn = true;
+      } else {
+        addContext(descriptionTokens);
+      }
     }
 
     // Code artifacts: the model produced a patch (a tool result). Count only the
     // added lines as generated output; the whole patch re-enters context.
+    const exactPatchSources = new Set<string>();
     for (const art of activity.artifacts || []) {
       const unidiffPatch = art.changeSet?.gitPatch?.unidiffPatch;
-      if (unidiffPatch) {
+      if (typeof unidiffPatch === "string") {
+        activityHasToolOperation = true;
+      }
+      if (unidiffPatch && latestChangeSetArtifacts.has(art)) {
         sawUnidiffPatch = true;
-        toolCallCount += 1;
         const addedCode = measureAddedDiffLines(unidiffPatch, countTokens);
         outputTokens += addedCode.tokens;
         transcriptChars += addedCode.chars;
-        addContext(countBoundedTokens(unidiffPatch));
+        const source = changeSetSourceKey(art);
+        exactPatchSources.add(source);
+        replacePatchContext(source, countBoundedTokens(unidiffPatch));
       }
       const commitMessage = art.changeSet?.gitPatch?.suggestedCommitMessage;
-      if (commitMessage) {
+      if (commitMessage && latestChangeSetArtifacts.has(art)) {
         const msgTokens = countBoundedTokens(commitMessage);
         outputTokens += msgTokens;
         transcriptChars += commitMessage.length;
         addContext(msgTokens);
       }
       if (art.media?.data) {
+        activityHasToolOperation = true;
         // An attached image is model *input* (it is read into context), not output.
         // Use the standard ~258-token cost of a vision tile.
         addContext(258);
       }
+      if (art.bashOutput) {
+        activityHasToolOperation = true;
+        const command = art.bashOutput.command || "";
+        if (command) {
+          const commandTokens = countBoundedTokens(command);
+          transcriptChars += command.length;
+          if (activityHasAgentTurn) {
+            outputTokens += commandTokens;
+            addContext(commandTokens);
+          } else {
+            billAgentTurn(commandTokens);
+            activityHasAgentTurn = true;
+          }
+        }
+        if (art.bashOutput.output) {
+          addContext(countBoundedTokens(art.bashOutput.output));
+        }
+      }
+    }
+    applyProjectedPatchContexts(activity, exactPatchSources);
+    if (activityHasToolOperation) {
+      toolCallCount += 1;
     }
   }
 
