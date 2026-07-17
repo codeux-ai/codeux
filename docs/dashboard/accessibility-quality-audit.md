@@ -4,7 +4,7 @@ Use this checklist when changing dashboard shell navigation, shared primitives, 
 
 ## Source Areas
 
-The contracts below are implemented across `dashboard/src/v2/components/ui/*`, `dashboard/src/v2/components/TopNav.tsx`, `dashboard/src/v2/SettingsPage.tsx`, `dashboard/src/v2/TasksPage.tsx`, `dashboard/src/v2/BrowserPage.tsx`, live runtime components such as `LiveSessionPage.tsx`, `OverviewTelemetry.tsx`, `components/live-session/*`, and Stats components under `dashboard/src/v2/pages/stats/`.
+The contracts below are implemented across `dashboard/src/v2/components/ui/*`, `dashboard/src/v2/components/TopNav.tsx`, route-owned interaction surfaces for Nodes, Scheduler, Custom Dashboards, Agents, Onboarding, Projects, Knowledge, Browser Preview, and Chat, live runtime components such as `LiveSessionPage.tsx`, `OverviewTelemetry.tsx`, `components/live-session/*`, and Stats components under `dashboard/src/v2/pages/stats/`.
 
 ## Semantic Structure
 
@@ -51,6 +51,16 @@ The contracts below are implemented across `dashboard/src/v2/components/ui/*`, `
 - Motion must use the shared motion tokens and reduced-motion hooks/classes. Reduced motion removes or snaps movement while preserving static state cues such as rings, halos, badges, progress values, highlighted active tabs, and visible chart summaries.
 - Mobile and text-zoom checks must include shell selectors, Settings forms, Browser rails, Tasks cards, Stats tables, and live telemetry panels at narrow widths with long provider/model names.
 
+## Route Refinement Acceptance
+
+- Dirty route-owned editors must provide both escape routes: cancel keeps the edited values and current route, while save or explicit discard continues to the retained destination exactly once.
+- Destructive confirmation must use the shared focus-managed primitive. Acceptance coverage checks focus remains inside while open, Escape does not mutate data, and focus returns to the trigger or a logical fallback after close.
+- Pending row or item actions must disable or mark the affected control busy before another activation can dispatch. Retryable errors remain associated with the failed item and expose one keyboard-reachable retry action.
+- Removing a focused item must move focus to the next logical item, then the previous item, then a named list/page fallback. Never leave focus on a detached dialog or row.
+- Field validation must connect the invalid control to its error using `aria-describedby` or `aria-errormessage`; a nearby unassociated red paragraph is not sufficient.
+- Reduced-motion tests must emulate `prefers-reduced-motion: reduce` before route load, operate the same keyboard control, and assert the final state and live announcement. Do not wait for animation time or infer success from movement.
+- E2E records must be generic and isolated to the approved local test project. Cleanup is mandatory, and failure attachments must omit project display names, credentials, authored content, and secrets.
+
 ## Verification
 
 - Run `pnpm run test:dashboard` for repository-level dashboard regression coverage.
@@ -58,3 +68,5 @@ The contracts below are implemented across `dashboard/src/v2/components/ui/*`, `
 - Run `pnpm run build` after documentation or dashboard changes so server build, dashboard typecheck, and Vite packaging agree.
 - When runnable, start `pnpm run dev` and verify the dashboard route still responds with `GET http://localhost:4444` or the logged fallback port.
 - For accessibility regressions, prefer deterministic tests that assert roles, accessible names, labels, live-region urgency, `aria-busy`, `aria-sort`, mobile labels, focus restoration, and overflow-safe classes over broad snapshots.
+- Run `pnpm exec vitest run tests/dashboard/accessibility/dashboard-quality-regressions.test.tsx` to guard shared confirmation, draft protection, validation association, and non-motion status semantics across refined routes.
+- Run `pnpm run test:e2e -- tests/e2e/navigation/interaction-refinement.spec.ts` against the repository Playwright fixture to verify the running-dashboard acceptance contract. The suite must not target a live or non-test project.

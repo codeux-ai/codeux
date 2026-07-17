@@ -24,6 +24,8 @@ Long project names, locations, branches, source badges, and run details are trun
 
 The **All**, **Running**, **Idle**, and **Failed** filters show live counts and update the gallery in place. Projects that need intervention appear in **All** but are not counted as running, idle, or failed. If a filter has no matches, choose **Show all projects** or use the **Add Project** card that remains in the grid.
 
+The gallery is exposed as a project list to assistive technology. Filter changes announce the number of matching projects, and selecting a different active project announces its new name. If filtering removes the focused card, focus remains on the filter that caused the change. If deletion removes a focused card, focus moves to the next visible project, the previous project, or **Add Project**.
+
 ## Gallery states and responsive behavior
 
 - Initial loading marks the project-card region busy, announces that projects are loading, and shows skeleton cards.
@@ -33,13 +35,13 @@ The **All**, **Running**, **Idle**, and **Failed** filters show live counts and 
 - Cards automatically fill the available width and can shrink below their nominal desktop width. Headers, filters, card actions, form controls, and dialog actions wrap or stack on mobile, while long metadata stays inside the card instead of creating horizontal overflow.
 - Setup dialogs stay within the viewport and scroll their choice area internally on short screens.
 
-The page respects reduced motion. Optional hover, progress, spinner, and modal transitions stop, while selected borders, status text, focus rings, busy state, and live announcements remain visible.
+The page respects reduced motion. Optional hover, card movement, progress, spinner, and modal transitions stop, while selected borders, pending labels, success/error panels, removal feedback, focus rings, busy state, and live announcements remain visible.
 
 ## Keyboard and focus behavior
 
 Use Tab and Shift+Tab to move through **New Project**, the status filters, each card's selection surface, and its visible actions. Filters and card controls are native buttons, so Enter or Space activates them. Every control has a visible focus ring.
 
-The primary card surface and footer selection button expose whether the project is selected. Setup, settings, and delete are separate controls and do not accidentally select the card. The Add Project modal keeps focus inside while open, starts at the project name, and restores focus when it closes. Invalid submit announces one summary, marks the affected fields, focuses the first invalid field, and scrolls it into view; directory loading, empty folders, failures, and selected paths are also announced.
+The primary card surface and footer selection button expose whether the project is selected. Setup, settings, and delete are separate controls and do not accidentally select the card. Add Project and setup dialogs keep focus inside, support Escape and backdrop dismissal, start at their primary field or first scope choice, and restore focus when they close. The deletion confirmation follows the same focus trap and Escape/cancel policy; while deletion is pending its controls cannot submit twice. Invalid project creation announces one summary, marks the affected fields, focuses the first invalid field, and scrolls it into view; directory loading, empty folders, failures, and selected paths are also announced.
 
 ## Creating a project
 
@@ -96,13 +98,15 @@ Use **Select project** to make a project active, or use **Project settings** to 
 
 Deletion is destructive. The project card's **Delete project** action opens a confirmation dialog that names the project and explains what remains on disk. Confirming sends the existing dashboard deletion request and refreshes the gallery. Project deletion removes the project and its associated local runtime data; it does not delete the repository checkout or files inside `<repo>/.code-ux/`.
 
+The confirmation stays pending until the request settles and suppresses duplicate deletion. A failure leaves the project in the gallery with the returned diagnostic and a **Retry** action. Success leaves a dismissible confirmation above the unchanged gallery while focus moves to the nearest remaining card.
+
 The Settings **Danger Zone** provides a confirmation dialog for its **Delete Project** workflow. Programmatic deletion through the MCP `manage_projects` action remains gated by explicit `approval.confirmed = true`.
 
 ## Running Project Setup Agent
 
-Choose **Setup project** on an existing card to select Agents, Quicksprints, Preview Script, CI, Techstack detection, and optional Docs embedding. Starting setup uses the existing background setup flow; duplicate setup is disabled while the run is active.
+Choose **Setup project** on an existing card to select Agents, Quicksprints, Preview Script, CI, Techstack detection, and optional Docs embedding. Starting setup uses the existing background setup flow; duplicate setup is disabled while the start request or run is active.
 
-The page reports setup start, running, completion, and failure through notifications. Once tracking returns an invocation ID, the card's **Project setup running** row opens that invocation in Chat. Completion notifications also retain an **Open invocation** action so generated artifacts and errors can be reviewed after the run finishes.
+The page reports setup start, running, completion, and failure through notifications and persistent card feedback. Once tracking returns an invocation ID, the card's **Project setup running** row opens that invocation in Chat. Closing the setup dialog stops browser polling but does not cancel accepted background setup; the invocation action remains on the card. Start and invocation failures offer **Retry**, while a temporary tracking failure resumes polling for the known invocation instead of launching duplicate work. Completion feedback also retains **Open invocation** so generated artifacts, partial docs-ingestion diagnostics, and errors can be reviewed after the run finishes.
 
 ## Worker assignment
 
