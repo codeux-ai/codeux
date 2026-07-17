@@ -238,7 +238,12 @@ Structured invocation messages reconcile by stable ordinal in one SQLite transac
 
 Text-only completion fallback remains append-only so retry and audit messages are not removed.
 Hosted Jules activity-to-message sync uses the same atomic suffix reconciliation instead of clearing
-and reinserting the invocation transcript on each poll.
+and reinserting the invocation transcript on each poll. Full Jules histories are fetched and
+tokenized through a one-at-a-time process queue, duplicate in-flight requests for the same session
+join the existing work, and tokenizer input is sliced to at most 64 KiB. The raw activity array is
+released after bounded messages and numeric usage are derived, before SQLite reconciliation begins.
+This keeps wide hosted-session synchronization from multiplying large patch and media payloads in
+the Node.js heap.
 
 Streaming provider activity is buffered for 250 ms or 50 source records, then adjacent records from
 the same originator are compacted into bounded 16 KiB rows before one batch transaction. This avoids

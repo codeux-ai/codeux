@@ -227,7 +227,18 @@ Stats pricing still prefers configured model-pricing overrides and catalogue tok
 
 ### Jules
 
-Jules does not expose a compatible native token contract. Instead of excluding it, Code UX computes **estimated** tokens for Jules by accumulating input and output characters divided by 4 (the characters-per-token heuristic).
+Jules does not expose a compatible native token contract. Instead of excluding it, Code UX computes
+**estimated** tokens from the cumulative activity stream. The estimator models replayed input
+context, generated messages, progress/tool turns, and added lines from patch artifacts. It uses the
+`cl100k_base` tokenizer in slices of at most 64 KiB so a multi-megabyte patch cannot create one
+unbounded tokenizer allocation.
+
+Full-conversation usage synchronization is process-wide serialized. Calls for the same session join
+the existing in-flight sync, while different sessions wait on a one-at-a-time queue. Once bounded
+invocation messages and numeric usage have been derived, Code UX releases the raw remote activity
+array before reconciling SQLite rows. This prevents a wide set of hosted sessions from retaining and
+tokenizing multiple large histories concurrently without changing the persisted message or usage
+contract.
 
 During live synchronization (`syncLiveInvocation`), expected 404 responses indicating that a session or activity stream is unavailable are handled gracefully: they are logged at the debug level and skipped to avoid spamming the logs with warnings. For terminal sync (`calculateAndSaveUsageForTask`), the system is conservative: if the session returns a 404, it skips creating a new usage record to prevent saving "fake" empty records unless an existing prompt or usage record is already present to allow safe estimation.
 

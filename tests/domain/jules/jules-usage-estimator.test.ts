@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { getEncoding } from "js-tiktoken";
 import {
+  countJulesTokensInChunks,
   estimateJulesUsage,
   extractAddedDiffLines,
   JULES_SYSTEM_PROMPT_TOKENS,
   JULES_CONTEXT_TOKEN_CAP,
+  JULES_TOKENIZER_CHUNK_CHARS,
   JULES_TOKENS_PER_ADDED_LINE,
 } from "../../../src/domain/jules/jules-usage-estimator.js";
 import type { JulesActivity } from "../../../src/contracts/app-types.js";
@@ -25,6 +27,21 @@ describe("extractAddedDiffLines", () => {
       "+const b = 2;",
     ].join("\n");
     expect(extractAddedDiffLines(patch)).toBe("const a = 1;\nconst b = 2;");
+  });
+});
+
+describe("countJulesTokensInChunks", () => {
+  it("never passes an unbounded string to the tokenizer", () => {
+    const input = "x".repeat(JULES_TOKENIZER_CHUNK_CHARS * 3 + 17);
+    const seenChunkLengths: number[] = [];
+    const tokens = countJulesTokensInChunks(input, (chunk) => {
+      seenChunkLengths.push(chunk.length);
+      return chunk.length;
+    });
+
+    expect(tokens).toBe(input.length);
+    expect(seenChunkLengths.length).toBe(4);
+    expect(Math.max(...seenChunkLengths)).toBeLessThanOrEqual(JULES_TOKENIZER_CHUNK_CHARS);
   });
 });
 

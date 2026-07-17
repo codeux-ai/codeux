@@ -11,6 +11,7 @@ import type { JulesActivity, JulesSession } from "../../contracts/app-types.js";
 import { estimateJulesUsage, type JulesUsageEstimate } from "./jules-usage-estimator.js";
 import {
   MAX_MESSAGE_CONTENT_CHARS,
+  MAX_TOOL_PAYLOAD_CHARS,
   truncateForStorage,
 } from "../../services/invocation-message-limits.js";
 import { isNotFoundError } from "../../integrations/jules-api-client.js";
@@ -35,6 +36,8 @@ const LIVE_SYNC_THROTTLE_MS = 8_000;
 export class JulesUsageService {
   private encoder: Tiktoken | null = null;
   private readonly lastLiveSyncMsBySession = new Map<string, number>();
+  private readonly liveSyncBySession = new Map<string, Promise<void>>();
+  private usageSyncTail: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly julesClient: JulesClient,
@@ -63,6 +66,24 @@ export class JulesUsageService {
     sessionId: string,
     passedPrompt?: string,
     gitMetrics?: GitMetrics
+  ): Promise<void> {
+    await this.enqueueUsageSync(async () => {
+      await this.calculateAndSaveUsageForTaskSerial(
+        projectId,
+        taskId,
+        sessionId,
+        passedPrompt,
+        gitMetrics,
+      );
+    });
+  }
+
+  private async calculateAndSaveUsageForTaskSerial(
+    projectId: string,
+    taskId: string,
+    sessionId: string,
+    passedPrompt?: string,
+    gitMetrics?: GitMetrics,
   ): Promise<void> {
     try {
       const existingRecord = this.executionRepository.getLatestProviderInvocationUsageBySession(sessionId, "task_coding");
@@ -120,13 +141,42 @@ export class JulesUsageService {
     prompt?: string,
     gitMetrics?: GitMetrics
   ): Promise<void> {
+    const inFlight = this.liveSyncBySession.get(sessionId);
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
+
     const now = Date.now();
     const last = this.lastLiveSyncMsBySession.get(sessionId) ?? 0;
     if (now - last < LIVE_SYNC_THROTTLE_MS) {
       return;
     }
-    this.lastLiveSyncMsBySession.set(sessionId, now);
 
+    const pending = this.enqueueUsageSync(async () => {
+      try {
+        await this.syncLiveInvocationSerial(projectId, taskId, sessionId, prompt, gitMetrics);
+      } finally {
+        this.lastLiveSyncMsBySession.set(sessionId, Date.now());
+      }
+    });
+    this.liveSyncBySession.set(sessionId, pending);
+    try {
+      await pending;
+    } finally {
+      if (this.liveSyncBySession.get(sessionId) === pending) {
+        this.liveSyncBySession.delete(sessionId);
+      }
+    }
+  }
+
+  private async syncLiveInvocationSerial(
+    projectId: string,
+    taskId: string,
+    sessionId: string,
+    prompt?: string,
+    gitMetrics?: GitMetrics,
+  ): Promise<void> {
     try {
       const activities = await this.julesClient.getFullConversation(sessionId);
       if (activities.length === 0 && !prompt) {
@@ -148,6 +198,12 @@ export class JulesUsageService {
         this.logger.warn("Failed live Jules invocation sync", { error, sessionId });
       }
     }
+  }
+
+  private enqueueUsageSync(work: () => Promise<void>): Promise<void> {
+    const pending = this.usageSyncTail.then(work, work);
+    this.usageSyncTail = pending.catch(() => undefined);
+    return pending;
   }
 
   /** Resolves the session prompt and PR git stats, fetching the session only
@@ -197,12 +253,22 @@ export class JulesUsageService {
   }): void {
     const { projectId, taskId, sessionId, activities, prompt, gitMetrics, final } = args;
 
-    const estimate = estimateJulesUsage({
-      prompt,
-      activities,
-      gitMetrics,
-      countTokens: (text) => this.countTokens(text),
-    });
+    let estimate!: JulesUsageEstimate;
+    let conversationMessages!: AppendExecutionInvocationMessageInput[];
+    try {
+      conversationMessages = this.buildConversationMessages(activities, prompt, "");
+      estimate = estimateJulesUsage({
+        prompt,
+        activities,
+        gitMetrics,
+        countTokens: (text) => this.countTokens(text),
+      });
+    } finally {
+      // These arrays are freshly fetched for this sync. Release the raw remote
+      // messages, patches, and media before the SQLite reconciliation allocates
+      // its own bounded message view.
+      activities.length = 0;
+    }
 
     const status = final ? "completed" : "running";
 
@@ -280,9 +346,15 @@ export class JulesUsageService {
 
     // Activity history is cumulative. Reconcile by stable ordinal so an
     // eight-second live sync only inserts or updates the changed suffix.
+    if (prompt && conversationMessages.length > 0) {
+      conversationMessages[0] = {
+        ...conversationMessages[0],
+        createdAt: record.createdAt,
+      };
+    }
     this.executionRepository.syncExecutionInvocationMessages(
       execInvocation.id,
-      this.buildConversationMessages(activities, prompt, record.createdAt),
+      conversationMessages,
     );
 
     this.logger.info("Saved Jules usage telemetry and conversation transcript for task", {
@@ -372,10 +444,14 @@ export class JulesUsageService {
       for (const art of activity.artifacts || []) {
         const patch = art.changeSet?.gitPatch?.unidiffPatch;
         if (patch) {
+          const contentPatch = truncateForStorage(
+            patch,
+            Math.max(0, MAX_MESSAGE_CONTENT_CHARS - 12),
+          );
           push({
             role: "tool",
-            contentMarkdown: cap(`\`\`\`diff\n${patch}\n\`\`\``),
-            toolCallsJson: { output: truncateForStorage(patch, MAX_MESSAGE_CONTENT_CHARS) },
+            contentMarkdown: `\`\`\`diff\n${contentPatch}\n\`\`\``,
+            toolCallsJson: { output: truncateForStorage(patch, MAX_TOOL_PAYLOAD_CHARS) },
             metadata: { ...base, kind: "tool_result", toolName: "apply_patch" },
           });
         }

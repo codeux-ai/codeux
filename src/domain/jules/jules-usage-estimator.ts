@@ -38,6 +38,11 @@ export const JULES_SYSTEM_PROMPT_TOKENS = 800;
  *  compaction Jules performs and prevents quadratic blow-up on long sessions. */
 export const JULES_CONTEXT_TOKEN_CAP = 200_000;
 
+/** Maximum string slice passed to the tokenizer at once. `js-tiktoken`
+ * materializes token arrays and regex matches, so feeding it a multi-megabyte
+ * patch in one call can temporarily consume gigabytes of V8 heap. */
+export const JULES_TOKENIZER_CHUNK_CHARS = 64 * 1024;
+
 /** Fallback tokens-per-added-line when a diff isn't available but PR git stats are. */
 export const JULES_TOKENS_PER_ADDED_LINE = 12;
 
@@ -80,6 +85,72 @@ export function extractAddedDiffLines(unidiffPatch: string): string {
   return added.join("\n");
 }
 
+/** Tokenizes large values in bounded slices. Jules usage is already an
+ * estimate, and the tiny BPE-boundary variance is preferable to an unbounded
+ * temporary allocation for generated patches and transcripts. */
+export function countJulesTokensInChunks(
+  text: string,
+  countTokens: (chunk: string) => number,
+): number {
+  let total = 0;
+  let offset = 0;
+  while (offset < text.length) {
+    let end = Math.min(text.length, offset + JULES_TOKENIZER_CHUNK_CHARS);
+    if (
+      end < text.length
+      && end > offset
+      && text.charCodeAt(end - 1) >= 0xD800
+      && text.charCodeAt(end - 1) <= 0xDBFF
+    ) {
+      end -= 1;
+    }
+    total += countTokens(text.slice(offset, end));
+    offset = end;
+  }
+  return total;
+}
+
+function measureAddedDiffLines(
+  unidiffPatch: string,
+  countTokens: (text: string) => number,
+): { chars: number; tokens: number } {
+  let batch = "";
+  let chars = 0;
+  let tokens = 0;
+  let hasAddedLine = false;
+  let cursor = 0;
+
+  const flush = () => {
+    if (!batch) {
+      return;
+    }
+    tokens += countJulesTokensInChunks(batch, countTokens);
+    batch = "";
+  };
+
+  while (cursor <= unidiffPatch.length) {
+    const newline = unidiffPatch.indexOf("\n", cursor);
+    const end = newline >= 0 ? newline : unidiffPatch.length;
+    const line = unidiffPatch.slice(cursor, end);
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      const addedLine = line.slice(1);
+      const separator = hasAddedLine ? "\n" : "";
+      chars += separator.length + addedLine.length;
+      if (batch.length + separator.length + addedLine.length > JULES_TOKENIZER_CHUNK_CHARS) {
+        flush();
+      }
+      batch += separator + addedLine;
+      hasAddedLine = true;
+    }
+    if (newline < 0) {
+      break;
+    }
+    cursor = newline + 1;
+  }
+  flush();
+  return { chars, tokens };
+}
+
 function planToMarkdown(activity: JulesActivity): string {
   const steps = activity.planGenerated?.plan?.steps;
   if (!Array.isArray(steps) || steps.length === 0) {
@@ -102,6 +173,7 @@ function sortByCreateTime(activities: JulesActivity[]): JulesActivity[] {
  */
 export function estimateJulesUsage(input: JulesUsageEstimateInput): JulesUsageEstimate {
   const { countTokens, gitMetrics } = input;
+  const countBoundedTokens = (text: string) => countJulesTokensInChunks(text, countTokens);
   const activities = sortByCreateTime(input.activities || []);
 
   let inputTokens = 0;
@@ -116,7 +188,7 @@ export function estimateJulesUsage(input: JulesUsageEstimateInput): JulesUsageEs
   const prompt = input.prompt || "";
   if (prompt) {
     promptChars += prompt.length;
-    context = Math.min(JULES_CONTEXT_TOKEN_CAP, context + countTokens(prompt));
+    context = Math.min(JULES_CONTEXT_TOKEN_CAP, context + countBoundedTokens(prompt));
   }
 
   const addContext = (tokens: number) => {
@@ -137,24 +209,24 @@ export function estimateJulesUsage(input: JulesUsageEstimateInput): JulesUsageEs
     if (activity.userMessaged?.userMessage) {
       const text = activity.userMessaged.userMessage;
       promptChars += text.length;
-      addContext(countTokens(text));
+      addContext(countBoundedTokens(text));
     }
     if (activity.planApproved?.planId) {
       const text = `Approved plan (ID: ${activity.planApproved.planId})`;
       promptChars += text.length;
-      addContext(countTokens(text));
+      addContext(countBoundedTokens(text));
     }
 
     // Agent-side model output turns.
     if (activity.agentMessaged?.agentMessage) {
       const text = activity.agentMessaged.agentMessage;
       transcriptChars += text.length;
-      billAgentTurn(countTokens(text));
+      billAgentTurn(countBoundedTokens(text));
     }
     if (activity.planGenerated?.plan?.steps) {
       const text = `Proposed plan:\n\n${planToMarkdown(activity)}`;
       transcriptChars += text.length;
-      billAgentTurn(countTokens(text));
+      billAgentTurn(countBoundedTokens(text));
     }
     if (activity.progressUpdated?.title || activity.progressUpdated?.description) {
       // Progress updates are short status lines the agent emits while driving
@@ -164,13 +236,13 @@ export function estimateJulesUsage(input: JulesUsageEstimateInput): JulesUsageEs
       const text = `${title}\n${desc}`;
       transcriptChars += text.length;
       toolCallCount += 1;
-      billAgentTurn(countTokens(text));
+      billAgentTurn(countBoundedTokens(text));
     }
     if (activity.sessionCompleted !== undefined && activity.sessionCompleted !== null) {
-      billAgentTurn(countTokens("Jules session completed successfully."));
+      billAgentTurn(countBoundedTokens("Jules session completed successfully."));
     }
     if (activity.sessionFailed?.reason) {
-      billAgentTurn(countTokens(`Jules session failed: ${activity.sessionFailed.reason}`));
+      billAgentTurn(countBoundedTokens(`Jules session failed: ${activity.sessionFailed.reason}`));
     }
 
     // Code artifacts: the model produced a patch (a tool result). Count only the
@@ -180,15 +252,14 @@ export function estimateJulesUsage(input: JulesUsageEstimateInput): JulesUsageEs
       if (unidiffPatch) {
         sawUnidiffPatch = true;
         toolCallCount += 1;
-        const addedCode = extractAddedDiffLines(unidiffPatch);
-        const codeTokens = countTokens(addedCode);
-        outputTokens += codeTokens;
-        transcriptChars += addedCode.length;
-        addContext(countTokens(unidiffPatch));
+        const addedCode = measureAddedDiffLines(unidiffPatch, countTokens);
+        outputTokens += addedCode.tokens;
+        transcriptChars += addedCode.chars;
+        addContext(countBoundedTokens(unidiffPatch));
       }
       const commitMessage = art.changeSet?.gitPatch?.suggestedCommitMessage;
       if (commitMessage) {
-        const msgTokens = countTokens(commitMessage);
+        const msgTokens = countBoundedTokens(commitMessage);
         outputTokens += msgTokens;
         transcriptChars += commitMessage.length;
         addContext(msgTokens);
