@@ -50,6 +50,7 @@ import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { OnboardingInstallationStep } from "./OnboardingInstallationStep.js";
 import { OnboardingAppearanceStep } from "./OnboardingAppearanceStep.js";
+import { Dialog } from "../ui/Dialog.js";
 import { fetchRuntimeAssetsStatus, prepareProviderTool } from "../../lib/runtime-assets-api.js";
 import { isDeprecatedProvider } from "../../lib/provider-lifecycle.js";
 import { useOnboardingMessages } from "../../i18n/messages/onboarding.js";
@@ -373,7 +374,6 @@ const normalizeOnboardingReadiness = (nextReadiness: OnboardingRuntimeReadiness)
 export const OnboardingExperience: FunctionComponent = () => {
   const { t, tp } = useOnboardingMessages();
   const navigate = useNavigate();
-  const backdropRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLElement>(null);
   const sideRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -388,6 +388,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     settings,
     selectedProviders,
     selectedProviderTypes,
+    draftDirty,
     saving,
     error,
     activeStepData: active,
@@ -401,8 +402,12 @@ export const OnboardingExperience: FunctionComponent = () => {
   const [checkingReadiness, setCheckingReadiness] = useState(false);
   const [runningInstallMode, setRunningInstallMode] = useState<OnboardingDependencyInstallMode | null>(null);
   const [lastInstallResult, setLastInstallResult] = useState<OnboardingDependencyInstallerResult | null>(null);
+  const [failedInstallMode, setFailedInstallMode] = useState<OnboardingDependencyInstallMode | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
+  const [dismissalNotice, setDismissalNotice] = useState<string | null>(null);
   const [runtimeAssets, setRuntimeAssets] = useState<RuntimeAssetsStatus | null>(null);
   const [easyProviderAuthModes, setEasyProviderAuthModes] = useState<Partial<Record<ProviderId, "dashboardAuth" | "localAuth">>>({});
   const reducedMotion = useReducedMotion();
@@ -414,9 +419,13 @@ export const OnboardingExperience: FunctionComponent = () => {
     antigravity: t("providerDescriptionAntigravity"), "mockup-cli": t("providerDescriptionMock"),
   };
   const validationRef = useRef<HTMLDivElement>(null);
+  const validationFocusSelectorRef = useRef<string | null>(null);
   const openRef = useRef(open);
   const mountedRef = useRef(true);
   const loadRequestRef = useRef(0);
+  const installRequestRef = useRef(0);
+  const providerPreparationRequestRef = useRef(0);
+  const saveRequestRef = useRef(0);
   const {
     state: onboardingUserState,
     loading: onboardingStateLoading,
@@ -426,14 +435,20 @@ export const OnboardingExperience: FunctionComponent = () => {
 
   useEffect(() => {
     openRef.current = open;
+    if (open) {
+      setDismissalNotice(null);
+    }
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
+    const requestGeneration = providerPreparationRequestRef.current;
     let cancelled = false;
     const refresh = async (): Promise<void> => {
       const next = await fetchRuntimeAssetsStatus().catch(() => null);
-      if (!cancelled && next) setRuntimeAssets(next);
+      if (!cancelled && next && openRef.current && requestGeneration === providerPreparationRequestRef.current) {
+        setRuntimeAssets(next);
+      }
     };
     void refresh();
     const interval = window.setInterval(() => void refresh(), 2_000);
@@ -445,15 +460,23 @@ export const OnboardingExperience: FunctionComponent = () => {
 
   const beginProviderPreparation = (provider: ProviderId): void => {
     if (provider === "jules" || provider === "mockup-cli") return;
+    const requestGeneration = providerPreparationRequestRef.current;
     void prepareProviderTool(provider)
       .then(() => fetchRuntimeAssetsStatus())
-      .then((next) => setRuntimeAssets(next))
+      .then((next) => {
+        if (mountedRef.current && openRef.current && requestGeneration === providerPreparationRequestRef.current) {
+          setRuntimeAssets(next);
+        }
+      })
       .catch(() => undefined);
   };
 
   useEffect(() => {
     if (!open) {
       loadRequestRef.current += 1;
+      installRequestRef.current += 1;
+      providerPreparationRequestRef.current += 1;
+      saveRequestRef.current += 1;
       clearAppearancePreview();
     }
   }, [open]);
@@ -461,12 +484,70 @@ export const OnboardingExperience: FunctionComponent = () => {
   useEffect(() => () => {
     mountedRef.current = false;
     loadRequestRef.current += 1;
+    installRequestRef.current += 1;
+    providerPreparationRequestRef.current += 1;
+    saveRequestRef.current += 1;
     clearAppearancePreview();
   }, []);
 
   const closeOnboarding = (): void => {
+    openRef.current = false;
+    loadRequestRef.current += 1;
+    installRequestRef.current += 1;
+    providerPreparationRequestRef.current += 1;
+    saveRequestRef.current += 1;
     clearAppearancePreview();
     dispatch({ type: "close" });
+  };
+
+  const dismissalBlockedMessage = saving
+    ? t("closeUnavailableSaving")
+    : runningInstallMode
+      ? t("closeUnavailableInstalling")
+      : dismissing
+        ? t("closeUnavailableCancelling")
+        : null;
+  const dismissalBlocked = dismissalBlockedMessage !== null;
+
+  const completeCancellation = async (): Promise<void> => {
+    if (dismissalBlocked) {
+      setDismissalNotice(dismissalBlockedMessage);
+      return;
+    }
+    setDismissing(true);
+    setDismissalNotice(t("closeUnavailableCancelling"));
+    try {
+      await markOnboardingCompleted("cancel");
+      if (!mountedRef.current || !openRef.current) {
+        return;
+      }
+      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
+      setShowDiscardConfirmation(false);
+      closeOnboarding();
+    } catch (cancelError) {
+      if (mountedRef.current && openRef.current) {
+        setDismissalNotice(t("cancelFailedAnnouncement", {
+          message: cancelError instanceof Error ? cancelError.message : String(cancelError),
+        }));
+      }
+    } finally {
+      if (mountedRef.current && openRef.current) {
+        setDismissing(false);
+      }
+    }
+  };
+
+  const requestClose = (): void => {
+    if (dismissalBlocked) {
+      setDismissalNotice(dismissalBlockedMessage);
+      return;
+    }
+    setDismissalNotice(null);
+    if (draftDirty) {
+      setShowDiscardConfirmation(true);
+      return;
+    }
+    void completeCancellation();
   };
 
   useEffect(() => {
@@ -480,26 +561,27 @@ export const OnboardingExperience: FunctionComponent = () => {
     const handleOpen = () => {
       void resetOnboardingState();
       dispatch({ type: "reset-and-open" });
+      openRef.current = true;
+      loadRequestRef.current += 1;
+      installRequestRef.current += 1;
+      providerPreparationRequestRef.current += 1;
+      saveRequestRef.current += 1;
+      setShowDiscardConfirmation(false);
+      setDismissing(false);
+      setDismissalNotice(null);
+      setCheckingReadiness(false);
+      setRunningInstallMode(null);
+      setLastInstallResult(null);
+      setFailedInstallMode(null);
+      setInstallError(null);
+      setValidationMessage(null);
+      setRuntimeAssets(null);
+      setEasyProviderAuthModes({});
       setIntroPhase("intro");
     };
     window.addEventListener(ONBOARDING_OPEN_EVENT, handleOpen);
     return () => window.removeEventListener(ONBOARDING_OPEN_EVENT, handleOpen);
   }, [resetOnboardingState]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        void markOnboardingCompleted("cancel");
-        window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-        closeOnboarding();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, markOnboardingCompleted]);
 
   const handleIntroExitStart = () => {
     setIntroPhase("transitioning");
@@ -543,16 +625,27 @@ export const OnboardingExperience: FunctionComponent = () => {
   }, [open]);
 
   const runDependencyInstall = async (mode: OnboardingDependencyInstallMode): Promise<void> => {
+    const requestId = installRequestRef.current + 1;
+    installRequestRef.current = requestId;
     setRunningInstallMode(mode);
+    setFailedInstallMode(null);
     setInstallError(null);
     try {
       const result = await installOnboardingDependencies(mode);
+      if (!mountedRef.current || !openRef.current || requestId !== installRequestRef.current) {
+        return;
+      }
       setLastInstallResult(result);
       await load();
     } catch (dependencyInstallError) {
-      setInstallError(dependencyInstallError instanceof Error ? dependencyInstallError.message : String(dependencyInstallError));
+      if (mountedRef.current && openRef.current && requestId === installRequestRef.current) {
+        setFailedInstallMode(mode);
+        setInstallError(dependencyInstallError instanceof Error ? dependencyInstallError.message : String(dependencyInstallError));
+      }
     } finally {
-      setRunningInstallMode(null);
+      if (mountedRef.current && openRef.current && requestId === installRequestRef.current) {
+        setRunningInstallMode(null);
+      }
     }
   };
 
@@ -571,11 +664,6 @@ export const OnboardingExperience: FunctionComponent = () => {
     }
     const ctx = gsap.context(() => {
       gsap.fromTo(
-        backdropRef.current,
-        { opacity: 0 },
-        { opacity: 1, duration: reducedMotion ? 0 : MODAL_MOTION.backdrop.duration, ease: MODAL_MOTION.backdrop.ease },
-      );
-      gsap.fromTo(
         shellRef.current,
         {
           opacity: MODAL_MOTION.entry.opacityStart,
@@ -588,8 +676,8 @@ export const OnboardingExperience: FunctionComponent = () => {
           y: MODAL_MOTION.entry.yEnd,
           scale: MODAL_MOTION.entry.scaleEnd,
           filter: MODAL_MOTION.entry.filterEnd,
-          duration: reducedMotion ? 0 : 0.72,
-          ease: MODAL_MOTION.entry.ease,
+          duration: gsapTokens.enterExit.duration,
+          ease: gsapTokens.enterExit.ease,
           clearProps: "filter",
         },
       );
@@ -597,12 +685,12 @@ export const OnboardingExperience: FunctionComponent = () => {
         gsap.fromTo(
           sideRef.current.querySelectorAll("[data-step-item], [data-sidebar-copy]"),
           { opacity: 0, x: reducedMotion ? 0 : -18 },
-          { opacity: 1, x: 0, duration: reducedMotion ? 0 : 0.65, stagger: reducedMotion ? 0 : 0.055, ease: "power3.out", delay: reducedMotion ? 0 : 0.12 },
+          { opacity: 1, x: 0, duration: gsapTokens.selectionMovement.duration, ease: gsapTokens.selectionMovement.ease },
         );
       }
     });
     return () => ctx.revert();
-  }, [open, reducedMotion]);
+  }, [open, reducedMotion, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease, gsapTokens.selectionMovement.duration, gsapTokens.selectionMovement.ease]);
 
   useLayoutEffect(() => {
     if (!contentRef.current) {
@@ -613,23 +701,36 @@ export const OnboardingExperience: FunctionComponent = () => {
       gsap.fromTo(
         contentRef.current!.querySelectorAll("[data-onboarding-card]"),
         { opacity: reducedMotion ? 1 : 0, y: reducedMotion ? 0 : 18 * direction, scale: 1 },
-        { opacity: 1, y: 0, scale: 1, duration: gsapTokens.enterExit.duration, stagger: reducedMotion ? 0 : 0.045, ease: gsapTokens.enterExit.ease },
+        { opacity: 1, y: 0, scale: 1, duration: gsapTokens.selectionMovement.duration, ease: gsapTokens.selectionMovement.ease },
       );
     });
     return () => ctx.revert();
-  }, [activeStep, lastStep, selectedProviders.length, settings, reducedMotion, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease]);
+  }, [activeStep, lastStep, selectedProviders.length, settings, reducedMotion, gsapTokens.selectionMovement.duration, gsapTokens.selectionMovement.ease]);
 
   useEffect(() => {
     setValidationMessage(null);
+    validationFocusSelectorRef.current = null;
   }, [activeStep]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!validationMessage) {
+      return;
+    }
+    const focusSelector = validationFocusSelectorRef.current;
+    const focusTarget = focusSelector
+      ? contentRef.current?.querySelector<HTMLElement>(focusSelector)
+        || shellRef.current?.querySelector<HTMLElement>(focusSelector)
+      : null;
+    const target = focusTarget || validationRef.current;
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView?.({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
+  }, [reducedMotion, validationMessage]);
+
+  useLayoutEffect(() => {
     if (!open || introPhase !== "onboarding") {
       return;
     }
-    window.setTimeout(() => {
-      stepHeadingRef.current?.focus({ preventScroll: true });
-    }, 0);
+    stepHeadingRef.current?.focus({ preventScroll: true });
   }, [activeStep, introPhase, open]);
 
   const readinessByProvider = useMemo(
@@ -908,16 +1009,8 @@ export const OnboardingExperience: FunctionComponent = () => {
     if (result.valid) {
       return true;
     }
+    validationFocusSelectorRef.current = result.focusSelector ?? null;
     setValidationMessage(result.message);
-    window.setTimeout(() => {
-      const focusTarget = result.focusSelector
-        ? contentRef.current?.querySelector<HTMLElement>(result.focusSelector)
-          || shellRef.current?.querySelector<HTMLElement>(result.focusSelector)
-        : null;
-      const target = focusTarget || validationRef.current;
-      target?.focus({ preventScroll: true });
-      target?.scrollIntoView?.({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
-    }, 0);
     return false;
   };
 
@@ -928,17 +1021,38 @@ export const OnboardingExperience: FunctionComponent = () => {
   };
 
   const applyAndClose = async () => {
+    if (saving) {
+      return;
+    }
     if (!validateActiveStep()) {
       return;
     }
     if (!settings) {
-      await markOnboardingCompleted("complete");
-      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-      closeOnboarding();
-      await navigate({ to: experienceMode === "EASY" ? "/chat" : "/" });
-      window.setTimeout(startDashboardTour, 260);
+      const requestId = saveRequestRef.current + 1;
+      saveRequestRef.current = requestId;
+      dispatch({ type: "set-saving", saving: true });
+      try {
+        await markOnboardingCompleted("complete");
+        if (!mountedRef.current || !openRef.current || requestId !== saveRequestRef.current) {
+          return;
+        }
+        window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
+        closeOnboarding();
+        await navigate({ to: experienceMode === "EASY" ? "/chat" : "/" });
+        startDashboardTour();
+      } catch (saveError) {
+        if (mountedRef.current && openRef.current && requestId === saveRequestRef.current) {
+          dispatch({ type: "set-error", error: saveError instanceof Error ? saveError.message : String(saveError) });
+        }
+      } finally {
+        if (mountedRef.current && openRef.current && requestId === saveRequestRef.current) {
+          dispatch({ type: "set-saving", saving: false });
+        }
+      }
       return;
     }
+    const requestId = saveRequestRef.current + 1;
+    saveRequestRef.current = requestId;
     dispatch({ type: "set-saving", saving: true });
     try {
       let nextSettings = applyOnboardingExperienceModeDefaults(cloneSystemSettings(settings), experienceMode, {
@@ -1007,25 +1121,32 @@ export const OnboardingExperience: FunctionComponent = () => {
         nextSettings.integrations.providers[providerConfigId] = sanitizeSystemProviderConfig(integrationProvider);
       }
       nextSettings = await saveSystemSettings(nextSettings);
+      if (!mountedRef.current || !openRef.current || requestId !== saveRequestRef.current) {
+        return;
+      }
       dispatch({ type: "set-settings", settings: nextSettings });
       await markOnboardingCompleted("complete");
+      if (!mountedRef.current || !openRef.current || requestId !== saveRequestRef.current) {
+        return;
+      }
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
       closeOnboarding();
       await navigate({ to: experienceMode === "EASY" ? "/chat" : "/" });
-      window.setTimeout(startDashboardTour, 260);
+      startDashboardTour();
     } catch (saveError) {
-      dispatch({ type: "set-error", error: saveError instanceof Error ? saveError.message : String(saveError) });
+      if (mountedRef.current && openRef.current && requestId === saveRequestRef.current) {
+        dispatch({ type: "set-error", error: saveError instanceof Error ? saveError.message : String(saveError) });
+      }
     } finally {
-      dispatch({ type: "set-saving", saving: false });
+      if (mountedRef.current && openRef.current && requestId === saveRequestRef.current) {
+        dispatch({ type: "set-saving", saving: false });
+      }
     }
   };
 
-  if (!open) {
-    return null;
-  }
-
   const stepNeedsSettings: StepId[] = ["provider-setup", "git", "jira", "automation", "appearance", "defaults"];
-  const canGoNext = !stepNeedsSettings.includes(active.id) || Boolean(settings);
+  const navigationLocked = saving || runningInstallMode !== null || dismissing;
+  const canGoNext = !navigationLocked && (!stepNeedsSettings.includes(active.id) || Boolean(settings));
   const clusterReady = readiness.cluster.status === "ready";
   const dockerExecutionEnabled = settings?.defaults.cliWorkflow.executionMode === "DOCKER";
   const jiraSettings = settings?.integrations.jira || DEFAULT_JIRA_SETTINGS;
@@ -1060,11 +1181,24 @@ export const OnboardingExperience: FunctionComponent = () => {
   const onboardingStaticBackgroundColor = draftAppearance?.staticBackgroundColor ?? "#0d0f12";
   const saveStatusText = saving
     ? t("savingSettings")
+    : dismissing
+      ? t("discardingDraft")
     : error
       ? t("saveFailedAnnouncement")
       : checkingReadiness
         ? t("checkingReadiness")
-        : t("draftReadyAnnouncement");
+        : draftDirty
+          ? t("draftReadyAnnouncement")
+          : t("draftUnchangedAnnouncement");
+  const asyncStatusText = runningInstallMode
+    ? t("installingMode", { installer: runningInstallMode === "docker-engine-git" ? "Docker Engine" : "Docker Desktop" })
+    : installError
+      ? t("installationFailedAnnouncement", { message: installError })
+      : lastInstallResult
+        ? t("installationOutcomeAnnouncement", { status: lastInstallResult.status, message: lastInstallResult.message })
+        : t("readinessAnnouncement", { status: readiness.cluster.label, detail: readiness.cluster.detail });
+  const closePolicyText = dismissalBlockedMessage
+    ?? (draftDirty ? t("closeRequiresConfirmation") : t("closeAvailable"));
   const motionStyle = {
     "--onboarding-enter-exit-duration": interactionTokens.enterExit.duration,
     "--onboarding-enter-exit-ease": interactionTokens.enterExit.ease,
@@ -1080,11 +1214,20 @@ export const OnboardingExperience: FunctionComponent = () => {
 
   return (
     <>
-      {introPhase !== "onboarding" && (
+      {open && introPhase !== "onboarding" && (
         <OnboardingIntro onExitStart={handleIntroExitStart} onComplete={handleIntroComplete} />
       )}
-      {introPhase !== "intro" && (
-    <div ref={backdropRef} style={motionStyle} className="fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-[#F3F7F5] px-3 py-4 text-slate-900 dark:bg-[#060A0D] dark:text-slate-100 md:px-6 md:py-8">
+      <Dialog
+        isOpen={open && introPhase === "onboarding"}
+        onClose={requestClose}
+        disableBackdropClick={dismissalBlocked}
+        suspendFocusTrap={showDiscardConfirmation}
+        ariaLabelledBy="onboarding-title"
+        ariaDescribedBy="onboarding-close-policy"
+        initialFocusRef={stepHeadingRef}
+        className="!z-[200] !h-screen !max-h-none !w-screen !max-w-none !overflow-hidden !rounded-none !border-0 !bg-transparent !shadow-none"
+      >
+    <div style={motionStyle} className="relative flex h-full w-full items-center justify-center overflow-hidden bg-[#F3F7F5] px-3 py-4 text-slate-900 dark:bg-[#060A0D] dark:text-slate-100 md:px-6 md:py-8">
       <div aria-hidden className="pointer-events-none absolute inset-0">
         {onboardingBackgroundMode === "STATIC" ? (
           <div className="absolute inset-0" style={{ backgroundColor: onboardingStaticBackgroundColor }} />
@@ -1101,9 +1244,6 @@ export const OnboardingExperience: FunctionComponent = () => {
       </div>
       <section
         ref={shellRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="onboarding-title"
         className="relative z-10 grid h-[calc(100vh-2rem)] max-h-[940px] min-h-0 w-full max-w-[1360px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[2rem] border border-black/[0.08] bg-[#F9F8F4]/96 shadow-[0_30px_90px_rgba(15,23,42,0.2)] backdrop-blur-2xl dark:border-white/15 dark:bg-void-900/96 dark:shadow-[0_30px_90px_rgba(0,0,0,0.46)] md:h-[calc(100vh-4rem)] md:grid-cols-[330px_1fr]"
       >
         <div aria-hidden className="pointer-events-none absolute inset-0 z-20 rounded-[2rem] ring-1 ring-inset ring-black/[0.06] dark:ring-white/10" />
@@ -1137,8 +1277,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                     data-step-item
                     type="button"
                     aria-current={activeItem ? "step" : undefined}
+                    disabled={navigationLocked}
                     onClick={() => setActiveStep(stepIndex)}
-                    className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-[background-color,border-color,transform] hover:translate-x-1 ${
+                    className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-[background-color,border-color,transform] hover:translate-x-1 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-x-0 ${
                       activeItem ? "border-signal-500/28 bg-white text-slate-950 shadow-[0_16px_40px_rgba(15,23,42,0.12)] dark:border-white/30 dark:shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : "border-black/0 text-slate-500 hover:border-black/[0.07] hover:bg-black/[0.035] hover:text-slate-900 dark:border-white/0 dark:text-slate-300 dark:hover:border-white/10 dark:hover:bg-white/8 dark:hover:text-white"
                     }`}
                     style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
@@ -1170,22 +1311,30 @@ export const OnboardingExperience: FunctionComponent = () => {
                 />
               </div>
             </div>
-            <button
-              type="button"
-              onClick={async () => {
-                await markOnboardingCompleted("cancel");
-                window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-                closeOnboarding();
-              }}
-              className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:hover:bg-white/[0.06] dark:hover:text-white"
-              aria-label={t("closeOnboarding")}
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-3">
+              <p
+                id="onboarding-close-policy"
+                role={dismissalBlockedMessage || dismissalNotice ? "status" : undefined}
+                aria-live={dismissalBlockedMessage || dismissalNotice ? "polite" : undefined}
+                className={dismissalBlockedMessage || dismissalNotice ? "max-w-64 text-right text-xs font-semibold leading-relaxed text-status-amber" : "sr-only"}
+              >
+                {dismissalNotice ?? closePolicyText}
+              </p>
+              <button
+                type="button"
+                onClick={requestClose}
+                disabled={dismissalBlocked}
+                aria-describedby="onboarding-close-policy"
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-45 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                aria-label={t("closeOnboarding")}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </header>
 
           <div ref={contentRef} className="dashboard-scrollbar relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 dark:text-slate-100 md:px-8">
-            <div className="sr-only" role="status" aria-live="polite">{stepProgressLabel}. {saveStatusText}</div>
+            <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{stepProgressLabel}. {saveStatusText}. {asyncStatusText}</div>
             {error ? (
               <div className="mb-4 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm font-semibold text-status-red" role="alert">
                 <div>{error}</div>
@@ -1268,6 +1417,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 selectedInstallMode={runningInstallMode ?? lastInstallResult?.mode ?? null}
                 runningInstallMode={runningInstallMode}
                 lastInstallResult={lastInstallResult}
+                failedInstallMode={failedInstallMode}
                 installError={installError}
                 checkingReadiness={checkingReadiness}
                 onAutoInstall={handleAutoInstall}
@@ -1856,7 +2006,7 @@ export const OnboardingExperience: FunctionComponent = () => {
           <footer className="relative flex shrink-0 items-center justify-between gap-3 border-t border-black/[0.06] bg-white/45 px-5 py-4 backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-950/28 md:px-8">
             <button
               type="button"
-              disabled={activeStep === 0}
+              disabled={activeStep === 0 || navigationLocked}
               onClick={goToPreviousStep}
               className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold text-slate-500 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.06]"
             >
@@ -1872,8 +2022,9 @@ export const OnboardingExperience: FunctionComponent = () => {
 	                  key={`dot-${idx}`}
 	                  type="button"
 	                  aria-label={t("goToStep", { step: dot.label })}
+	                  disabled={navigationLocked}
 	                  onClick={() => setActiveStep(idx)}
-	                  className={`h-2 rounded-full transition-all motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${activeStep === idx ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
+	                  className={`h-2 rounded-full transition-all motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 ${activeStep === idx ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
 	                  style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
 	                />
               ))}
@@ -1882,7 +2033,7 @@ export const OnboardingExperience: FunctionComponent = () => {
               <button
                 type="button"
                 onClick={() => void applyAndClose()}
-                disabled={saving}
+                disabled={navigationLocked}
                 aria-describedby="onboarding-status"
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)] transition-colors hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-void-900"
               >
@@ -1905,7 +2056,42 @@ export const OnboardingExperience: FunctionComponent = () => {
         </div>
       </section>
     </div>
-      )}
+      </Dialog>
+      <Dialog
+        isOpen={open && showDiscardConfirmation}
+        onClose={() => setShowDiscardConfirmation(false)}
+        disableBackdropClick={dismissing}
+        ariaLabelledBy="onboarding-discard-title"
+        ariaDescribedBy="onboarding-discard-description"
+        className="!z-[220] w-[calc(100vw-2rem)] max-w-md !overflow-hidden"
+      >
+        <div className="p-6">
+          <h2 id="onboarding-discard-title" className="font-display text-xl font-semibold text-slate-950 dark:text-white">
+            {t("discardDraftTitle")}
+          </h2>
+          <p id="onboarding-discard-description" className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+            {t("discardDraftBody")}
+          </p>
+        </div>
+        <div className="flex flex-col-reverse gap-3 border-t border-black/[0.06] bg-slate-50 p-5 dark:border-white/[0.06] dark:bg-void-900 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={() => setShowDiscardConfirmation(false)}
+            disabled={dismissing}
+            className="rounded-xl border border-black/[0.08] bg-white px-4 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200"
+          >
+            {t("keepOnboardingDraft")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void completeCancellation()}
+            disabled={dismissing}
+            className="rounded-xl bg-status-red px-4 py-2.5 text-sm font-bold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/40 disabled:opacity-60"
+          >
+            {dismissing ? t("discardingDraft") : t("discardDraftAndClose")}
+          </button>
+        </div>
+      </Dialog>
     </>
   );
 };

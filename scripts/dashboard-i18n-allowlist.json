@@ -73,21 +73,21 @@
     },
     {
       "path": "dashboard/src/v2/components/onboarding/OnboardingExperience.tsx",
-      "line": 1687,
+      "line": 1837,
       "kind": "attribute:placeholder",
       "text": "agents@codeux.ai",
       "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/onboarding/OnboardingInstallationStep.tsx",
-      "line": 421,
+      "line": 431,
       "kind": "jsx-text",
       "text": "stderr:",
       "rationale": "This labels verbatim process output streams using their technical identifiers."
     },
     {
       "path": "dashboard/src/v2/components/onboarding/OnboardingInstallationStep.tsx",
-      "line": 422,
+      "line": 432,
       "kind": "jsx-text",
       "text": "stdout:",
       "rationale": "This labels verbatim process output streams using their technical identifiers."
