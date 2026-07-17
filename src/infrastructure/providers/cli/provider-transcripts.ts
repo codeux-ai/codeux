@@ -24,6 +24,9 @@ import type {
 } from "./provider-transcript-chunks.js";
 
 const DEFAULT_TRANSCRIPT_CHUNK_BYTES = 2 * 1024 * 1024;
+const MAX_FALLBACK_TRANSCRIPT_BYTES = 8 * 1024 * 1024;
+const MAX_ANTIGRAVITY_TRANSCRIPT_BYTES = 8 * 1024 * 1024;
+const MAX_ANTIGRAVITY_LOG_BYTES = 512 * 1024;
 
 interface CodexSessionDateParts {
   year: string;
@@ -123,6 +126,25 @@ async function readHostFileChunk(
     contentBase64: buffer.toString("base64"),
     reset,
   };
+}
+
+async function readHostFileTail(filePath: string, maxBytes: number): Promise<string | null> {
+  const stat = await fs.stat(filePath).catch(() => null);
+  if (!stat || typeof stat.isFile !== "function" || !stat.isFile()) {
+    // Compatibility fallback for virtual/mocked filesystems that implement
+    // readFile but not stat/open. Real filesystem reads take the bounded path.
+    const value = await fs.readFile(filePath, "utf8").catch(() => null);
+    return value && value.length > maxBytes ? value.slice(-maxBytes) : value;
+  }
+  const byteCount = Math.min(stat.size, maxBytes);
+  const buffer = Buffer.allocUnsafe(byteCount);
+  const handle = await fs.open(filePath, "r");
+  try {
+    await handle.read(buffer, 0, byteCount, Math.max(0, stat.size - byteCount));
+  } finally {
+    await handle.close();
+  }
+  return buffer.toString("utf8");
 }
 
 export async function readCodexLatestSessionChunk(
@@ -319,7 +341,10 @@ export async function readCodexLatestSessionJson(
       }),
     );
     withMtimes.sort((a, b) => b.mtime - a.mtime);
-    return await fs.readFile(withMtimes[0].filePath, "utf8").catch(() => null);
+    return await readHostFileTail(
+      withMtimes[0].filePath,
+      MAX_FALLBACK_TRANSCRIPT_BYTES,
+    ).catch(() => null);
   } catch {
     return null;
   }
@@ -368,7 +393,10 @@ export async function readCodexSessionJson(
       const rolloutFile = (await fs.readdir(sessionsDir))
         .find((file) => file.endsWith(`-${nativeSessionId}.jsonl`));
       if (rolloutFile) {
-        return await fs.readFile(path.join(sessionsDir, rolloutFile), "utf8").catch(() => null);
+        return await readHostFileTail(
+          path.join(sessionsDir, rolloutFile),
+          MAX_FALLBACK_TRANSCRIPT_BYTES,
+        ).catch(() => null);
       }
     } catch {
       // Try the next UTC/local date candidate.
@@ -430,19 +458,28 @@ export async function readClaudeSessionJsonl(
     const slug = cwd.replace(/[/\\:]/g, "-");
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
     const sessionPath = path.join(homeDir, ".claude", "projects", slug, `${nativeSessionId}.jsonl`);
-    return (await fs.readFile(sessionPath, "utf8").catch(() => null)) || null;
+    return (await readHostFileTail(
+      sessionPath,
+      MAX_FALLBACK_TRANSCRIPT_BYTES,
+    ).catch(() => null)) || null;
 }
 
 export async function parseAntigravityConversationId(
     cwd: string,
     logPath: string,
     executionMode: CliWorkflowSettings["executionMode"],
-    dockerRunner: Pick<IDockerRunner, "readWorkspaceFile">
+    dockerRunner: Pick<IDockerRunner, "readWorkspaceFile" | "readWorkspaceFileTail">
   ): Promise<string | null> {
     try {
       const raw = executionMode === "DOCKER"
-        ? ((await dockerRunner.readWorkspaceFile?.(cwd, logPath).catch(() => null)) || "")
-        : (await fs.readFile(logPath, "utf8").catch(() => ""));
+        ? ((await dockerRunner.readWorkspaceFileTail?.(
+            cwd,
+            logPath,
+            MAX_ANTIGRAVITY_LOG_BYTES,
+          ).catch(() => null))
+          ?? (await dockerRunner.readWorkspaceFile?.(cwd, logPath).catch(() => null))
+          ?? "")
+        : ((await readHostFileTail(logPath, MAX_ANTIGRAVITY_LOG_BYTES).catch(() => null)) ?? "");
       if (!raw.trim()) {
         return null;
       }
@@ -460,7 +497,7 @@ export async function readAntigravityTranscript(
     cwd: string,
     conversationId: string,
     executionMode: CliWorkflowSettings["executionMode"],
-    dockerRunner: Pick<IDockerRunner, "readWorkspaceFile">
+    dockerRunner: Pick<IDockerRunner, "readWorkspaceFile" | "readWorkspaceFileTail">
   ): Promise<string | null> {
     const candidates = [
       executionMode === "DOCKER"
@@ -479,8 +516,13 @@ export async function readAntigravityTranscript(
 
     for (const p of candidates) {
       const raw = executionMode === "DOCKER"
-        ? await dockerRunner.readWorkspaceFile?.(cwd, p).catch(() => null)
-        : await fs.readFile(p, "utf8").catch(() => null);
+        ? (await dockerRunner.readWorkspaceFileTail?.(
+            cwd,
+            p,
+            MAX_ANTIGRAVITY_TRANSCRIPT_BYTES,
+          ).catch(() => null))
+          ?? await dockerRunner.readWorkspaceFile?.(cwd, p).catch(() => null)
+        : await readHostFileTail(p, MAX_ANTIGRAVITY_TRANSCRIPT_BYTES).catch(() => null);
       if (raw) {
         return raw;
       }

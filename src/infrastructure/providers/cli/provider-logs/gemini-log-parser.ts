@@ -6,6 +6,7 @@ import {
   parseTimestampMs,
   toNumber,
 } from "./usage-parse-utils.js";
+import { retainProviderConversationTail } from "./provider-conversation-limits.js";
 
 export interface GeminiUsageTotals {
   inputTokens: number;
@@ -573,7 +574,7 @@ export function parseGeminiLog(stdout: string): GeminiLogResult {
       break;
     }
   }
-  const conversation = parseGeminiConversation(parsed);
+  const conversation = retainProviderConversationTail(parseGeminiConversation(parsed));
   const nativeSessionId = firstString(parsed.session_id, parsed.sessionId, parsed.nativeSessionId) ?? null;
 
   return {

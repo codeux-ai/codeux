@@ -1,5 +1,6 @@
 import type { ParsedConversationTurn, ParsedProviderLogResult } from "./provider-conversation-types.js";
 import { extractJsonContainer, parseJsonObject, toNumber } from "./usage-parse-utils.js";
+import { retainProviderConversationTail } from "./provider-conversation-limits.js";
 
 export interface OpenCodeUsageTotals {
   inputTokens: number;
@@ -584,6 +585,7 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
       cost,
     }
     : null;
+  const retainedConversation = retainProviderConversationTail(conversation);
 
   return {
     usage: parsedUsage,
@@ -595,6 +597,6 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
     cost,
     nativeSessionId,
     rawUsageJson,
-    conversation,
+    conversation: retainedConversation,
   };
 }

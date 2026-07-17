@@ -2,6 +2,11 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import type { ParsedConversationTurn } from "./provider-conversation-types.js";
 import { extractJsonContainer, parseTimestampMs, parseUsageObject, toNumber } from "./usage-parse-utils.js";
+import { retainProviderConversationTail } from "./provider-conversation-limits.js";
+
+export const QWEN_MAX_FULL_LOG_FILE_BYTES = 16 * 1024 * 1024;
+const QWEN_OVERSIZED_LOG_TAIL_BYTES = 2 * 1024 * 1024;
+const QWEN_MAX_RETAINED_FULL_LOG_BYTES = 64 * 1024 * 1024;
 
 export interface QwenUsageTotals {
   inputTokens: number;
@@ -558,7 +563,62 @@ export function buildQwenConversation(records: unknown[], sinceMs?: number): Par
     }
   });
 
-  return conversation;
+  return retainProviderConversationTail(conversation);
+}
+
+async function readQwenOversizedUsageRecord(
+  filePath: string,
+  fileSize: number,
+  mtimeMs: number,
+): Promise<Record<string, unknown> | null> {
+  const byteCount = Math.min(fileSize, QWEN_OVERSIZED_LOG_TAIL_BYTES);
+  const buffer = Buffer.allocUnsafe(byteCount);
+  const handle = await fs.open(filePath, "r").catch(() => null);
+  if (!handle) return null;
+  try {
+    await handle.read(buffer, 0, byteCount, Math.max(0, fileSize - byteCount));
+  } finally {
+    await handle.close();
+  }
+  const tail = buffer.toString("utf8");
+  let searchBefore = tail.length;
+  while (searchBefore > 0) {
+    const usageKey = tail.lastIndexOf("\"usage\"", searchBefore);
+    if (usageKey < 0) break;
+    const objectStart = tail.indexOf("{", usageKey + 7);
+    if (objectStart >= 0) {
+      const parsed = extractJsonContainer<Record<string, unknown>>(
+        tail.slice(objectStart),
+        "object",
+      );
+      if (parsed.ok) {
+        const record = {
+          timestamp: new Date(mtimeMs).toISOString(),
+          usage: parsed.value,
+        };
+        if (extractQwenUsageRecord(record)) return record;
+      }
+    }
+    searchBefore = usageKey;
+  }
+  return null;
+}
+
+function projectQwenUsageRecord(
+  record: Record<string, unknown>,
+  fallbackTimestampMs: number,
+): Record<string, unknown> | null {
+  const usage = qwenUsageObject(record);
+  if (!usage) return null;
+  const response = qwenResponsePayload(record);
+  const responseId = response?.id ?? asRecord(record.response)?.id ?? record.id;
+  return {
+    timestamp: record.timestamp ?? new Date(fallbackTimestampMs).toISOString(),
+    response: {
+      ...(typeof responseId === "string" ? { id: responseId } : {}),
+      usage,
+    },
+  };
 }
 
 /**
@@ -586,11 +646,32 @@ export async function readQwenOpenAiLogRecords(
       .sort((a, b) => a.mtimeMs - b.mtimeMs || a.file.localeCompare(b.file));
 
     const records: unknown[] = [];
+    let retainedFullLogBytes = 0;
     for (const candidate of candidates) {
-      const content = await fs.readFile(candidate.filePath, "utf8").catch(() => "");
-      const parsed = extractJsonContainer<Record<string, unknown>>(content, "object");
-      if (parsed.ok) {
-        records.push(parsed.value);
+      const stat = await fs.stat(candidate.filePath).catch(() => null);
+      if (!stat) continue;
+      if (stat.size > QWEN_MAX_FULL_LOG_FILE_BYTES) {
+        const projected = await readQwenOversizedUsageRecord(
+          candidate.filePath,
+          stat.size,
+          stat.mtimeMs,
+        );
+        if (projected) records.push(projected);
+      } else {
+        const content = await fs.readFile(candidate.filePath, "utf8").catch(() => "");
+        const parsed = extractJsonContainer<Record<string, unknown>>(content, "object");
+        if (parsed.ok) {
+          if (
+            retainedFullLogBytes + stat.size
+            <= QWEN_MAX_RETAINED_FULL_LOG_BYTES
+          ) {
+            records.push(parsed.value);
+            retainedFullLogBytes += stat.size;
+          } else {
+            const projected = projectQwenUsageRecord(parsed.value, stat.mtimeMs);
+            if (projected) records.push(projected);
+          }
+        }
       }
     }
     return records;

@@ -120,6 +120,7 @@ export interface IDockerRunner {
   }): Promise<CommandResult>;
   readWorkspaceFile?(cwd: string, targetPath: string): Promise<string | null>;
   readWorkspaceFileBase64?(cwd: string, targetPath: string): Promise<string | null>;
+  readWorkspaceFileTail?(cwd: string, targetPath: string, maxBytes?: number): Promise<string | null>;
   readLatestWorkspaceFile?(cwd: string, dirPath: string, glob?: string): Promise<string | null>;
   readWorkspaceFileChunk?(cwd: string, targetPath: string, cursor: ProviderTranscriptCursor, maxBytes?: number): Promise<ProviderTranscriptChunk | null>;
   readLatestWorkspaceFileChunk?(cwd: string, dirPath: string, glob: string, cursor: ProviderTranscriptCursor, maxBytes?: number): Promise<ProviderTranscriptChunk | null>;
@@ -837,6 +838,26 @@ export class DockerRunner implements IDockerRunner {
     const workspace = this.resolveWorkspace(cwd);
     try {
       const result = await this.volumeHelperPool.exec(workspace.volumeName, ["base64", targetPath], buildRuntimeVolumeName(workspace.volumeName));
+      return result.ok ? result.stdout : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async readWorkspaceFileTail(
+    cwd: string,
+    targetPath: string,
+    maxBytes = 8 * 1024 * 1024,
+  ): Promise<string | null> {
+    const workspace = this.resolveWorkspace(cwd);
+    const boundedMaxBytes = Math.min(Math.max(Math.floor(maxBytes), 1), 8 * 1024 * 1024);
+    try {
+      const result = await this.volumeHelperPool.exec(
+        workspace.volumeName,
+        ["tail", "-c", String(boundedMaxBytes), targetPath],
+        buildRuntimeVolumeName(workspace.volumeName),
+        { maxStdoutChars: boundedMaxBytes },
+      );
       return result.ok ? result.stdout : null;
     } catch {
       return null;

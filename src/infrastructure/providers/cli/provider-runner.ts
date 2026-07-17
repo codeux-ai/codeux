@@ -70,6 +70,9 @@ import { BoundedTextBuffer } from "../../../shared/subprocess/bounded-text-buffe
 
 const PROVIDER_LIVE_STDOUT_MAX_CHARS = 512 * 1024;
 const PROVIDER_LIVE_STDERR_MAX_CHARS = 32 * 1024;
+const MAX_ANTIGRAVITY_DATABASE_BYTES = 512 * 1024 * 1024;
+const MAX_CAPTURED_PROVIDER_OUTPUT_BYTES = 2 * 1024 * 1024;
+const MAX_ANTIGRAVITY_DIAGNOSTIC_BYTES = 512 * 1024;
 
 export interface ProviderRunResult extends CommandResult {
   usageTelemetry: ProviderUsageTelemetry;
@@ -522,7 +525,7 @@ export class ProviderRunner implements IProviderRunner {
     let tempDbPath: string | null = null;
     let watcher: ProviderTelemetryWatcher | null = null;
 
-    if (input.onTelemetry) {
+    if (input.onTelemetry || provider === "codex" || provider === "claude-code") {
       watcher = new ProviderTelemetryWatcher({
         provider,
         model: runModel,
@@ -531,7 +534,7 @@ export class ProviderRunner implements IProviderRunner {
         startedMs,
         workflowSettings,
         signal,
-        onTelemetry: input.onTelemetry,
+        onTelemetry: input.onTelemetry ?? (() => undefined),
         invocationId: input.invocationId,
         providerInvocationId: input.providerInvocationId,
         purpose: input.purpose,
@@ -667,17 +670,21 @@ export class ProviderRunner implements IProviderRunner {
         readAntigravityDiagnostics,
       });
 
-      const finalCodexRollout = provider === "codex" && watcher
-        ? await (async () => {
-            await watcher.stop();
-            return watcher.readFinalCodexRollout();
-          })()
-        : null;
+      let finalCodexRollout = null;
+      let finalClaudeLog = null;
+      if (watcher && (provider === "codex" || provider === "claude-code")) {
+        await watcher.stop();
+        if (provider === "codex") {
+          finalCodexRollout = await watcher.readFinalCodexRollout();
+        } else {
+          finalClaudeLog = await watcher.readFinalClaudeLog();
+        }
+      }
 
       const capturedText = input.codexOutputPath
         ? await this.readProviderOutputPath(cwd, input.codexOutputPath, workflowSettings.executionMode)
         : "";
-      const claudeSessionJsonl = provider === "claude-code" && nativeSessionId
+      const claudeSessionJsonl = provider === "claude-code" && nativeSessionId && !finalClaudeLog
         ? await readClaudeSessionJsonl(cwd, nativeSessionId, workflowSettings.executionMode, this.dockerRunner)
         : null;
       const codexStdoutSessionId = provider === "codex"
@@ -760,6 +767,7 @@ export class ProviderRunner implements IProviderRunner {
           ? codexStdoutSessionId || resolvedNativeSessionId || nativeSessionId
           : resolvedNativeSessionId || nativeSessionId,
         claudeSessionJsonl,
+        claudeSessionLog: finalClaudeLog,
         codexSessionJson,
         codexRollout: finalCodexRollout,
         qwenReportedUsage: qwenLog?.usage ?? null,
@@ -988,10 +996,29 @@ export class ProviderRunner implements IProviderRunner {
     executionMode: CliWorkflowSettings["executionMode"],
   ): Promise<string> {
     if (executionMode === "DOCKER" && outputPath.startsWith(`${CONTAINER_WORKSPACE_ROOT}/`)) {
-      return ((await this.dockerRunner.readWorkspaceFile?.(cwd, outputPath).catch(() => null)) || "").trim();
+      return ((
+        await this.dockerRunner.readWorkspaceFileTail?.(
+          cwd,
+          outputPath,
+          MAX_CAPTURED_PROVIDER_OUTPUT_BYTES,
+        ).catch(() => null)
+      ) ?? (
+        await this.dockerRunner.readWorkspaceFile?.(cwd, outputPath).catch(() => null)
+      ) ?? "").trim();
     }
 
-    return (await fs.readFile(outputPath, "utf8").catch(() => "")).trim();
+    const stat = await fs.stat(outputPath).catch(() => null);
+    if (!stat?.isFile()) return "";
+    const byteCount = Math.min(stat.size, MAX_CAPTURED_PROVIDER_OUTPUT_BYTES);
+    const buffer = Buffer.allocUnsafe(byteCount);
+    const handle = await fs.open(outputPath, "r").catch(() => null);
+    if (!handle) return "";
+    try {
+      await handle.read(buffer, 0, byteCount, Math.max(0, stat.size - byteCount));
+    } finally {
+      await handle.close();
+    }
+    return buffer.toString("utf8").trim();
   }
 
   private async readQwenLogMetadata(sessionId: string): Promise<string | null> {
@@ -1090,9 +1117,31 @@ export class ProviderRunner implements IProviderRunner {
     logPath: string,
     executionMode: CliWorkflowSettings["executionMode"],
   ): Promise<string> {
-    const raw = executionMode === "DOCKER"
-      ? ((await this.dockerRunner.readWorkspaceFile?.(cwd, logPath).catch(() => null)) || "")
-      : (await fs.readFile(logPath, "utf8").catch(() => ""));
+    let raw = "";
+    if (executionMode === "DOCKER") {
+      raw = (await this.dockerRunner.readWorkspaceFileTail?.(
+        cwd,
+        logPath,
+        MAX_ANTIGRAVITY_DIAGNOSTIC_BYTES,
+      ).catch(() => null))
+        ?? (await this.dockerRunner.readWorkspaceFile?.(cwd, logPath).catch(() => null))
+        ?? "";
+    } else {
+      const stat = await fs.stat(logPath).catch(() => null);
+      if (stat?.isFile()) {
+        const byteCount = Math.min(stat.size, MAX_ANTIGRAVITY_DIAGNOSTIC_BYTES);
+        const buffer = Buffer.allocUnsafe(byteCount);
+        const handle = await fs.open(logPath, "r").catch(() => null);
+        if (handle) {
+          try {
+            await handle.read(buffer, 0, byteCount, Math.max(0, stat.size - byteCount));
+            raw = buffer.toString("utf8");
+          } finally {
+            await handle.close();
+          }
+        }
+      }
+    }
     return this.extractAntigravityErrorLines(raw);
   }
 
@@ -1143,13 +1192,11 @@ export class ProviderRunner implements IProviderRunner {
 
     for (const p of candidates) {
       if (executionMode === "DOCKER") {
-        if (this.dockerRunner.readWorkspaceFileBase64) {
-          const base64Str = await this.dockerRunner.readWorkspaceFileBase64(cwd, p).catch(() => null);
-          if (base64Str) {
-            const dbBuffer = Buffer.from(base64Str, "base64");
-            await fs.writeFile(tempDbPath, dbBuffer);
-            return true;
-          }
+        if (
+          this.dockerRunner.readWorkspaceFileChunk
+          && await this.copyDockerWorkspaceFileInChunks(cwd, p, tempDbPath)
+        ) {
+          return true;
         }
       } else {
         try {
@@ -1161,6 +1208,45 @@ export class ProviderRunner implements IProviderRunner {
       }
     }
     return false;
+  }
+
+  private async copyDockerWorkspaceFileInChunks(
+    cwd: string,
+    sourcePath: string,
+    destinationPath: string,
+  ): Promise<boolean> {
+    const handle = await fs.open(destinationPath, "w").catch(() => null);
+    if (!handle) return false;
+    let cursor: ProviderTranscriptCursor = { sourceId: null, offset: 0 };
+    let complete = false;
+    try {
+      while (cursor.offset < MAX_ANTIGRAVITY_DATABASE_BYTES) {
+        const chunk = await this.dockerRunner.readWorkspaceFileChunk!(
+          cwd,
+          sourcePath,
+          cursor,
+        ).catch(() => null);
+        if (!chunk || chunk.startOffset !== cursor.offset) return false;
+        if (chunk.totalBytes > MAX_ANTIGRAVITY_DATABASE_BYTES) return false;
+        const bytes = Buffer.from(chunk.contentBase64, "base64");
+        if (bytes.length !== chunk.nextOffset - chunk.startOffset) return false;
+        if (bytes.length > 0) {
+          await handle.write(bytes, 0, bytes.length, chunk.startOffset);
+        }
+        cursor = { sourceId: chunk.sourceId, offset: chunk.nextOffset };
+        if (chunk.nextOffset >= chunk.totalBytes) {
+          complete = true;
+          break;
+        }
+        if (bytes.length === 0) return false;
+      }
+      return complete;
+    } finally {
+      await handle.close().catch(() => undefined);
+      if (!complete) {
+        await fs.rm(destinationPath, { force: true }).catch(() => undefined);
+      }
+    }
   }
 
   /** Builds the `-c` config overrides that point Codex at a custom OpenAI-compatible

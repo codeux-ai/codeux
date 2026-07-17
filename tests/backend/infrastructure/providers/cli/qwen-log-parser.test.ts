@@ -6,6 +6,7 @@ import {
   buildQwenConversation,
   extractQwenUsageRecord,
   parseQwenOpenAiLogs,
+  QWEN_MAX_FULL_LOG_FILE_BYTES,
   readQwenOpenAiLogRecords,
   sumQwenOpenAiUsage,
   turnsFromOpenAiMessage,
@@ -134,6 +135,38 @@ describe("qwen-code OpenAI log parser", () => {
 
     expect(await readQwenOpenAiLogRecords(dir, now - 1000)).toEqual([]);
     expect(await parseQwenOpenAiLogs(dir, now - 1000)).toBeNull();
+  });
+
+  it("projects exact usage from the tail of an oversized host log", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qwen-log-parser-large-"));
+    tempDirs.push(dir);
+    const filePath = path.join(dir, "oversized.json");
+    const tail = JSON.stringify({
+      response: {
+        usage: {
+          prompt_tokens: 44,
+          completion_tokens: 9,
+          prompt_tokens_details: { cached_tokens: 7 },
+        },
+      },
+    });
+    const size = QWEN_MAX_FULL_LOG_FILE_BYTES + 1024;
+    const handle = await fs.open(filePath, "w");
+    await handle.truncate(size);
+    await handle.write(tail, size - Buffer.byteLength(tail));
+    await handle.close();
+    const now = Date.now();
+    await fs.utimes(filePath, now / 1000, now / 1000);
+
+    const records = await readQwenOpenAiLogRecords(dir, now - 1000);
+
+    expect(sumQwenOpenAiUsage(records)).toEqual({
+      inputTokens: 37,
+      cachedInputTokens: 7,
+      outputTokens: 9,
+      reasoningOutputTokens: 0,
+    });
+    expect(buildQwenConversation(records)).toEqual([]);
   });
 
   it("skips partial log files and aggregates recoverable records with missing token fields", async () => {

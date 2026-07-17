@@ -138,6 +138,13 @@ Qwen Code runs via its OpenAI-compatible request/response logging (`enableOpenAI
 
 `src/infrastructure/providers/cli/provider-logs/qwen-log-parser.ts` sums `response.usage` (including `response.body` / `response.data` wrappers and a bare top-level fallback) across every logged call in the run. Cached and reasoning token extraction delegates to the shared `parseUsageObject` adapter (also used by Codex), which checks OpenAI-style `prompt_tokens_details.cached_tokens` / `completion_tokens_details.reasoning_tokens` first, then falls back to Anthropic-style `cache_read_input_tokens` + `cache_creation_input_tokens`. The transcript parser accepts both OpenAI message/tool-call fields and Anthropic content blocks for readable reasoning, assistant text, tool use, and tool results. Timestamped records proven to predate the invocation are excluded, while valid records without timestamps remain eligible. Host files are read deterministically and malformed neighboring Docker records do not suppress recoverable records.
 
+Host-side log retention is bounded independently from usage accounting. Files up to 16 MiB are
+parsed normally, while a larger file is read from a 2 MiB tail and projected to its provider usage
+object. Once 64 MiB of full request/response records is retained for conversation reconstruction,
+later records are reduced to timestamp, response identity, and usage. Reported token aggregation
+therefore continues across every recoverable call without retaining repeated request histories or
+large tool payloads. Normalized conversation storage keeps at most 2,048 bounded turns.
+
 ### Claude Code
 
 Claude Code runs with a generated native `--session-id`.
@@ -163,14 +170,17 @@ Live Claude polling uses `ClaudeCodeLogAccumulator`: it preserves the incomplete
 parses only bytes appended since the previous poll, replaces duplicate message-id snapshots in
 place, and reports a stable conversation revision plus the changed turn suffix. It does not join
 all prior chunks and reparse the entire session on every poll. Final collection uses the same parser
-contract, while reported usage remains authoritative over estimates.
+and drains any remaining chunks through that accumulator instead of rereading the full session.
+A JSONL record above 2 MiB is discarded through its terminating newline, retained text/tool fields
+use the persistence caps, and only the newest 2,048 turns remain in memory. Reported usage remains
+authoritative over estimates and is still accumulated from every accepted assistant record.
 
 ### Antigravity
 
 Antigravity runs with `agy` CLI commands.
 
 Code UX parses session data from two sources:
-- **Token usage**: reads the conversation's SQLite database file (`~/.gemini/antigravity-cli/conversations/<id>.db` or fallback path `~/.gemini/antigravity/conversations/<id>.db`). It decodes the custom Protobuf data stored in **every** row of the `gen_metadata` table and sums across them to extract:
+- **Token usage**: reads the conversation's SQLite database file (`~/.gemini/antigravity-cli/conversations/<id>.db` or fallback path `~/.gemini/antigravity/conversations/<id>.db`). It scans the custom Protobuf data stored in **every** row of the `gen_metadata` table and sums across them to extract:
   - `inputTokens`
   - `outputTokens` (falling back to reasoning + candidates if output tokens are zero or missing, per row)
   - `reasoningTokens`
@@ -182,7 +192,17 @@ Code UX parses session data from two sources:
   - `reasoning` turns from `SYSTEM` source events.
   - Role/parts transcript rows and overview-style nested entry rows, including Gemini-style `functionCall` and `functionResponse` parts, when Antigravity emits those instead of the older entry-type names.
 
-For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.
+The Protobuf reader follows only the known `1 → 17 → 2` usage-message path and reads its numeric
+token fields. All other length-delimited model metadata stays opaque. It never recursively guesses
+that arbitrary strings, binary values, or tool payloads are nested Protobuf messages. SQLite rows
+are iterated one at a time, and an individual row above 64 MiB makes reported usage unavailable
+rather than allowing one provider artifact to consume the V8 heap.
+
+For Docker-backed Antigravity runs, the SQLite file is copied to its host temporary path in
+2 MiB decoded chunks with a 512 MiB file ceiling. No whole-database Base64 string and decoded
+duplicate coexist in JavaScript. Diagnostic logs use a bounded tail, transcript reads retain at
+most the newest 8 MiB, individual transcript records above 2 MiB are ignored, and normalized
+conversation fields share the 2,048-turn retention cap.
 
 ## Live Watcher Polling
 
@@ -194,7 +214,7 @@ The live provider telemetry watcher polls once after startup and then at a 1.5 s
 - provider-specific metadata for transcript/log sources
 - Antigravity database metadata when the source conversation database can be statted before copying it
 
-When the metadata signature matches the last successful telemetry emission, the watcher skips full transcript/log reads and skips Antigravity temporary database refreshes. This is the primary fast path for Claude Code JSONL, Codex rollout JSONL, Qwen Code OpenAI logs, and Antigravity log/transcript/database sources. When metadata helpers are unavailable, such as Docker reads or older tests/callers, the watcher falls back to the full read path so telemetry emissions are not dropped.
+When the metadata signature matches the last successful telemetry emission, the watcher skips transcript/log reads and Antigravity temporary database refreshes. This is the primary fast path for Claude Code JSONL, Codex rollout JSONL, Qwen Code OpenAI logs, and Antigravity log/transcript/database sources. Changed Codex and Claude sources are consumed incrementally; changed Antigravity databases are copied in bounded chunks and scanned row-by-row. When metadata helpers are unavailable, such as older tests/callers, provider-specific bounded fallback reads preserve telemetry without opening an unbounded source.
 
 Provider metadata helpers must return a stable string that changes when the underlying source changes. Current helpers use file name, size, and integer mtime for single files or sorted directory entries. Missing-but-valid sources should return a sentinel such as `missing` or `none`; an unavailable helper is represented by omitting the helper entirely, which deliberately disables the metadata fast path for that provider. Antigravity performs one additional signature pass after the conversation id is parsed from the log so the resolved id, transcript metadata, and database metadata all participate before deciding whether to read the transcript or refresh the temporary database copy.
 

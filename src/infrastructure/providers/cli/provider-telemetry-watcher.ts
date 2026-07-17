@@ -96,6 +96,7 @@ interface FullReadResult {
 
 const FAILURE_BACKOFF_MAX_SKIPPED_POLLS = 20;
 const MAX_INCREMENTAL_CHUNKS_PER_POLL = 4;
+const MAX_FINAL_INCREMENTAL_PASSES = 32;
 const HEAP_PRESSURE_WARNING_INTERVAL_MS = 60_000;
 
 function buildMetadataSourceSignature(args: {
@@ -242,7 +243,48 @@ export class ProviderTelemetryWatcher {
       return this.codexRolloutAccumulator.getCurrentResult();
     }
     this.resolveCodexNativeSessionId(this.opts.getAccumulatedRawStdout());
-    const result = await this.collectIncrementalCodexInputs(null, {
+    let previousSignature: string | null = null;
+    let latest = this.codexRolloutAccumulator.getCurrentResult();
+    for (let pass = 0; pass < MAX_FINAL_INCREMENTAL_PASSES; pass += 1) {
+      const result = await this.collectIncrementalCodexInputs(null, this.emptyFullReadInputs());
+      latest = result.inputs.codexRollout ?? latest;
+      const signature = result.inputs.codexIncrementalSignature;
+      if (!signature || signature === previousSignature) break;
+      previousSignature = signature;
+      if (getNodeHeapPressure().underPressure) {
+        this.warnHeapPressure("final");
+        break;
+      }
+    }
+    return latest;
+  }
+
+  async readFinalClaudeLog(): Promise<ClaudeCodeLogResult | null> {
+    if (!this.opts.readClaudeSessionJsonlChunk || !this.claudeLogAccumulator) {
+      return null;
+    }
+    if (getNodeHeapPressure().underPressure) {
+      this.warnHeapPressure("final");
+      return this.claudeLogAccumulator.getCurrentResult();
+    }
+    let previousSignature: string | null = null;
+    let latest = this.claudeLogAccumulator.getCurrentResult();
+    for (let pass = 0; pass < MAX_FINAL_INCREMENTAL_PASSES; pass += 1) {
+      const result = await this.collectIncrementalClaudeInputs(null, this.emptyFullReadInputs());
+      latest = result.inputs.claudeLog ?? latest;
+      const signature = result.inputs.claudeIncrementalSignature;
+      if (!signature || signature === previousSignature) break;
+      previousSignature = signature;
+      if (getNodeHeapPressure().underPressure) {
+        this.warnHeapPressure("final");
+        break;
+      }
+    }
+    return latest;
+  }
+
+  private emptyFullReadInputs(): FullReadInputs {
+    return {
       resolvedNativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId,
       claudeSessionJsonl: null,
       claudeLog: null,
@@ -252,8 +294,7 @@ export class ProviderTelemetryWatcher {
       codexIncrementalSignature: null,
       qwenLog: null,
       antigravityTranscriptJsonl: null,
-    });
-    return result.inputs.codexRollout;
+    };
   }
 
   private async loop() {
@@ -443,17 +484,7 @@ export class ProviderTelemetryWatcher {
     if (this.opts.provider === "codex") {
       this.resolveCodexNativeSessionId(args.stdout);
     }
-    const emptyInputs: FullReadInputs = {
-      resolvedNativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId,
-      claudeSessionJsonl: null,
-      claudeLog: null,
-      claudeIncrementalSignature: null,
-      codexSessionJson: null,
-      codexRollout: null,
-      codexIncrementalSignature: null,
-      qwenLog: null,
-      antigravityTranscriptJsonl: null,
-    };
+    const emptyInputs = this.emptyFullReadInputs();
 
     if (this.opts.provider === "claude-code" && this.opts.nativeSessionId) {
       if (this.opts.readClaudeSessionJsonlChunk) {

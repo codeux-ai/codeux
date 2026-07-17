@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  CLAUDE_MAX_JSONL_RECORD_CHARS,
   ClaudeCodeLogAccumulator,
   parseClaudeCodeSessionJsonl,
 } from "../../../../../src/infrastructure/providers/cli/provider-logs/claude-code-log-parser.js";
+import { MAX_RETAINED_PROVIDER_TURNS } from "../../../../../src/infrastructure/providers/cli/provider-logs/provider-conversation-limits.js";
 
 // ─── Test fixture helpers ────────────────────────────────────────────────────
 
@@ -722,5 +724,46 @@ describe("ClaudeCodeLogAccumulator", () => {
 
     expect(result.conversation.map((turn) => turn.text)).toEqual(["New source"]);
     expect(result.conversationRevision).toBe(1);
+  });
+
+  it("discards an oversized JSONL record across chunks and resumes at the next line", () => {
+    const oversized = JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: "x".repeat(CLAUDE_MAX_JSONL_RECORD_CHARS + 1),
+      },
+    });
+    const valid = makeAssistantEntry({
+      messageId: "msg_after_oversized",
+      content: [{ type: "text", text: "Recovered after oversized output." }],
+    });
+    const accumulator = new ClaudeCodeLogAccumulator();
+
+    accumulator.appendChunk(oversized.slice(0, 1_500_000), "session-file");
+    const result = accumulator.appendChunk(
+      `${oversized.slice(1_500_000)}\n${valid}\n`,
+      "session-file",
+    );
+
+    expect(result.conversation.map((turn) => turn.text)).toEqual([
+      "Recovered after oversized output.",
+    ]);
+    expect(result.usage).toMatchObject({ inputTokens: 100, outputTokens: 50 });
+  });
+
+  it("retains a bounded conversation tail while continuing to parse all records", () => {
+    const lines = Array.from(
+      { length: MAX_RETAINED_PROVIDER_TURNS + 20 },
+      (_, index) => makeUserEntry({ content: `turn-${index}` }),
+    );
+
+    const result = parseClaudeCodeSessionJsonl(lines.join("\n"));
+
+    expect(result.conversation).toHaveLength(MAX_RETAINED_PROVIDER_TURNS);
+    expect(result.conversation[0]?.text).toBe("turn-20");
+    expect(result.conversation.at(-1)?.text).toBe(
+      `turn-${MAX_RETAINED_PROVIDER_TURNS + 19}`,
+    );
   });
 });
