@@ -7,6 +7,7 @@ import type {
   OnboardingRuntimeReadiness,
 } from "../../../types.js";
 import { useOnboardingMessages, type OnboardingMessageKey } from "../../i18n/messages/onboarding.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export interface OnboardingInstallationStepProps {
   clusterReady: boolean;
@@ -21,6 +22,7 @@ export interface OnboardingInstallationStepProps {
   selectedInstallMode?: OnboardingDependencyInstallMode | null;
   runningInstallMode?: OnboardingDependencyInstallMode | null;
   lastInstallResult?: OnboardingDependencyInstallerResult | null;
+  failedInstallMode?: OnboardingDependencyInstallMode | null;
   installError?: string | null;
   checkingReadiness?: boolean;
   onAutoInstall?: () => void;
@@ -89,6 +91,7 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
   selectedInstallMode = null,
   runningInstallMode = null,
   lastInstallResult = null,
+  failedInstallMode = null,
   installError = null,
   checkingReadiness = false,
   onAutoInstall,
@@ -96,11 +99,17 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
   onRecheck,
 }) => {
   const { t } = useOnboardingMessages();
+  const interactionTokens = useInteractionTokens();
   const missingRequired = hasMissingRequiredDependencies(readiness);
   const recommendedOption = readiness.installers.options.find((option) => option.mode === readiness.installers.recommendedMode);
   const canAutoInstall = missingRequired && Boolean(recommendedOption?.available);
   const anyInstallRunning = runningInstallMode !== null;
   const failedCommands = lastInstallResult?.commands.filter((command) => command.status === "failed") ?? [];
+  const retryInstallMode = failedInstallMode ?? lastInstallResult?.mode;
+  const asyncFeedbackStyle = {
+    transitionDuration: interactionTokens.asyncFeedback.duration,
+    transitionTimingFunction: interactionTokens.asyncFeedback.ease,
+  };
   const statusLabel = (status: string): string => {
     if (status === "ready") return t("statusReady");
     if (status === "missing") return t("statusMissing");
@@ -113,8 +122,8 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
   };
 
   return (
-    <div className="space-y-5">
-      <div data-onboarding-card className={`relative overflow-hidden rounded-3xl border p-5 shadow-[0_18px_45px_rgba(15,23,42,0.05)] ${clusterReady ? "border-signal-500/20 bg-signal-500/8" : "border-status-amber/25 bg-status-amber/10"}`}>
+    <div className="space-y-5" aria-busy={anyInstallRunning || checkingReadiness ? "true" : undefined}>
+      <div data-onboarding-card className={`relative overflow-hidden rounded-3xl border p-5 shadow-[0_18px_45px_rgba(15,23,42,0.05)] transition-[border-color,background-color] motion-reduce:transition-none ${clusterReady ? "border-signal-500/20 bg-signal-500/8" : "border-status-amber/25 bg-status-amber/10"}`} style={asyncFeedbackStyle}>
         <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
         <div className="flex items-start gap-4">
           <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${clusterReady ? "bg-signal-500/12 text-signal-600" : "bg-status-amber/15 text-status-amber"}`}>
@@ -325,7 +334,7 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
       ) : null}
 
       {runningInstallMode ? (
-        <div role="status" aria-live="polite" className="rounded-2xl border border-signal-500/20 bg-signal-500/10 p-4 text-sm text-signal-700 dark:text-signal-200">
+        <div role="status" aria-live="polite" aria-atomic="true" className="rounded-2xl border border-signal-500/20 bg-signal-500/10 p-4 text-sm text-signal-700 transition-[border-color,background-color] motion-reduce:transition-none dark:text-signal-200" style={asyncFeedbackStyle}>
           <div className="flex items-center gap-2 font-black">
             <Loader2 aria-hidden className="h-4 w-4 animate-spin motion-reduce:animate-none" />
             {t("installingMode", { installer: modeLabel(runningInstallMode) })}
@@ -337,17 +346,18 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
       ) : null}
 
       {installError ? (
-        <div role="status" aria-live="polite" className="rounded-2xl border border-status-red/20 bg-status-red/10 p-4 text-sm text-status-red">
+        <div role="status" aria-live="polite" aria-atomic="true" className="rounded-2xl border border-status-red/20 bg-status-red/10 p-4 text-sm text-status-red transition-[border-color,background-color] motion-reduce:transition-none" style={asyncFeedbackStyle}>
           <div className="font-black">{t("installIncomplete")}</div>
           <p className="mt-1.5 leading-relaxed">{installError}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {lastInstallResult && onInstallMode ? (
+            {retryInstallMode && onInstallMode ? (
               <button
                 type="button"
-                onClick={() => onInstallMode(lastInstallResult.mode)}
+                onClick={() => onInstallMode(retryInstallMode)}
+                disabled={anyInstallRunning}
                 className="inline-flex h-9 items-center justify-center rounded-xl border border-status-red/25 px-3 text-xs font-black uppercase tracking-[0.12em] focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/40"
               >
-                {t("retryInstaller", { installer: modeLabel(lastInstallResult.mode) })}
+                {t("retryInstaller", { installer: modeLabel(retryInstallMode) })}
               </button>
             ) : null}
             {onRecheck ? (
@@ -364,7 +374,7 @@ export const OnboardingInstallationStep: FunctionComponent<OnboardingInstallatio
       ) : null}
 
       {lastInstallResult ? (
-        <section role="status" aria-live="polite" aria-labelledby="onboarding-install-result-title" className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_14px_38px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+        <section role="status" aria-live="polite" aria-atomic="true" aria-labelledby="onboarding-install-result-title" className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_14px_38px_rgba(15,23,42,0.04)] transition-[border-color,background-color] motion-reduce:transition-none dark:border-white/[0.06] dark:bg-white/[0.04]" style={asyncFeedbackStyle}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h4 id="onboarding-install-result-title" className="text-sm font-black text-slate-950 dark:text-white">

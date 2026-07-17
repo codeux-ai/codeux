@@ -88,6 +88,7 @@ export interface OnboardingFlowState {
   readiness: OnboardingRuntimeReadiness;
   settings: SystemSettings | null;
   selectedProviders: ProviderId[];
+  initialDraftFingerprint: string | null;
   saving: boolean;
   error: string | null;
 }
@@ -123,11 +124,22 @@ export const createInitialOnboardingFlowState = (locale: DashboardLocale = "en")
   readiness: getDefaultOnboardingReadiness(locale),
   settings: null,
   selectedProviders: [],
+  initialDraftFingerprint: null,
   saving: false,
   error: null,
 });
 
 export const cloneSystemSettings = (settings: SystemSettings): SystemSettings => structuredClone(settings) as SystemSettings;
+
+export const createOnboardingDraftFingerprint = (
+  experienceMode: DashboardExperienceMode,
+  settings: SystemSettings | null,
+  selectedProviders: ProviderId[],
+): string => JSON.stringify({
+  experienceMode,
+  selectedProviders: [...selectedProviders].sort(),
+  settings,
+});
 
 export const onboardingFlowReducer = (
   state: OnboardingFlowState,
@@ -137,7 +149,17 @@ export const onboardingFlowReducer = (
     case "set-open":
       return { ...state, open: action.open };
     case "reset-and-open":
-      return { ...state, open: true, activeStep: 0, lastStep: state.activeStep };
+      return {
+        ...state,
+        open: true,
+        activeStep: 0,
+        lastStep: state.activeStep,
+        settings: null,
+        selectedProviders: [],
+        initialDraftFingerprint: null,
+        saving: false,
+        error: null,
+      };
     case "close":
       return { ...state, open: false };
     case "set-active-step":
@@ -146,19 +168,29 @@ export const onboardingFlowReducer = (
       return { ...state, lastStep: state.activeStep, activeStep: clampStep(state.activeStep + 1, state.experienceMode) };
     case "go-previous":
       return { ...state, lastStep: state.activeStep, activeStep: clampStep(state.activeStep - 1, state.experienceMode) };
-    case "load-success":
+    case "load-success": {
       const loadedMode = normalizeDashboardExperienceMode(action.settings.defaults.appearance.experienceMode);
+      const hasExistingDraft = state.settings !== null;
+      const nextExperienceMode = hasExistingDraft ? state.experienceMode : loadedMode;
+      const nextSettings = state.settings ?? action.settings;
+      const nextSelectedProviders = hasExistingDraft
+        ? state.selectedProviders
+        : getProviderInitialSelection(action.readiness.providers, action.settings);
       return {
         ...state,
-        experienceMode: state.settings ? state.experienceMode : loadedMode,
-        activeStep: clampStep(state.activeStep, state.settings ? state.experienceMode : loadedMode),
+        experienceMode: nextExperienceMode,
+        activeStep: clampStep(state.activeStep, nextExperienceMode),
         readiness: action.readiness,
-        settings: action.settings,
-        selectedProviders: state.selectedProviders.length > 0
-          ? state.selectedProviders
-          : getProviderInitialSelection(action.readiness.providers, action.settings),
+        settings: nextSettings,
+        selectedProviders: nextSelectedProviders,
+        initialDraftFingerprint: state.initialDraftFingerprint ?? createOnboardingDraftFingerprint(
+          nextExperienceMode,
+          nextSettings,
+          nextSelectedProviders,
+        ),
         error: null,
       };
+    }
     case "load-failure":
       return { ...state, error: action.error };
     case "select-experience-mode":
@@ -205,6 +237,12 @@ export function useOnboardingStepFlow() {
     () => onboardingProviderTypes.filter((provider) => state.selectedProviders.includes(provider)),
     [state.selectedProviders],
   );
+  const draftDirty = state.initialDraftFingerprint !== null
+    && state.initialDraftFingerprint !== createOnboardingDraftFingerprint(
+      state.experienceMode,
+      state.settings,
+      state.selectedProviders,
+    );
 
   const setActiveStep = (step: number) => dispatch({ type: "set-active-step", step });
   const goToNextStep = () => dispatch({ type: "go-next" });
@@ -219,6 +257,7 @@ export function useOnboardingStepFlow() {
     setActiveStep,
     activeStepData,
     selectedProviderTypes,
+    draftDirty,
     goToNextStep,
     goToPreviousStep,
     resetSteps,

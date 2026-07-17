@@ -24,6 +24,7 @@ import type {
 } from "../../../dashboard/src/types.js";
 import {
   createInitialOnboardingFlowState,
+  createOnboardingDraftFingerprint,
   defaultOnboardingReadiness,
   easyOnboardingSteps,
   onboardingFlowReducer,
@@ -299,6 +300,39 @@ describe("onboarding flow reducer", () => {
     expect(settings.integrations.githubToken).toBe("");
     expect(state.settings).not.toBe(settings);
   });
+
+  it("keeps the draft and its initial fingerprint across readiness refreshes", () => {
+    const settings = createSystemSettings();
+    let state = onboardingFlowReducer(createInitialOnboardingFlowState(), {
+      type: "load-success",
+      readiness: defaultOnboardingReadiness,
+      settings,
+    });
+    const initialFingerprint = state.initialDraftFingerprint;
+
+    state = onboardingFlowReducer(state, {
+      type: "update-settings",
+      recipe: (current) => ({
+        ...current,
+        integrations: { ...current.integrations, githubToken: "draft-token" },
+      }),
+    });
+    const changedFingerprint = createOnboardingDraftFingerprint(
+      state.experienceMode,
+      state.settings,
+      state.selectedProviders,
+    );
+    expect(changedFingerprint).not.toBe(initialFingerprint);
+
+    state = onboardingFlowReducer(state, {
+      type: "load-success",
+      readiness: { ...defaultOnboardingReadiness, checkedAt: "later" },
+      settings: createSystemSettings(),
+    });
+
+    expect(state.settings?.integrations.githubToken).toBe("draft-token");
+    expect(state.initialDraftFingerprint).toBe(initialFingerprint);
+  });
 });
 
 describe("onboarding state hook", () => {
@@ -355,6 +389,17 @@ describe("GuidedDashboardTour integration", () => {
     window.dispatchEvent(new CustomEvent(DASHBOARD_TOUR_START_EVENT));
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(queryByRole("dialog")).toBeNull();
+  });
+
+  it("cancels a delayed tour start when the tour unmounts", () => {
+    createTourTarget("project-selector");
+    const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
+    const { unmount } = render(<GuidedDashboardTour />);
+
+    window.dispatchEvent(new CustomEvent(DASHBOARD_TOUR_START_EVENT));
+    unmount();
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
   });
 
   it("dismisses the German tour from the narrow layout", async () => {
@@ -493,6 +538,101 @@ describe("OnboardingExperience integration", () => {
     cleanup();
   });
 
+  it("contains keyboard focus and requires an explicit dirty-draft decision", async () => {
+    const systemSettings = createSystemSettings();
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/user/onboarding/cancel")) {
+        return new Response(JSON.stringify({ completed: true, onboardingCompletedAt: "2026-07-17T00:00:00.000Z" }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-07-17T00:00:00.000Z",
+          cluster: { status: "ready", label: "Ready", detail: "Runtime is ready." },
+          dependencies: [],
+          providers: [],
+        }), { status: 200 });
+      }
+      if (url.endsWith("/api/runtime-assets/status")) {
+        return new Response(JSON.stringify({ managedRuntime: { state: "ready" }, providers: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    const user = userEvent.setup();
+
+    render(<OnboardingExperience />);
+
+    const dialog = await screen.findByRole("dialog", { name: "Make the runtime ready." });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Setup mode" })));
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href]"));
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    last.focus();
+    await user.tab();
+    expect(document.activeElement).toBe(first);
+    first.focus();
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(last);
+
+    await user.click(screen.getByRole("radio", { name: /^Standard\b/ }));
+    await user.click(screen.getByRole("button", { name: "Close onboarding" }));
+    expect(await screen.findByRole("dialog", { name: "Discard onboarding changes?" })).not.toBeNull();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Discard onboarding changes?" })).toBeNull());
+    expect(screen.getByRole("dialog", { name: "Make the runtime ready." })).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Close onboarding" }));
+    await user.click(await screen.findByRole("button", { name: "Discard and close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Make the runtime ready." })).toBeNull());
+  });
+
+  it("ignores a readiness response that arrives after onboarding closes", async () => {
+    const systemSettings = createSystemSettings();
+    let resolveReadiness: (response: Response) => void = () => {};
+    const readinessResponse = new Promise<Response>((resolve) => {
+      resolveReadiness = resolve;
+    });
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/user/onboarding/cancel")) {
+        return new Response(JSON.stringify({ completed: true, onboardingCompletedAt: "2026-07-17T00:00:00.000Z" }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return readinessResponse;
+      }
+      if (url.endsWith("/api/runtime-assets/status")) {
+        return new Response(JSON.stringify({ managedRuntime: { state: "ready" }, providers: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Close onboarding" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Make the runtime ready." })).toBeNull());
+
+    resolveReadiness(new Response(JSON.stringify({
+      checkedAt: "2026-07-17T00:00:00.000Z",
+      cluster: { status: "ready", label: "Late readiness", detail: "This result is obsolete." },
+      dependencies: [],
+      providers: [],
+    }), { status: 200 }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(screen.queryByText("Late readiness")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Make the runtime ready." })).toBeNull();
+  });
+
   it("shows step navigation labels without compact sidebar status cards", async () => {
     const defaultSettings = cloneDefaultSettings();
     const systemSettings = {
@@ -620,6 +760,7 @@ describe("OnboardingExperience integration", () => {
     const installResponse = new Promise<Response>((resolve) => {
       resolveInstall = resolve;
     });
+    let installCallCount = 0;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = typeof input === "string" ? input : input.url;
       if (url.endsWith("/api/user/onboarding")) {
@@ -640,7 +781,13 @@ describe("OnboardingExperience integration", () => {
           mode: "docker-engine-git",
           confirmInstall: true,
         });
-        return installResponse;
+        installCallCount += 1;
+        return installCallCount === 1
+          ? installResponse
+          : new Response(JSON.stringify(installResult), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
       }
       return new Response(JSON.stringify({}), { status: 404 });
     });
@@ -653,6 +800,11 @@ describe("OnboardingExperience integration", () => {
     await user.click(autoInstallButton);
 
     expect(await screen.findByText("Installing Docker Engine")).not.toBeNull();
+    const closeButton = screen.getByRole("button", { name: "Close onboarding" });
+    expect((closeButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Onboarding cannot be closed while dependency installation is running.")).not.toBeNull();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "Make the runtime ready." })).not.toBeNull();
     resolveInstall(new Response(JSON.stringify(installResult), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -671,6 +823,17 @@ describe("OnboardingExperience integration", () => {
         return url.endsWith("/api/onboarding/readiness");
       });
       expect(readinessCalls).toHaveLength(2);
+    });
+
+    const retryButton = screen.getByRole("button", { name: "Retry Docker Engine" }) as HTMLButtonElement;
+    await waitFor(() => expect(retryButton.disabled).toBe(false));
+    await user.click(retryButton);
+    await waitFor(() => {
+      const readinessCalls = fetchMock.mock.calls.filter(([input]) => {
+        const url = typeof input === "string" ? input : input.url;
+        return url.endsWith("/api/onboarding/readiness");
+      });
+      expect(readinessCalls).toHaveLength(3);
     });
   });
 
@@ -816,7 +979,7 @@ describe("OnboardingExperience integration", () => {
 
     await waitFor(() => expect(settingsApi.saveSystemSettings).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/user/onboarding/complete", expect.objectContaining({ method: "POST" })));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("runs the short Easy onboarding flow, saves the selected mode, and lands on Chat", async () => {
@@ -1220,6 +1383,7 @@ describe("onboarding appearance step", () => {
     });
 
     await userEvent.click(screen.getByRole("button", { name: "Close onboarding" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Discard and close" }));
     await waitFor(() => {
       expect(previews[previews.length - 1]).toBeNull();
     });

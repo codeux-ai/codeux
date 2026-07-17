@@ -5,6 +5,8 @@ import { ArrowLeft, ArrowRight, BookOpen, Box, CalendarDays, Check, Compass, Eye
 import { DASHBOARD_TOUR_START_EVENT, DASHBOARD_TOUR_STORAGE_KEY } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { GSAP_INTERACTION_TOKENS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import type { DashboardFeatureId } from "../../lib/dashboard-feature-flags.js";
 import { isDashboardFeatureEnabled } from "../../lib/dashboard-feature-flags.js";
 import { useOnboardingMessages, type OnboardingMessageKey } from "../../i18n/messages/onboarding.js";
@@ -179,6 +181,10 @@ const accentClasses: Record<TourStep["accent"], { text: string; bg: string; bgSo
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
+const durationToMilliseconds = (duration: string): number => (
+  duration.endsWith("ms") ? Number.parseFloat(duration) : Number.parseFloat(duration) * 1_000
+);
+
 const getTourElement = (targetId: string): HTMLElement | null => (
   document.querySelector(`[data-tour-id="${targetId}"]`) as HTMLElement | null
 );
@@ -215,6 +221,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
   const targetRingRef = useRef<HTMLDivElement>(null);
   const primaryActionRef = useRef<HTMLButtonElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const delayedStartRef = useRef<number | null>(null);
   const suppressAutoAdvanceRef = useRef(false);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -224,6 +231,21 @@ export const GuidedDashboardTour: FunctionComponent = () => {
   const [paused, setPaused] = useState(false);
   const reducedMotion = useReducedMotion();
   const interactionTokens = useInteractionTokens();
+  const gsapTokens = useGsapInteractionTokens();
+  const hideTour = useCallback(() => {
+    window.localStorage.setItem(DASHBOARD_TOUR_STORAGE_KEY, "true");
+    if (delayedStartRef.current !== null) {
+      window.clearTimeout(delayedStartRef.current);
+      delayedStartRef.current = null;
+    }
+    setOpen(false);
+  }, []);
+  const trapRef = useFocusTrap(open, {
+    onClose: hideTour,
+    initialFocusRef: primaryActionRef,
+    restoreFocusRef,
+    restoreFocus: true,
+  });
 
   const refreshSteps = useCallback(() => {
     const steps = tourSteps.filter((step) => {
@@ -262,8 +284,12 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
   useEffect(() => {
     const start = () => {
-      restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      window.setTimeout(() => {
+      if (delayedStartRef.current !== null) {
+        window.clearTimeout(delayedStartRef.current);
+      }
+      delayedStartRef.current = window.setTimeout(() => {
+        delayedStartRef.current = null;
+        restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         const steps = refreshSteps();
         if (steps.length === 0) {
           return;
@@ -272,17 +298,23 @@ export const GuidedDashboardTour: FunctionComponent = () => {
         setProgress(0);
         suppressAutoAdvanceRef.current = false;
         setOpen(true);
-      }, 140);
+      }, durationToMilliseconds(interactionTokens.enterExit.duration));
     };
     window.addEventListener(DASHBOARD_TOUR_START_EVENT, start);
-    return () => window.removeEventListener(DASHBOARD_TOUR_START_EVENT, start);
-  }, [refreshSteps]);
+    return () => {
+      window.removeEventListener(DASHBOARD_TOUR_START_EVENT, start);
+      if (delayedStartRef.current !== null) {
+        window.clearTimeout(delayedStartRef.current);
+        delayedStartRef.current = null;
+      }
+    };
+  }, [interactionTokens.enterExit.duration, refreshSteps]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open || !targetReady) {
       return;
     }
-    window.setTimeout(() => primaryActionRef.current?.focus({ preventScroll: true }), 0);
+    primaryActionRef.current?.focus({ preventScroll: true });
   }, [activeIndex, open, targetReady]);
 
   useLayoutEffect(() => {
@@ -293,13 +325,16 @@ export const GuidedDashboardTour: FunctionComponent = () => {
     const update = () => updateTargetRect();
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
-    const interval = window.setInterval(update, 450);
+    const interval = window.setInterval(
+      update,
+      Math.max(gsapTokens.asyncFeedback.duration, GSAP_INTERACTION_TOKENS.asyncFeedback.duration) * 1_000,
+    );
     return () => {
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
       window.clearInterval(interval);
     };
-  }, [open, updateTargetRect]);
+  }, [gsapTokens.asyncFeedback.duration, open, updateTargetRect]);
 
   useLayoutEffect(() => {
     if (!open || !targetReady || !cardRef.current) {
@@ -309,15 +344,8 @@ export const GuidedDashboardTour: FunctionComponent = () => {
     gsap.fromTo(
       animatedElements,
       { opacity: 0, y: reducedMotion ? 0 : 18, scale: reducedMotion ? 1 : 0.97, filter: reducedMotion ? "blur(0px)" : "blur(10px)" },
-      { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", duration: reducedMotion ? 0 : 0.42, ease: "power4.out", clearProps: "filter" },
+      { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", duration: gsapTokens.enterExit.duration, ease: gsapTokens.enterExit.ease, clearProps: "filter" },
     );
-    if (!reducedMotion && linePathRef.current) {
-      gsap.fromTo(
-        linePathRef.current,
-        { strokeDashoffset: 0 },
-        { strokeDashoffset: -32, duration: 2.8, ease: "none", repeat: -1 },
-      );
-    }
     return () => {
       if (linePathRef.current) {
         gsap.killTweensOf(linePathRef.current);
@@ -326,7 +354,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
         if (el) gsap.killTweensOf(el);
       });
     };
-  }, [activeIndex, open, reducedMotion, targetReady]);
+  }, [activeIndex, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease, open, reducedMotion, targetReady]);
 
   useEffect(() => {
     setProgress(0);
@@ -337,10 +365,10 @@ export const GuidedDashboardTour: FunctionComponent = () => {
       return;
     }
     const interval = window.setInterval(() => {
-      setProgress((current) => Math.min(100, current + 1.25));
-    }, 100);
+      setProgress((current) => Math.min(100, current + 4));
+    }, gsapTokens.asyncFeedback.duration * 1_000);
     return () => window.clearInterval(interval);
-  }, [availableSteps.length, open, paused, reducedMotion]);
+  }, [availableSteps.length, gsapTokens.asyncFeedback.duration, open, paused, reducedMotion]);
 
   useEffect(() => {
     if (progress < 100 || availableSteps.length === 0) {
@@ -361,12 +389,6 @@ export const GuidedDashboardTour: FunctionComponent = () => {
     setProgress(100);
   }, [activeIndex, availableSteps.length, progress]);
 
-  const hideTour = useCallback(() => {
-    window.localStorage.setItem(DASHBOARD_TOUR_STORAGE_KEY, "true");
-    setOpen(false);
-    window.setTimeout(() => restoreFocusRef.current?.focus({ preventScroll: true }), 0);
-  }, []);
-
   const goPrevious = useCallback(() => {
     suppressAutoAdvanceRef.current = true;
     setProgress(0);
@@ -384,9 +406,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
       return;
     }
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        hideTour();
-      } else if (e.key === "ArrowLeft") {
+      if (e.key === "ArrowLeft") {
         if (activeIndex > 0) goPrevious();
       } else if (e.key === "ArrowRight") {
         if (activeIndex === availableSteps.length - 1) hideTour();
@@ -475,8 +495,12 @@ export const GuidedDashboardTour: FunctionComponent = () => {
       </div>
 
       <div
-        ref={cardRef}
+        ref={(element) => {
+          cardRef.current = element;
+          trapRef.current = element;
+        }}
         role="dialog"
+        aria-modal="true"
         aria-live="polite"
         aria-labelledby="dashboard-tour-title"
         aria-describedby="dashboard-tour-description dashboard-tour-count"
@@ -523,7 +547,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
           <div className="mt-4 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={reducedMotion ? t("tourStepProgress") : t("tourAutoProgress")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={tourProgressValue}>
             <div
-              className={`h-1.5 rounded-full ${accent.bg} shadow-[0_0_18px_rgba(0,224,160,0.45)] transition-[width] duration-100 motion-reduce:transition-none`}
+              className={`h-1.5 rounded-full ${accent.bg} shadow-[0_0_18px_rgba(0,224,160,0.45)] transition-[width] motion-reduce:transition-none`}
               style={{ width: `${tourProgressValue}%`, transitionDuration: interactionTokens.selectionMovement.duration, transitionTimingFunction: interactionTokens.selectionMovement.ease }}
             />
           </div>

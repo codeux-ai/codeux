@@ -2,8 +2,8 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment, type ComponentChild } from "preact";
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render as testingRender, screen, waitFor, fireEvent, within } from "@testing-library/preact";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { render as testingRender, screen, waitFor, fireEvent, within, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { OnboardingExperience } from "../../../dashboard/src/v2/components/onboarding/OnboardingExperience.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -32,7 +32,7 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
-  useResolvedMotionDuration: (d: any) => d,
+  useResolvedMotionDuration: (duration: number | string) => typeof duration === "number" ? 0 : "0ms",
   useReducedMotion: () => true,
 }));
 
@@ -93,6 +93,8 @@ const getChoiceButton = (choiceTitle: string, optionLabel: string): HTMLButtonEl
 };
 
 describe("Onboarding automation defaults", () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     vi.clearAllMocks();
     const settings = JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS));
@@ -144,6 +146,22 @@ describe("Onboarding automation defaults", () => {
     expect(getToggleInRow("Resolve feature merge conflicts")).toHaveAttribute("aria-pressed", "false");
     expect(getToggleInRow("Memory system")).toHaveAttribute("aria-pressed", "false");
     expect(getToggleInRow("Enable QA agent")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("moves focus and keeps complete status cues when reduced motion is enabled", async () => {
+    render(<OnboardingExperience />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Automation" }));
+
+    const heading = await screen.findByRole("heading", { name: "Automation" });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(screen.getByRole("progressbar", { name: /Step 9 of 10: Automation/i })).not.toBeNull();
+    const dialog = screen.getByRole("dialog", { name: "Make the runtime ready." });
+    expect((dialog.firstElementChild as HTMLElement).style.getPropertyValue("--onboarding-selection-duration")).toBe("0ms");
+    expect(screen.getAllByRole("status").some((status) => (
+      status.textContent?.includes("Step 9 of 10: Automation")
+        && status.textContent.includes("Runtime readiness: Ready. Runtime is ready.")
+    ))).toBe(true);
   });
 
   it("defaults the appearance pattern overlay to none", () => {
