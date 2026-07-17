@@ -12,7 +12,11 @@ import {
   QwenUsageTotals,
   ParsedConversationTurn,
 } from "./provider-usage.js";
-import { CodexRolloutAccumulator, type CodexLogResult } from "./provider-logs/codex-log-parser.js";
+import {
+  CodexRolloutAccumulator,
+  parseCodexExecStdout,
+  type CodexLogResult,
+} from "./provider-logs/codex-log-parser.js";
 import {
   ClaudeCodeLogAccumulator,
   type ClaudeCodeLogResult,
@@ -49,8 +53,11 @@ export interface TelemetryWatcherOptions {
   readClaudeSessionJsonl: (nativeSessionId: string) => Promise<string | null>;
   readClaudeSessionJsonlChunk?: (nativeSessionId: string, cursor: ProviderTranscriptCursor) => Promise<ProviderTranscriptChunk | null>;
   getCodexLatestSessionJsonMetadata?: () => Promise<string | null>;
+  getCodexSessionJsonMetadata?: (nativeSessionId: string) => Promise<string | null>;
   readCodexLatestSessionJson: () => Promise<string | null>;
+  readCodexSessionJson?: (nativeSessionId: string) => Promise<string | null>;
   readCodexLatestSessionChunk?: (cursor: ProviderTranscriptCursor) => Promise<ProviderTranscriptChunk | null>;
+  readCodexSessionChunk?: (nativeSessionId: string, cursor: ProviderTranscriptCursor) => Promise<ProviderTranscriptChunk | null>;
   getQwenLogDataMetadata?: () => Promise<string | null>;
   readQwenLogData: () => Promise<{ usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null>;
   getAntigravityLogMetadata?: (logPath: string) => Promise<string | null>;
@@ -221,9 +228,13 @@ export class ProviderTelemetryWatcher {
   }
 
   async readFinalCodexRollout(): Promise<CodexLogResult | null> {
-    if (!this.opts.readCodexLatestSessionChunk || !this.codexRolloutAccumulator) {
+    if (
+      (!this.opts.readCodexSessionChunk && !this.opts.readCodexLatestSessionChunk)
+      || !this.codexRolloutAccumulator
+    ) {
       return null;
     }
+    this.resolveCodexNativeSessionId(this.opts.getAccumulatedRawStdout());
     const result = await this.collectIncrementalCodexInputs(null, {
       resolvedNativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId,
       claudeSessionJsonl: null,
@@ -245,6 +256,9 @@ export class ProviderTelemetryWatcher {
       try {
         const stdout = this.opts.getAccumulatedRawStdout();
         const stderr = this.opts.getAccumulatedStderr();
+        if (this.opts.provider === "codex") {
+          this.resolveCodexNativeSessionId(stdout);
+        }
         const fallbackFailureSourceSignature = this.buildFallbackFailureSourceSignature({
           resolvedNativeSessionId: this.resolvedNativeSessionId,
           stdout,
@@ -398,6 +412,9 @@ export class ProviderTelemetryWatcher {
     stdout: string;
     stderr: string;
   }): Promise<FullReadResult> {
+    if (this.opts.provider === "codex") {
+      this.resolveCodexNativeSessionId(args.stdout);
+    }
     const emptyInputs: FullReadInputs = {
       resolvedNativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId,
       claudeSessionJsonl: null,
@@ -426,15 +443,23 @@ export class ProviderTelemetryWatcher {
     }
 
     if (this.opts.provider === "codex") {
-      if (this.opts.readCodexLatestSessionChunk && this.codexRolloutAccumulator) {
+      if (
+        (this.opts.readCodexSessionChunk || this.opts.readCodexLatestSessionChunk)
+        && this.codexRolloutAccumulator
+      ) {
         return this.collectIncrementalCodexInputs(args.preReadSourceSignature, emptyInputs);
       }
+      const nativeSessionId = emptyInputs.resolvedNativeSessionId;
       return {
         skipped: false,
         preReadSourceSignature: args.preReadSourceSignature,
         inputs: {
           ...emptyInputs,
-          codexSessionJson: await this.opts.readCodexLatestSessionJson(),
+          codexSessionJson: this.opts.readCodexSessionJson
+            ? nativeSessionId
+              ? await this.opts.readCodexSessionJson(nativeSessionId)
+              : null
+            : await this.opts.readCodexLatestSessionJson(),
         },
       };
     }
@@ -470,8 +495,13 @@ export class ProviderTelemetryWatcher {
     let sourceId: string | null = null;
     let reset = false;
     const decodedParts: string[] = [];
+    const nativeSessionId = emptyInputs.resolvedNativeSessionId;
     for (let index = 0; index < MAX_INCREMENTAL_CHUNKS_PER_POLL; index += 1) {
-      const chunk = await this.opts.readCodexLatestSessionChunk!(this.codexChunkDecoder.cursor);
+      const chunk = this.opts.readCodexSessionChunk
+        ? nativeSessionId
+          ? await this.opts.readCodexSessionChunk(nativeSessionId, this.codexChunkDecoder.cursor)
+          : null
+        : await this.opts.readCodexLatestSessionChunk?.(this.codexChunkDecoder.cursor) ?? null;
       if (!chunk) {
         break;
       }
@@ -639,6 +669,17 @@ export class ProviderTelemetryWatcher {
     return resolvedNativeSessionId;
   }
 
+  private resolveCodexNativeSessionId(stdout: string): string | null {
+    const stdoutSessionId = parseCodexExecStdout(stdout).nativeSessionId;
+    const resolved = stdoutSessionId
+      || this.resolvedNativeSessionId
+      || this.opts.nativeSessionId;
+    if (resolved) {
+      this.resolvedNativeSessionId = resolved;
+    }
+    return resolved;
+  }
+
   private async resolveAntigravityTempDatabase(resolvedNativeSessionId: string): Promise<void> {
     if (!this.tempDbPath) {
       const safeSession = resolvedNativeSessionId.replace(/[^A-Za-z0-9_-]/g, "_");
@@ -690,6 +731,12 @@ export class ProviderTelemetryWatcher {
       return { available: true, signature: await this.opts.getClaudeSessionJsonlMetadata(this.opts.nativeSessionId) || "" };
     }
     if (this.opts.provider === "codex") {
+      if (resolvedNativeSessionId && this.opts.getCodexSessionJsonMetadata) {
+        return {
+          available: true,
+          signature: await this.opts.getCodexSessionJsonMetadata(resolvedNativeSessionId) || "",
+        };
+      }
       if (!this.opts.getCodexLatestSessionJsonMetadata) {
         return { available: false };
       }

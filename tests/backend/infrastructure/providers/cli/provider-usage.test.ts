@@ -680,7 +680,7 @@ describe("collectProviderUsageTelemetry", () => {
     expect(result.conversation[4]).toMatchObject({ kind: "assistant", text: "Tests written." });
   });
 
-  it("prefers Codex rollout usage over the exec stdout stream", async () => {
+  it("uses Codex rollout telemetry while keeping the current exec thread identity", async () => {
     const result = await collectProviderUsageTelemetry({
       provider: "codex",
       model: "gpt-4o-codex",
@@ -702,7 +702,7 @@ describe("collectProviderUsageTelemetry", () => {
       outputTokens: 120,
       usageSource: "reported",
     });
-    expect(result.nativeSessionId).toBe("0199codex-uuid");
+    expect(result.nativeSessionId).toBe("stdout-thread");
     expect(result.conversation.map((turn) => turn.text).join("\n")).toContain("Tests written.");
     expect(result.conversation.map((turn) => turn.text).join("\n")).not.toContain("Stdout-only answer.");
   });

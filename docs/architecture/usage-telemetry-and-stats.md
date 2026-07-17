@@ -119,6 +119,13 @@ Codex token estimation keeps process-local caches bounded for long-running worke
 
 Codex's rollout file (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) is cumulative for the whole session and keeps accumulating across `codex exec resume --last` (used for follow-up/QA-reopened runs and multi-turn retries). `parseCodexRolloutJsonl` isolates each run's own usage by treating the last `total_token_usage` snapshot *before* the run's time window as a baseline and subtracting it from the final cumulative snapshot — otherwise a follow-up would re-report every earlier turn's tokens too, inflating that run's persisted usage.
 
+Rollout discovery is native-thread-specific. For a new invocation, the `thread.started` id from the
+current exec stream is authoritative; for an exact continuation, the requested native id is the
+initial target. Code UX derives the rollout date from that id and reads only
+`rollout-*-<native-id>.jsonl` from the invocation's paired runtime volume. The generic newest-file
+lookup remains only as a compatibility fallback when a legacy caller has no native id, so prior
+sessions in the same runtime home cannot overwrite the persisted continuation identity.
+
 ### Qwen Code
 
 Qwen Code runs via its OpenAI-compatible request/response logging (`enableOpenAILoggingDir`), written to a directory that is reset at the start of every run so usage aggregation only ever sums the current invocation's own log files — unlike Codex/OpenCode, there is no cross-run cumulative counter to isolate.

@@ -98,6 +98,9 @@ the dashboard, and interactive replies.
 - Scheduler starts consume current purpose-aware provider capacity, including adaptive reply
   reservations. Task QA runs in waves of at most four so merges and newly unblocked coding progress
   between review waves instead of waiting behind a full-DAG QA backlog.
+- Incremental Codex telemetry follows the native thread id emitted by the current exec stream (or
+  the exact requested resume id) and reads only that rollout from the paired runtime volume. A
+  previous invocation's newer file cannot replace the persisted continuation identity.
 
 The published architecture page is available at
 [`/docs/architecture-high-concurrency-orchestration`](/docs/architecture-high-concurrency-orchestration).
