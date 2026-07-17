@@ -23,7 +23,9 @@ import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
 import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
 import { Button } from "./components/ui/Button.js";
+import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { useProjectData } from "./context/project-data.js";
+import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
 import {
   translateDashboardMessage,
   translateDashboardPlural,
@@ -37,6 +39,7 @@ import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime
 import { fetchSprints } from "./lib/project-api.js";
 import { fetchNodeFlows } from "./lib/node-flow-api.js";
 import { fetchQuicksprintTemplates } from "./lib/quicksprint-api.js";
+import { useInteractionTokens } from "./lib/motion/tokens.js";
 import {
   createSchedulerEntry,
   deleteSchedulerEntry,
@@ -65,9 +68,45 @@ type ScheduleTimingMode = "absolute" | "after_sprint_end";
 type OperatorScheduleTargetType = Extract<ScheduleTargetType, "sprint" | "quicksprint" | "chat" | "memory_remediation" | "node_flow">;
 type SchedulerFormInput = Omit<UpdateSchedulerEntryInput, "targetType"> & Pick<CreateSchedulerEntryInput, "targetType">;
 type FeedbackState = { tone: "idle" | "success" | "error"; message: string | null };
+type SchedulerField =
+  | "scheduledFor"
+  | "interval"
+  | "count"
+  | "until"
+  | "sprint"
+  | "template"
+  | "taskCount"
+  | "chatMessage"
+  | "nodeFlow"
+  | "nodeFlowInput"
+  | "anchorSprint"
+  | "anchorOffset";
+type SchedulerFieldErrors = Partial<Record<SchedulerField, string>>;
+type SchedulerRowAction = "toggle" | "delete";
+type SchedulerRowFeedback = {
+  tone: "success" | "error";
+  message: string;
+  retryAction?: SchedulerRowAction;
+  retryPaused?: boolean;
+};
 
-const SCHEDULER_FIELD_CLASS = "scheduler-field rounded-[var(--radius-ui)] border border-[color:var(--color-border-muted)] dark:border-white/[0.06] hover:border-[color:var(--color-border-muted)] dark:hover:border-white/[0.12] bg-white/80 dark:bg-white/[0.05] px-3.5 text-sm font-semibold text-slate-700 dark:text-slate-200 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] outline-none transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/20";
+const SCHEDULER_FIELD_CLASS = "scheduler-field rounded-[var(--radius-ui)] border border-[color:var(--color-border-muted)] dark:border-white/[0.06] hover:border-[color:var(--color-border-muted)] dark:hover:border-white/[0.12] bg-white/80 dark:bg-white/[0.05] px-3.5 text-sm font-semibold text-slate-700 dark:text-slate-200 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] outline-none transition-[border-color,box-shadow,background-color,color] duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] motion-reduce:duration-0 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/20 aria-[invalid=true]:border-status-red/50 aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-status-red/15";
 const SCHEDULER_COMPACT_FIELD_CLASS = `${SCHEDULER_FIELD_CLASS} min-h-[40px]`;
+
+const SCHEDULER_FIELD_IDS: Record<SchedulerField, string> = {
+  scheduledFor: "scheduler-scheduled-for",
+  interval: "scheduler-recurrence-interval",
+  count: "scheduler-recurrence-count",
+  until: "scheduler-recurrence-until",
+  sprint: "scheduler-target-sprint",
+  template: "scheduler-target-template",
+  taskCount: "scheduler-task-count",
+  chatMessage: "scheduler-chat-message",
+  nodeFlow: "scheduler-target-node-flow",
+  nodeFlowInput: "scheduler-node-flow-input",
+  anchorSprint: "scheduler-anchor-sprint",
+  anchorOffset: "scheduler-anchor-offset",
+};
 
 const TARGET_OPTIONS: Array<{
   value: ScheduleTargetType;
@@ -437,11 +476,28 @@ const LocalizedProjectPlaceholderCopy: FunctionComponent = () => {
   );
 };
 
+const SchedulerFieldError: FunctionComponent<{ field: SchedulerField; message?: string }> = ({ field, message }) => (
+  message ? (
+    <p
+      id={`${SCHEDULER_FIELD_IDS[field]}-error`}
+      role="alert"
+      className="mt-2 text-xs font-semibold text-status-red"
+    >
+      {message}
+    </p>
+  ) : null
+);
+
 export const SchedulerPage: FunctionComponent = () => {
   const { selectedProject } = useProjectData();
   const { locale, translate, translatePlural, formatNumber, formatTime } = useDashboardI18n();
+  const interactionTokens = useInteractionTokens();
+  const confirmDialog = useConfirmDialog();
   const refreshSequence = useRef(0);
   const submitInFlight = useRef(false);
+  const rowActionsInFlight = useRef(new Set<string>());
+  const pendingDeleteEntryId = useRef<string | null>(null);
+  const postDeleteFocusEntryId = useRef<string | null>(null);
   const [view, setView] = useState<SchedulerView>("calendar");
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
   const [schedule, setSchedule] = useState<SchedulerCollectionResponse | null>(null);
@@ -477,6 +533,9 @@ export const SchedulerPage: FunctionComponent = () => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState>({ tone: "idle", message: null });
+  const [fieldErrors, setFieldErrors] = useState<SchedulerFieldErrors>({});
+  const [pendingRowActions, setPendingRowActions] = useState<Set<string>>(() => new Set());
+  const [rowFeedback, setRowFeedback] = useState<Record<string, SchedulerRowFeedback>>({});
 
   const [editingEntry, setEditingEntry] = useState<SchedulerEntryRecord | null>(null);
   const [entryTitle, setEntryTitle] = useState("");
@@ -503,6 +562,53 @@ export const SchedulerPage: FunctionComponent = () => {
   const [count, setCount] = useState(6);
   const [until, setUntil] = useState(() => toDateInputValue(addDays(new Date(), 30)));
   const selectedTimezone = editingEntry?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const controlMotionStyle = {
+    transitionDuration: interactionTokens.controlFeedback.duration,
+    transitionTimingFunction: interactionTokens.controlFeedback.ease,
+  };
+  const selectionMotionStyle = {
+    transitionDuration: interactionTokens.selectionMovement.duration,
+    transitionTimingFunction: interactionTokens.selectionMovement.ease,
+  };
+  const expansionMotionStyle = {
+    transitionDuration: interactionTokens.expansionCollapse.duration,
+    transitionTimingFunction: interactionTokens.expansionCollapse.ease,
+  };
+  const listMotionStyle = {
+    transitionDuration: interactionTokens.listReorder.duration,
+    transitionTimingFunction: interactionTokens.listReorder.ease,
+  };
+  const feedbackMotionStyle = {
+    transitionDuration: interactionTokens.asyncFeedback.duration,
+    transitionTimingFunction: interactionTokens.asyncFeedback.ease,
+  };
+
+  const clearFieldError = (field: SchedulerField): void => {
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const reportValidationError = (field: SchedulerField, message: string): void => {
+    setFieldErrors({ [field]: message });
+    window.requestAnimationFrame(() => {
+      document.getElementById(SCHEDULER_FIELD_IDS[field])?.focus();
+    });
+  };
+
+  const rowActionKey = (entryId: string, action: SchedulerRowAction): string => `${entryId}:${action}`;
+  const setRowActionPending = (entryId: string, action: SchedulerRowAction, pending: boolean): void => {
+    const key = rowActionKey(entryId, action);
+    setPendingRowActions((current) => {
+      const next = new Set(current);
+      if (pending) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
 
   const range = useMemo(() => {
     const from = startOfWeek(selectedDate);
@@ -662,6 +768,7 @@ export const SchedulerPage: FunctionComponent = () => {
       setFeedback({ tone: "error", message: unsupportedEditReason(entry.targetType, locale) });
       return;
     }
+    setFieldErrors({});
     setEditingEntry(entry);
     setEntryTitle(entry.title);
     setTargetType(entry.targetType);
@@ -706,6 +813,7 @@ export const SchedulerPage: FunctionComponent = () => {
   };
 
   const cancelEdit = (clearFeedback = true) => {
+    setFieldErrors({});
     setEditingEntry(null);
     setEntryTitle("");
     setTargetType("sprint");
@@ -747,6 +855,7 @@ export const SchedulerPage: FunctionComponent = () => {
       return;
     }
     setFeedback({ tone: "idle", message: null });
+    setFieldErrors({});
     if (!isOperatorEditableTarget(targetType)) {
       setFeedback({ tone: "error", message: unsupportedEditReason(targetType, locale) });
       return;
@@ -754,28 +863,28 @@ export const SchedulerPage: FunctionComponent = () => {
 
     const scheduledDate = isAnchoredTiming ? null : new Date(scheduledFor);
     if (scheduledDate && !Number.isFinite(scheduledDate.getTime())) {
-      setFeedback({ tone: "error", message: translate(schedulerMessages, "validationDateTime") });
+      reportValidationError("scheduledFor", translate(schedulerMessages, "validationDateTime"));
       return;
     }
 
     let recurrenceUntil: Date | null = null;
     if (repeatEnabled && !isAnchoredTiming) {
       if (!Number.isInteger(interval) || interval < 1) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationInterval") });
+        reportValidationError("interval", translate(schedulerMessages, "validationInterval"));
         return;
       }
       if (endMode === "after_count" && (!Number.isInteger(count) || count < 1)) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationCount") });
+        reportValidationError("count", translate(schedulerMessages, "validationCount"));
         return;
       }
       if (endMode === "on_date") {
         recurrenceUntil = new Date(until);
         if (!Number.isFinite(recurrenceUntil.getTime())) {
-          setFeedback({ tone: "error", message: translate(schedulerMessages, "validationEndDate") });
+          reportValidationError("until", translate(schedulerMessages, "validationEndDate"));
           return;
         }
         if (scheduledDate && recurrenceUntil.getTime() <= scheduledDate.getTime()) {
-          setFeedback({ tone: "error", message: translate(schedulerMessages, "validationEndAfterStart") });
+          reportValidationError("until", translate(schedulerMessages, "validationEndAfterStart"));
           return;
         }
       }
@@ -813,54 +922,54 @@ export const SchedulerPage: FunctionComponent = () => {
 
     if (targetType === "sprint") {
       if (!selectedSprintId) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChooseSprint") });
+        reportValidationError("sprint", translate(schedulerMessages, "validationChooseSprint"));
         return;
       }
       const sprint = sprints.find((item) => item.id === selectedSprintId);
       if (!sprint || (sprint.status === "completed" && (!editingEntry || editingEntry.sprintTarget?.sprintId !== selectedSprintId))) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChooseSprint") });
+        reportValidationError("sprint", translate(schedulerMessages, "validationChooseSprint"));
         return;
       }
     } else if (targetType === "quicksprint") {
       if (!selectedTemplateId) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChooseTemplate") });
+        reportValidationError("template", translate(schedulerMessages, "validationChooseTemplate"));
         return;
       }
       if (!Number.isInteger(taskCount) || taskCount < 1 || taskCount > 50) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationTaskCount") });
+        reportValidationError("taskCount", translate(schedulerMessages, "validationTaskCount"));
         return;
       }
     } else if (targetType === "chat") {
       if (!chatMessage.trim()) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChatMessage") });
+        reportValidationError("chatMessage", translate(schedulerMessages, "validationChatMessage"));
         return;
       }
     } else if (targetType === "node_flow") {
       if (!selectedNodeFlowId) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChooseNodeFlow") });
+        reportValidationError("nodeFlow", translate(schedulerMessages, "validationChooseNodeFlow"));
         return;
       }
     }
 
     const parsedNodeFlowInput = targetType === "node_flow" ? parseNodeFlowInputJson(nodeFlowInputJson, locale) : {};
     if (parsedNodeFlowInput.error) {
-      setFeedback({ tone: "error", message: parsedNodeFlowInput.error });
+      reportValidationError("nodeFlowInput", parsedNodeFlowInput.error);
       return;
     }
 
     let scheduleAnchor: ScheduleAnchor | undefined;
     if (isAnchoredTiming) {
       if (!anchorSourceSprintId) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChooseAnchorSprint") });
+        reportValidationError("anchorSprint", translate(schedulerMessages, "validationChooseAnchorSprint"));
         return;
       }
       const offsetMinutes = Math.floor(Number(anchorOffsetMinutes || 0));
       if (!Number.isFinite(offsetMinutes) || offsetMinutes < 0) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationOffset") });
+        reportValidationError("anchorOffset", translate(schedulerMessages, "validationOffset"));
         return;
       }
       if (targetType === "sprint" && selectedSprintId === anchorSourceSprintId) {
-        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationOwnSprint") });
+        reportValidationError("anchorSprint", translate(schedulerMessages, "validationOwnSprint"));
         return;
       }
       scheduleAnchor = {
@@ -935,25 +1044,147 @@ export const SchedulerPage: FunctionComponent = () => {
     }
   };
 
-  const toggleEntryStatus = async (entryId: string, paused: boolean) => {
+  const toggleEntryStatus = async (entryId: string, paused: boolean): Promise<void> => {
+    const actionKey = rowActionKey(entryId, "toggle");
+    if (rowActionsInFlight.current.has(actionKey)) return;
+    rowActionsInFlight.current.add(actionKey);
+    setRowActionPending(entryId, "toggle", true);
+    setRowFeedback((current) => {
+      const next = { ...current };
+      delete next[entryId];
+      return next;
+    });
     try {
       await updateSchedulerEntry(entryId, { status: paused ? "scheduled" : "paused" });
+      setSchedule((current) => current ? {
+        ...current,
+        entries: current.entries.map((entry) => (
+          entry.id === entryId ? { ...entry, status: paused ? "scheduled" : "paused" } : entry
+        )),
+      } : current);
+      setRowFeedback((current) => ({
+        ...current,
+        [entryId]: {
+          tone: "success",
+          message: translate(schedulerMessages, paused ? "scheduleResumed" : "schedulePaused"),
+        },
+      }));
       await refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : translate(schedulerMessages, "failedUpdate") });
+      setRowFeedback((current) => ({
+        ...current,
+        [entryId]: {
+          tone: "error",
+          message: error instanceof Error ? error.message : translate(schedulerMessages, "failedUpdate"),
+          retryAction: "toggle",
+          retryPaused: paused,
+        },
+      }));
+    } finally {
+      rowActionsInFlight.current.delete(actionKey);
+      setRowActionPending(entryId, "toggle", false);
     }
   };
 
-  const removeEntry = async (entryId: string) => {
-    if (!window.confirm(translate(schedulerMessages, "deleteConfirmation"))) {
-      return;
-    }
+  const deleteEntry = async (entryId: string): Promise<boolean> => {
+    const actionKey = rowActionKey(entryId, "delete");
+    if (rowActionsInFlight.current.has(actionKey)) return false;
+    rowActionsInFlight.current.add(actionKey);
+    setRowActionPending(entryId, "delete", true);
+    setRowFeedback((current) => {
+      const next = { ...current };
+      delete next[entryId];
+      return next;
+    });
     try {
       await deleteSchedulerEntry(entryId);
+      setRowFeedback((current) => ({
+        ...current,
+        [entryId]: { tone: "success", message: translate(schedulerMessages, "scheduleDeleted") },
+      }));
+      setFeedback({ tone: "success", message: translate(schedulerMessages, "scheduleDeleted") });
       await refresh();
+      return true;
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : translate(schedulerMessages, "failedDelete") });
+      setRowFeedback((current) => ({
+        ...current,
+        [entryId]: {
+          tone: "error",
+          message: error instanceof Error ? error.message : translate(schedulerMessages, "failedDelete"),
+          retryAction: "delete",
+        },
+      }));
+      return false;
+    } finally {
+      rowActionsInFlight.current.delete(actionKey);
+      setRowActionPending(entryId, "delete", false);
     }
+  };
+
+  const removeEntry = (entry: SchedulerEntryRecord, trigger: HTMLButtonElement): void => {
+    const actionKey = rowActionKey(entry.id, "delete");
+    if (rowActionsInFlight.current.has(actionKey) || pendingDeleteEntryId.current) return;
+    pendingDeleteEntryId.current = entry.id;
+    const entries = schedule?.entries ?? [];
+    const entryIndex = entries.findIndex((candidate) => candidate.id === entry.id);
+    postDeleteFocusEntryId.current = entries[entryIndex + 1]?.id ?? entries[entryIndex - 1]?.id ?? null;
+    confirmDialog.triggerRef.current = trigger;
+    void confirmDialog.requestConfirm({
+      title: translate(schedulerMessages, "deleteDialogTitle", { title: entry.title }),
+      body: translate(schedulerMessages, "deleteConfirmation"),
+      confirmLabel: translate(schedulerMessages, "confirmDelete"),
+      cancelLabel: translate(schedulerMessages, "cancel"),
+      tone: "danger",
+      copy: {
+        eyebrow: translate(schedulerMessages, "deleteDialogEyebrow"),
+        destructiveWarning: translate(schedulerMessages, "deleteConfirmation"),
+        requiredConfirmationPrompt: translate(schedulerMessages, "deleteConfirmation"),
+        requiredConfirmationInputLabel: translate(schedulerMessages, "confirmDelete"),
+        requiredConfirmationDisabledLabel: translate(schedulerMessages, "confirmDelete"),
+        processing: translate(schedulerMessages, "deletingSchedule"),
+        processingWait: translate(schedulerMessages, "deletingScheduleWait"),
+      },
+    }).then((confirmed) => {
+      if (!confirmed) pendingDeleteEntryId.current = null;
+    });
+  };
+
+  const focusAfterEntryDeletion = (): void => {
+    const focusEntryId = postDeleteFocusEntryId.current;
+    postDeleteFocusEntryId.current = null;
+    window.setTimeout(() => {
+      window.setTimeout(() => {
+        const focusTarget = (
+          focusEntryId
+            ? document.querySelector<HTMLElement>(`[data-testid="scheduler-entry-${focusEntryId}"] button`)
+            : null
+        ) ?? document.getElementById("scheduler-scheduled-entries-heading");
+        focusTarget?.focus();
+      }, 0);
+    }, 0);
+  };
+
+  const retryEntryDeletion = async (entryId: string): Promise<void> => {
+    if (await deleteEntry(entryId)) focusAfterEntryDeletion();
+  };
+
+  const confirmEntryDeletion = async (): Promise<void> => {
+    const entryId = pendingDeleteEntryId.current;
+    if (!entryId) {
+      confirmDialog.handleCancel();
+      return;
+    }
+    const deleted = await deleteEntry(entryId);
+    pendingDeleteEntryId.current = null;
+    confirmDialog.handleConfirm();
+    if (deleted) focusAfterEntryDeletion();
+  };
+
+  const cancelEntryDeletion = (): void => {
+    pendingDeleteEntryId.current = null;
+    postDeleteFocusEntryId.current = null;
+    confirmDialog.handleCancel();
+    window.requestAnimationFrame(() => confirmDialog.triggerRef.current?.focus());
   };
 
   if (!selectedProject) {
@@ -965,6 +1196,7 @@ export const SchedulerPage: FunctionComponent = () => {
   }
 
   return (
+    <>
     <PageContainer aria-label={translate(schedulerMessages, "pageLabel")} padding="standard" className="gap-8" data-testid="scheduler-page-root">
       <PageHeader
         data-testid="scheduler-primary-header"
@@ -1011,7 +1243,9 @@ export const SchedulerPage: FunctionComponent = () => {
                 aria-controls="scheduler-view-panel"
                 tabIndex={view === item ? 0 : -1}
                 onClick={() => setView(item)}
-                className={`min-h-[34px] rounded-full px-4 text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-150 ${
+                data-motion-contract="selectionMovement"
+                style={selectionMotionStyle}
+                className={`min-h-[34px] rounded-full px-4 text-[10px] font-bold uppercase tracking-[0.14em] transition-[background-color,color,box-shadow,transform] motion-reduce:duration-0 ${
                   view === item ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 }`}
               >
@@ -1076,9 +1310,14 @@ export const SchedulerPage: FunctionComponent = () => {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setTargetType(option.value)}
+                onClick={() => {
+                  setTargetType(option.value);
+                  setFieldErrors({});
+                }}
                 aria-pressed={targetType === option.value}
-                className={`min-h-[70px] rounded-2xl border p-3 text-left transition-all duration-150 ${
+                data-motion-contract="selectionMovement"
+                style={selectionMotionStyle}
+                className={`min-h-[70px] rounded-2xl border p-3 text-left transition-[border-color,background-color,box-shadow,color,transform] motion-reduce:duration-0 ${
                   targetType === option.value
                     ? option.activeClassName
                     : "border-black/[0.06] bg-black/[0.025] hover:bg-black/[0.04] dark:border-white/[0.06] dark:bg-white/[0.035] dark:hover:bg-white/[0.06]"
@@ -1103,11 +1342,18 @@ export const SchedulerPage: FunctionComponent = () => {
             </label>
 
             {targetType === "sprint" && (
-              <label className="block">
+              <label className="block" htmlFor={SCHEDULER_FIELD_IDS.sprint} style={expansionMotionStyle} data-motion-contract="expansionCollapse">
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "targetSprint")}</span>
                 <AvantgardeSelect
+                  id={SCHEDULER_FIELD_IDS.sprint}
                   value={selectedSprintId}
-                  onChange={setSelectedSprintId}
+                  onChange={(value) => {
+                    setSelectedSprintId(value);
+                    clearFieldError("sprint");
+                  }}
+                  invalid={Boolean(fieldErrors.sprint)}
+                  aria-invalid={Boolean(fieldErrors.sprint)}
+                  aria-describedby={fieldErrors.sprint ? `${SCHEDULER_FIELD_IDS.sprint}-error` : undefined}
                   searchable={true}
                   options={[
                     { value: "", label: translate(schedulerMessages, "chooseSprint") },
@@ -1119,16 +1365,24 @@ export const SchedulerPage: FunctionComponent = () => {
                   ]}
                   className="mt-2"
                 />
+                <SchedulerFieldError field="sprint" message={fieldErrors.sprint} />
               </label>
             )}
 
             {targetType === "quicksprint" && (
               <div className="grid gap-3">
-                <label className="block">
+                <label className="block" htmlFor={SCHEDULER_FIELD_IDS.template}>
                   <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "targetQuicksprint")}</span>
                   <AvantgardeSelect
+                    id={SCHEDULER_FIELD_IDS.template}
                     value={selectedTemplateId}
-                    onChange={setSelectedTemplateId}
+                    onChange={(value) => {
+                      setSelectedTemplateId(value);
+                      clearFieldError("template");
+                    }}
+                    invalid={Boolean(fieldErrors.template)}
+                    aria-invalid={Boolean(fieldErrors.template)}
+                    aria-describedby={fieldErrors.template ? `${SCHEDULER_FIELD_IDS.template}-error` : undefined}
                     searchable={true}
                     options={[
                       { value: "", label: translate(schedulerMessages, "chooseTemplate") },
@@ -1136,31 +1390,46 @@ export const SchedulerPage: FunctionComponent = () => {
                     ]}
                     className="mt-2"
                   />
+                  <SchedulerFieldError field="template" message={fieldErrors.template} />
                 </label>
-                <label className="block">
+                <label className="block" htmlFor={SCHEDULER_FIELD_IDS.taskCount}>
                   <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "taskCount")}</span>
                   <input
+                    id={SCHEDULER_FIELD_IDS.taskCount}
                     type="number"
                     min={1}
                     max={50}
                     value={taskCount}
-                    onInput={(event) => setTaskCount(Number(event.currentTarget.value))}
+                    onInput={(event) => {
+                      setTaskCount(Number(event.currentTarget.value));
+                      clearFieldError("taskCount");
+                    }}
+                    aria-invalid={Boolean(fieldErrors.taskCount)}
+                    aria-describedby={fieldErrors.taskCount ? `${SCHEDULER_FIELD_IDS.taskCount}-error` : undefined}
                     className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
                   />
+                  <SchedulerFieldError field="taskCount" message={fieldErrors.taskCount} />
                 </label>
               </div>
             )}
 
             {targetType === "chat" && (
-              <label className="block">
+              <label className="block" htmlFor={SCHEDULER_FIELD_IDS.chatMessage} style={expansionMotionStyle} data-motion-contract="expansionCollapse">
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "chatMessageLabel")}</span>
                 <textarea
+                  id={SCHEDULER_FIELD_IDS.chatMessage}
                   value={chatMessage}
-                  onInput={(event) => setChatMessage(event.currentTarget.value)}
+                  onInput={(event) => {
+                    setChatMessage(event.currentTarget.value);
+                    clearFieldError("chatMessage");
+                  }}
+                  aria-invalid={Boolean(fieldErrors.chatMessage)}
+                  aria-describedby={fieldErrors.chatMessage ? `${SCHEDULER_FIELD_IDS.chatMessage}-error` : undefined}
                   rows={5}
                   className={`mt-2 w-full resize-none py-3 font-medium ${SCHEDULER_FIELD_CLASS}`}
                   placeholder={translate(schedulerMessages, "chatMessagePlaceholder")}
                 />
+                <SchedulerFieldError field="chatMessage" message={fieldErrors.chatMessage} />
               </label>
             )}
 
@@ -1188,11 +1457,18 @@ export const SchedulerPage: FunctionComponent = () => {
 
             {targetType === "node_flow" && (
               <div className="grid gap-3">
-                <label className="block">
+                <label className="block" htmlFor={SCHEDULER_FIELD_IDS.nodeFlow}>
                   <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "targetNodeFlow")}</span>
                   <AvantgardeSelect
+                    id={SCHEDULER_FIELD_IDS.nodeFlow}
                     value={selectedNodeFlowId}
-                    onChange={setSelectedNodeFlowId}
+                    onChange={(value) => {
+                      setSelectedNodeFlowId(value);
+                      clearFieldError("nodeFlow");
+                    }}
+                    invalid={Boolean(fieldErrors.nodeFlow)}
+                    aria-invalid={Boolean(fieldErrors.nodeFlow)}
+                    aria-describedby={fieldErrors.nodeFlow ? `${SCHEDULER_FIELD_IDS.nodeFlow}-error` : undefined}
                     searchable={true}
                     options={[
                       { value: "", label: translate(schedulerMessages, nodeFlows.length > 0 ? "chooseNodeFlow" : "noSavedNodeFlows") },
@@ -1200,12 +1476,19 @@ export const SchedulerPage: FunctionComponent = () => {
                     ]}
                     className="mt-2"
                   />
+                  <SchedulerFieldError field="nodeFlow" message={fieldErrors.nodeFlow} />
                 </label>
-                <label className="block">
+                <label className="block" htmlFor={SCHEDULER_FIELD_IDS.nodeFlowInput}>
                   <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "jsonInput")}</span>
                   <textarea
+                    id={SCHEDULER_FIELD_IDS.nodeFlowInput}
                     value={nodeFlowInputJson}
-                    onInput={(event) => setNodeFlowInputJson(event.currentTarget.value)}
+                    onInput={(event) => {
+                      setNodeFlowInputJson(event.currentTarget.value);
+                      clearFieldError("nodeFlowInput");
+                    }}
+                    aria-invalid={Boolean(fieldErrors.nodeFlowInput)}
+                    aria-describedby={fieldErrors.nodeFlowInput ? `${SCHEDULER_FIELD_IDS.nodeFlowInput}-error` : undefined}
                     rows={5}
                     spellcheck={false}
                     className={`mt-2 w-full resize-y py-3 font-mono text-xs ${SCHEDULER_FIELD_CLASS}`}
@@ -1214,6 +1497,7 @@ export const SchedulerPage: FunctionComponent = () => {
                   <p className="mt-2 text-xs leading-relaxed text-slate-400">
                     {translate(schedulerMessages, "jsonInputHelp")}
                   </p>
+                  <SchedulerFieldError field="nodeFlowInput" message={fieldErrors.nodeFlowInput} />
                 </label>
               </div>
             )}
@@ -1248,12 +1532,19 @@ export const SchedulerPage: FunctionComponent = () => {
               </div>
 
               {isAnchoredTiming ? (
-                <div className="mt-4 grid gap-3">
-                  <label className="block">
+                <div className="mt-4 grid gap-3" style={expansionMotionStyle} data-motion-contract="expansionCollapse">
+                  <label className="block" htmlFor={SCHEDULER_FIELD_IDS.anchorSprint}>
                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "waitForSprint")}</span>
                     <AvantgardeSelect
+                      id={SCHEDULER_FIELD_IDS.anchorSprint}
                       value={anchorSourceSprintId}
-                      onChange={setAnchorSourceSprintId}
+                      onChange={(value) => {
+                        setAnchorSourceSprintId(value);
+                        clearFieldError("anchorSprint");
+                      }}
+                      invalid={Boolean(fieldErrors.anchorSprint)}
+                      aria-invalid={Boolean(fieldErrors.anchorSprint)}
+                      aria-describedby={fieldErrors.anchorSprint ? `${SCHEDULER_FIELD_IDS.anchorSprint}-error` : undefined}
                       searchable={true}
                       options={[
                         { value: "", label: translate(schedulerMessages, "chooseSourceSprint") },
@@ -1267,16 +1558,24 @@ export const SchedulerPage: FunctionComponent = () => {
                       ]}
                       className="mt-2"
                     />
+                    <SchedulerFieldError field="anchorSprint" message={fieldErrors.anchorSprint} />
                   </label>
-                  <label className="block">
+                  <label className="block" htmlFor={SCHEDULER_FIELD_IDS.anchorOffset}>
                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "offsetMinutes")}</span>
                     <input
+                      id={SCHEDULER_FIELD_IDS.anchorOffset}
                       type="number"
                       min={0}
                       value={anchorOffsetMinutes}
-                      onInput={(event) => setAnchorOffsetMinutes(Number(event.currentTarget.value))}
+                      onInput={(event) => {
+                        setAnchorOffsetMinutes(Number(event.currentTarget.value));
+                        clearFieldError("anchorOffset");
+                      }}
+                      aria-invalid={Boolean(fieldErrors.anchorOffset)}
+                      aria-describedby={fieldErrors.anchorOffset ? `${SCHEDULER_FIELD_IDS.anchorOffset}-error` : undefined}
                       className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
                     />
+                    <SchedulerFieldError field="anchorOffset" message={fieldErrors.anchorOffset} />
                   </label>
                   <p className="text-xs leading-relaxed text-slate-400">
                     {translate(schedulerMessages, "anchoredHelp")}
@@ -1291,9 +1590,15 @@ export const SchedulerPage: FunctionComponent = () => {
                     id="scheduler-scheduled-for"
                     type="datetime-local"
                     value={scheduledFor}
-                    onInput={(event) => setScheduledFor(event.currentTarget.value)}
+                    onInput={(event) => {
+                      setScheduledFor(event.currentTarget.value);
+                      clearFieldError("scheduledFor");
+                    }}
+                    aria-invalid={Boolean(fieldErrors.scheduledFor)}
+                    aria-describedby={fieldErrors.scheduledFor ? `${SCHEDULER_FIELD_IDS.scheduledFor}-error` : undefined}
                     className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
                   />
+                  <SchedulerFieldError field="scheduledFor" message={fieldErrors.scheduledFor} />
                   <p className="mt-2 text-xs font-medium text-slate-400">
                     {translate(schedulerMessages, "timezone", { timezone: selectedTimezone })}
                   </p>
@@ -1306,7 +1611,10 @@ export const SchedulerPage: FunctionComponent = () => {
                       <button
                         key={preset.label}
                         type="button"
-                        onClick={() => setScheduledFor(toDateInputValue(preset.date()))}
+                        onClick={() => {
+                          setScheduledFor(toDateInputValue(preset.date()));
+                          clearFieldError("scheduledFor");
+                        }}
                         className="min-h-[32px] rounded-full border border-black/[0.06] bg-black/[0.025] px-2 text-[10px] font-black uppercase tracking-[0.11em] text-slate-500 transition hover:border-signal-500/20 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400 dark:hover:text-white"
                       >
                         {preset.label}
@@ -1339,13 +1647,20 @@ export const SchedulerPage: FunctionComponent = () => {
               )}
 
               {repeatEnabled && !isAnchoredTiming && (
-                <div className="mt-4 grid gap-3">
+                <div className="mt-4 grid gap-3" style={expansionMotionStyle} data-motion-contract="expansionCollapse">
                   <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
                     <input
+                      id={SCHEDULER_FIELD_IDS.interval}
                       type="number"
                       min={1}
                       value={interval}
-                      onInput={(event) => setIntervalValue(Number(event.currentTarget.value))}
+                      onInput={(event) => {
+                        setIntervalValue(Number(event.currentTarget.value));
+                        clearFieldError("interval");
+                      }}
+                      aria-label={translate(schedulerMessages, "recurrenceInterval")}
+                      aria-invalid={Boolean(fieldErrors.interval)}
+                      aria-describedby={fieldErrors.interval ? `${SCHEDULER_FIELD_IDS.interval}-error` : undefined}
                       className={SCHEDULER_COMPACT_FIELD_CLASS}
                     />
                     <AvantgardeSelect
@@ -1360,6 +1675,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       ]}
                     />
                   </div>
+                  <SchedulerFieldError field="interval" message={fieldErrors.interval} />
 
                   <AvantgardeSelect
                     value={endMode}
@@ -1372,22 +1688,42 @@ export const SchedulerPage: FunctionComponent = () => {
                   />
 
                   {endMode === "after_count" && (
-                    <input
-                      type="number"
-                      min={1}
-                      value={count}
-                      onInput={(event) => setCount(Number(event.currentTarget.value))}
-                      className={SCHEDULER_COMPACT_FIELD_CLASS}
-                    />
+                    <div style={expansionMotionStyle} data-motion-contract="expansionCollapse">
+                      <input
+                        id={SCHEDULER_FIELD_IDS.count}
+                        type="number"
+                        min={1}
+                        value={count}
+                        onInput={(event) => {
+                          setCount(Number(event.currentTarget.value));
+                          clearFieldError("count");
+                        }}
+                        aria-label={translate(schedulerMessages, "recurrenceCount")}
+                        aria-invalid={Boolean(fieldErrors.count)}
+                        aria-describedby={fieldErrors.count ? `${SCHEDULER_FIELD_IDS.count}-error` : undefined}
+                        className={SCHEDULER_COMPACT_FIELD_CLASS}
+                      />
+                      <SchedulerFieldError field="count" message={fieldErrors.count} />
+                    </div>
                   )}
 
                   {endMode === "on_date" && (
-                    <input
-                      type="datetime-local"
-                      value={until}
-                      onInput={(event) => setUntil(event.currentTarget.value)}
-                      className={SCHEDULER_COMPACT_FIELD_CLASS}
-                    />
+                    <div style={expansionMotionStyle} data-motion-contract="expansionCollapse">
+                      <input
+                        id={SCHEDULER_FIELD_IDS.until}
+                        type="datetime-local"
+                        value={until}
+                        onInput={(event) => {
+                          setUntil(event.currentTarget.value);
+                          clearFieldError("until");
+                        }}
+                        aria-label={translate(schedulerMessages, "recurrenceEnd")}
+                        aria-invalid={Boolean(fieldErrors.until)}
+                        aria-describedby={fieldErrors.until ? `${SCHEDULER_FIELD_IDS.until}-error` : undefined}
+                        className={SCHEDULER_COMPACT_FIELD_CLASS}
+                      />
+                      <SchedulerFieldError field="until" message={fieldErrors.until} />
+                    </div>
                   )}
                 </div>
               )}
@@ -1417,7 +1753,7 @@ export const SchedulerPage: FunctionComponent = () => {
             </div>
 
             {feedback.message && (
-              <div role={feedback.tone === "error" ? "alert" : "status"} aria-live={feedback.tone === "error" ? "assertive" : "polite"} aria-atomic="true" className={`rounded-[var(--radius-ui)] border px-4 py-3 text-xs font-semibold backdrop-blur-md transition-all duration-150 ${
+              <div role={feedback.tone === "error" ? "alert" : "status"} aria-live={feedback.tone === "error" ? "assertive" : "polite"} aria-atomic="true" data-motion-contract="asyncFeedback" style={feedbackMotionStyle} className={`rounded-[var(--radius-ui)] border px-4 py-3 text-xs font-semibold backdrop-blur-md transition-[border-color,background-color,color,opacity] motion-reduce:duration-0 ${
                 feedback.tone === "error"
                   ? "border-status-red/20 bg-status-red/[0.06] text-status-red"
                   : "border-signal-500/20 bg-signal-500/[0.06] text-signal-600 dark:text-signal-400"
@@ -1512,7 +1848,9 @@ export const SchedulerPage: FunctionComponent = () => {
                       aria-label={translatePlural(schedulerMessages, "dayOccurrenceCount", dayItems.length, {
                         day: formatSchedulerDayLabel(day, locale),
                       })}
-                      className={`min-h-[13rem] rounded-2xl border p-3.5 text-left transition-all duration-150 ${
+                      data-motion-contract="selectionMovement"
+                      style={selectionMotionStyle}
+                      className={`min-h-[13rem] rounded-2xl border p-3.5 text-left transition-[border-color,background-color,box-shadow,transform] motion-reduce:duration-0 ${
                         selected
                           ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_4px_16px_rgba(0,224,160,0.08)]"
                           : "border-black/[0.06] bg-black/[0.015] hover:-translate-y-0.5 hover:bg-black/[0.03] dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:bg-white/[0.04]"
@@ -1548,7 +1886,8 @@ export const SchedulerPage: FunctionComponent = () => {
                                     }}
                                     aria-disabled={!canEditOccurrence}
                                     title={editReason}
-                                    className={`inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 ${
+                                    style={controlMotionStyle}
+                                    className={`inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-[border-color,background-color,color,opacity] motion-reduce:duration-0 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 ${
                                       canEditOccurrence
                                         ? "hover:bg-white hover:text-slate-950 dark:hover:bg-white/[0.05] dark:hover:text-white"
                                         : "cursor-not-allowed opacity-45"
@@ -1616,7 +1955,8 @@ export const SchedulerPage: FunctionComponent = () => {
                                     }}
                                     aria-disabled={!canEditOccurrence}
                                     title={editReason}
-                                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 ${
+                                    style={controlMotionStyle}
+                                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-[border-color,background-color,color,opacity] motion-reduce:duration-0 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 ${
                                       canEditOccurrence
                                         ? "hover:bg-white hover:text-slate-950 dark:hover:bg-white/[0.05] dark:hover:text-white"
                                         : "cursor-not-allowed opacity-45"
@@ -1642,7 +1982,7 @@ export const SchedulerPage: FunctionComponent = () => {
           <section className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{translate(schedulerMessages, "scheduledEntries")}</h3>
+                <h3 id="scheduler-scheduled-entries-heading" tabIndex={-1} className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{translate(schedulerMessages, "scheduledEntries")}</h3>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{translate(schedulerMessages, "scheduledEntriesDescription")}</p>
               </div>
               <Check className="h-5 w-5 text-signal-500" />
@@ -1661,8 +2001,11 @@ export const SchedulerPage: FunctionComponent = () => {
                 const editReason = canEditEntry
                   ? translate(schedulerMessages, "editScheduleEntry")
                   : unsupportedEditReason(entry.targetType, locale);
+                const togglePending = pendingRowActions.has(rowActionKey(entry.id, "toggle"));
+                const deletePending = pendingRowActions.has(rowActionKey(entry.id, "delete"));
+                const entryFeedback = rowFeedback[entry.id];
                 return (
-                  <div key={entry.id} data-testid={`scheduler-entry-${entry.id}`} className="grid gap-3 rounded-2xl border border-black/[0.05] bg-white/60 p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.05] dark:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div key={entry.id} data-testid={`scheduler-entry-${entry.id}`} data-motion-contract="listReorder" style={listMotionStyle} className="grid gap-3 rounded-2xl border border-black/[0.05] bg-white/60 p-4 shadow-sm transition-[border-color,background-color,box-shadow,transform,opacity] motion-reduce:duration-0 motion-safe:hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.05] dark:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>
@@ -1689,6 +2032,40 @@ export const SchedulerPage: FunctionComponent = () => {
                       {entry.lastError && (
                         <p className="mt-2 text-xs font-bold text-status-red">{entry.lastError}</p>
                       )}
+                      {entryFeedback && (
+                        <div
+                          role={entryFeedback.tone === "error" ? "alert" : "status"}
+                          aria-live={entryFeedback.tone === "error" ? "assertive" : "polite"}
+                          aria-atomic="true"
+                          data-testid={`scheduler-entry-feedback-${entry.id}`}
+                          data-motion-contract="asyncFeedback"
+                          style={feedbackMotionStyle}
+                          className={`mt-3 flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-[border-color,background-color,color,opacity] motion-reduce:duration-0 ${
+                            entryFeedback.tone === "error"
+                              ? "border-status-red/20 bg-status-red/[0.06] text-status-red"
+                              : "border-signal-500/20 bg-signal-500/[0.06] text-signal-600 dark:text-signal-400"
+                          }`}
+                        >
+                          <span>{entryFeedback.message}</span>
+                          {entryFeedback.tone === "error" && entryFeedback.retryAction && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (entryFeedback.retryAction === "toggle") {
+                                  void toggleEntryStatus(entry.id, Boolean(entryFeedback.retryPaused));
+                                } else {
+                                  void retryEntryDeletion(entry.id);
+                                }
+                              }}
+                              disabled={entryFeedback.retryAction === "toggle" ? togglePending : deletePending}
+                              className="rounded-full border border-current/25 px-2.5 py-1 font-bold transition-[background-color,color,opacity] motion-reduce:duration-0 hover:bg-white/50 disabled:cursor-not-allowed disabled:opacity-50"
+                              style={controlMotionStyle}
+                            >
+                              {translate(schedulerMessages, "retryAction")}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -1696,7 +2073,8 @@ export const SchedulerPage: FunctionComponent = () => {
                         onClick={() => startEdit(entry)}
                         aria-disabled={!canEditEntry}
                         title={editReason}
-                        className={`inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 ${
+                        style={controlMotionStyle}
+                        className={`inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-[border-color,background-color,color,opacity] motion-reduce:duration-0 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 ${
                           canEditEntry
                             ? "hover:bg-white hover:text-slate-950 dark:hover:bg-white/[0.05] dark:hover:text-white"
                             : "cursor-not-allowed opacity-45"
@@ -1708,19 +2086,28 @@ export const SchedulerPage: FunctionComponent = () => {
                       <button
                         type="button"
                         onClick={() => void toggleEntryStatus(entry.id, entry.status === "paused")}
-                        disabled={entry.status === "completed" || entry.status === "cancelled"}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                        disabled={togglePending || entry.status === "completed" || entry.status === "cancelled"}
+                        aria-busy={togglePending ? "true" : undefined}
+                        style={controlMotionStyle}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-[border-color,background-color,color,opacity] motion-reduce:duration-0 hover:bg-white hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
                         aria-label={translate(schedulerMessages, entry.status === "paused" ? "resumeScheduleEntry" : "pauseScheduleEntry")}
                       >
-                        {entry.status === "paused" ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                        {togglePending
+                          ? <RefreshCw className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                          : entry.status === "paused" ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
                       </button>
                       <button
                         type="button"
-                        onClick={() => void removeEntry(entry.id)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-status-red/20 bg-status-red/[0.06] text-status-red transition-all duration-150 hover:bg-status-red/[0.12]"
+                        onClick={(event) => removeEntry(entry, event.currentTarget)}
+                        disabled={deletePending}
+                        aria-busy={deletePending ? "true" : undefined}
+                        style={controlMotionStyle}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-status-red/20 bg-status-red/[0.06] text-status-red transition-[border-color,background-color,color,opacity] motion-reduce:duration-0 hover:bg-status-red/[0.12] disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label={translate(schedulerMessages, "deleteScheduleEntry")}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        {deletePending
+                          ? <RefreshCw className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                          : <Trash2 className="h-3.5 w-3.5" />}
                       </button>
                     </div>
                   </div>
@@ -1731,5 +2118,13 @@ export const SchedulerPage: FunctionComponent = () => {
         </div>
       </section>
     </PageContainer>
+    <ConfirmDialog
+      isOpen={confirmDialog.isOpen}
+      options={confirmDialog.options}
+      onConfirm={confirmEntryDeletion}
+      onCancel={cancelEntryDeletion}
+      restoreFocus
+    />
+    </>
   );
 };

@@ -11,7 +11,9 @@ expect.extend(matchers);
 // Mock GSAP to avoid timing issues in tests
 vi.mock("gsap", () => {
   const mockGsap = {
-    to: vi.fn(),
+    to: vi.fn((_target: unknown, vars?: { onComplete?: () => void }) => {
+      vars?.onComplete?.();
+    }),
     fromTo: vi.fn(),
     set: vi.fn(),
     quickTo: vi.fn(() => vi.fn()),
@@ -88,8 +90,9 @@ const renderSchedulerPage = (
 };
 
 describe("SchedulerPage", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     cleanup();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
     vi.clearAllMocks();
     window.confirm = vi.fn(() => true);
   });
@@ -458,6 +461,111 @@ describe("SchedulerPage", () => {
     resolveRefresh?.(mockSchedule);
   });
 
+  it("keeps cached rows visible and exposes a retryable error when refresh fails", async () => {
+    const mockSchedule = {
+      entries: [{
+        id: "entry-cached",
+        projectId: "proj-1",
+        title: "Cached schedule row",
+        targetType: "sprint",
+        status: "scheduled",
+        runCount: 0,
+        recurrence: { frequency: "none", interval: 1, endMode: "never" },
+      }],
+      occurrences: [],
+    };
+    vi.mocked(fetchProjectSchedule)
+      .mockResolvedValueOnce(mockSchedule as any)
+      .mockRejectedValueOnce(new Error("REFRESH_TEMPORARILY_UNAVAILABLE"))
+      .mockResolvedValueOnce(mockSchedule as any);
+
+    renderSchedulerPage();
+    await screen.findByText("Cached schedule row");
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("REFRESH_TEMPORARILY_UNAVAILABLE");
+    expect(screen.getByText("Cached schedule row")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    await waitFor(() => expect(screen.queryByText("REFRESH_TEMPORARILY_UNAVAILABLE")).not.toBeInTheDocument());
+    expect(screen.getByText("Cached schedule row")).toBeInTheDocument();
+  });
+
+  it("associates validation with the first invalid field, focuses it, and preserves entered values", async () => {
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: [] } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+    renderSchedulerPage();
+
+    const titleInput = await screen.findByPlaceholderText("Optional description/title");
+    fireEvent.input(titleInput, { target: { value: "Keep this draft title" } });
+    fireEvent.click(screen.getByRole("button", { name: /^schedule$/i }));
+
+    const sprintField = document.getElementById("scheduler-target-sprint")!;
+    const error = await screen.findByText("Choose a sprint that is not completed.");
+    await waitFor(() => expect(sprintField).toHaveFocus());
+    expect(sprintField).toHaveAttribute("aria-invalid", "true");
+    expect(sprintField).toHaveAttribute("aria-describedby", error.id);
+    expect(titleInput).toHaveValue("Keep this draft title");
+    expect(createSchedulerEntry).not.toHaveBeenCalled();
+  });
+
+  it("suppresses repeated row mutations and reports completion without relying on motion", async () => {
+    let resolveUpdate: ((value: unknown) => void) | null = null;
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({
+      entries: [{
+        id: "entry-once",
+        projectId: "proj-1",
+        title: "Only once",
+        targetType: "sprint",
+        status: "scheduled",
+        runCount: 0,
+        recurrence: { frequency: "none", interval: 1, endMode: "never" },
+      }],
+      occurrences: [],
+    } as any);
+    vi.mocked(updateSchedulerEntry).mockImplementationOnce(() => new Promise((resolve) => {
+      resolveUpdate = resolve;
+    }) as any);
+    renderSchedulerPage();
+
+    const pauseButton = await screen.findByRole("button", { name: /pause schedule entry/i });
+    fireEvent.click(pauseButton);
+    fireEvent.click(pauseButton);
+    expect(updateSchedulerEntry).toHaveBeenCalledTimes(1);
+    expect(pauseButton).toBeDisabled();
+
+    resolveUpdate?.({ id: "entry-once" });
+    expect(await screen.findByText("Schedule entry paused.")).toBeInTheDocument();
+    await waitFor(() => expect(pauseButton).toBeEnabled());
+  });
+
+  it("keeps row mutation failures persistent and retryable", async () => {
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({
+      entries: [{
+        id: "entry-retry",
+        projectId: "proj-1",
+        title: "Retry row",
+        targetType: "sprint",
+        status: "scheduled",
+        runCount: 0,
+        recurrence: { frequency: "none", interval: 1, endMode: "never" },
+      }],
+      occurrences: [],
+    } as any);
+    vi.mocked(updateSchedulerEntry)
+      .mockRejectedValueOnce(new Error("ROW_MUTATION_FAILED"))
+      .mockResolvedValueOnce({ id: "entry-retry" } as any);
+    renderSchedulerPage();
+
+    const row = await screen.findByTestId("scheduler-entry-entry-retry");
+    fireEvent.click(within(row).getByRole("button", { name: /pause schedule entry/i }));
+    expect(await within(row).findByRole("alert")).toHaveTextContent("ROW_MUTATION_FAILED");
+    fireEvent.click(within(row).getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(updateSchedulerEntry).toHaveBeenCalledTimes(2));
+    expect(await within(row).findByRole("status")).toHaveTextContent("Schedule entry paused.");
+  });
+
   it("handles scheduled entry toggle pause/resume and delete", async () => {
     const mockSchedule = {
       entries: [
@@ -491,7 +599,9 @@ describe("SchedulerPage", () => {
     // Click delete
     const deleteButton = screen.getByRole("button", { name: /delete schedule entry/i });
     fireEvent.click(deleteButton);
-    expect(deleteSchedulerEntry).toHaveBeenCalledWith("entry-1");
+    expect(window.confirm).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Delete schedule" }));
+    await waitFor(() => expect(deleteSchedulerEntry).toHaveBeenCalledWith("entry-1"));
   });
 
   it("renders agent wakeup and task schedules without exposing unsupported creation controls", async () => {
@@ -626,7 +736,8 @@ describe("SchedulerPage", () => {
     expect(updateSchedulerEntry).toHaveBeenCalledWith("entry-agent", { status: "paused" });
 
     fireEvent.click(within(row).getByRole("button", { name: /delete schedule entry/i }));
-    expect(deleteSchedulerEntry).toHaveBeenCalledWith("entry-agent");
+    fireEvent.click(await screen.findByRole("button", { name: "Delete schedule" }));
+    await waitFor(() => expect(deleteSchedulerEntry).toHaveBeenCalledWith("entry-agent"));
   });
 
   it("continues to render supported scheduler target summaries", async () => {
@@ -1215,6 +1326,78 @@ describe("SchedulerPage", () => {
     matchMediaSpy.mockRestore();
   });
 
+  it("keeps deletion pending by row id and suppresses repeated delete requests", async () => {
+    let resolveDelete: (() => void) | null = null;
+    vi.mocked(fetchProjectSchedule).mockResolvedValueOnce({
+      entries: [{
+        id: "entry-delete-once",
+        projectId: "proj-1",
+        title: "Delete once",
+        targetType: "sprint",
+        status: "scheduled",
+        recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        runCount: 0,
+      }],
+      occurrences: [],
+    } as any).mockResolvedValueOnce({ entries: [], occurrences: [] } as any);
+    vi.mocked(deleteSchedulerEntry).mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveDelete = resolve;
+    }));
+    renderSchedulerPage();
+
+    const row = await screen.findByTestId("scheduler-entry-entry-delete-once");
+    const deleteButton = within(row).getByRole("button", { name: "Delete schedule entry" });
+    fireEvent.click(deleteButton);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete schedule" }));
+
+    expect(await screen.findByText("Deleting schedule…")).toBeInTheDocument();
+    expect(deleteSchedulerEntry).toHaveBeenCalledTimes(1);
+    expect(deleteButton).toBeDisabled();
+    expect(within(row).getByRole("button", { name: "Pause schedule entry" })).toBeEnabled();
+    fireEvent.click(deleteButton);
+    expect(deleteSchedulerEntry).toHaveBeenCalledTimes(1);
+
+    resolveDelete?.();
+    await waitFor(() => expect(screen.getAllByText("Schedule entry deleted.").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Scheduled entries" })).toHaveFocus());
+  });
+
+  it("uses zero-duration semantic contracts while retaining explicit reduced-motion feedback", async () => {
+    const matchMediaSpy = vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(() => true),
+    }));
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({
+      entries: [{
+        id: "entry-reduced-motion",
+        projectId: "proj-1",
+        title: "Reduced motion row",
+        targetType: "sprint",
+        status: "scheduled",
+        recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        runCount: 0,
+      }],
+      occurrences: [],
+    } as any);
+    renderSchedulerPage();
+
+    const calendarTab = await screen.findByRole("tab", { name: "Calendar" });
+    expect(calendarTab).toHaveStyle({ transitionDuration: "0ms" });
+    expect(calendarTab).toHaveAttribute("data-motion-contract", "selectionMovement");
+
+    fireEvent.click(screen.getByRole("button", { name: "Pause schedule entry" }));
+    const feedback = await screen.findByText("Schedule entry paused.");
+    expect(feedback.closest('[data-motion-contract="asyncFeedback"]')).toHaveStyle({ transitionDuration: "0ms" });
+    expect(feedback).toBeInTheDocument();
+    matchMediaSpy.mockRestore();
+  });
+
   it("requires confirmation before deleting a schedule", async () => {
     vi.mocked(fetchProjectSchedule).mockResolvedValue({
       entries: [{
@@ -1227,11 +1410,16 @@ describe("SchedulerPage", () => {
       }],
       occurrences: [],
     } as any);
-    vi.mocked(window.confirm).mockReturnValue(false);
     renderSchedulerPage(mockProjectData, "de");
 
-    fireEvent.click(await screen.findByRole("button", { name: "Zeitplaneintrag löschen" }));
-    expect(window.confirm).toHaveBeenCalledWith("Diesen Zeitplaneintrag löschen? Dies kann nicht rückgängig gemacht werden.");
+    const deleteButton = await screen.findByRole("button", { name: "Zeitplaneintrag löschen" });
+    deleteButton.focus();
+    fireEvent.click(deleteButton);
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog", { name: "„Confirm delete“ löschen?" })).toBeInTheDocument();
+    expect(screen.getByText("Diesen Zeitplaneintrag löschen? Dies kann nicht rückgängig gemacht werden.")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(deleteButton).toHaveFocus());
     expect(deleteSchedulerEntry).not.toHaveBeenCalled();
   });
 });
