@@ -3,14 +3,14 @@
   "entries": [
     {
       "path": "dashboard/src/v2/AgentsPage.tsx",
-      "line": 802,
+      "line": 975,
       "kind": "attribute:placeholder",
       "text": "feature/agents-update",
       "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/agents/AgentPresetEditorPanel.tsx",
-      "line": 1213,
+      "line": 1265,
       "kind": "jsx-text",
       "text": "id",
       "rationale": "This is a persisted record field identifier shown as technical metadata and must remain verbatim."

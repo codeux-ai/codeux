@@ -18,6 +18,15 @@ The Agents management surface leans into a premium "Workshop" feel. We use a lot
 - **Focus Rings:** Ensure all buttons have explicit `focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30`.
 - **Header Actions:** Keep agent-management actions compact, pill-shaped, and visually consistent; secondary actions such as sync and push should share the same muted glass button treatment so the header reads as one control cluster.
 
+## Editor Navigation Safety
+
+- Agent and instruction-file editors publish a typed `{ editorKey, dirty, pending, save }` state to `AgentsPage`; parent selection code must never infer draft state from child markup or component internals.
+- Agent-card, instruction-file, project, Cancel, and `/agents` route-change requests use the shared `UnsavedChangesModal`. Keep editing cancels the destination, discard applies it without calling save, and save-and-leave applies it only when the editor's save contract resolves `true`.
+- Keep the latest requested destination in a ref while the modal or a save is pending. A later selection replaces the earlier destination, and a failed save leaves the editor, draft, destination modal, and retry path intact.
+- Project changes are held at the current Agents workspace until the decision is resolved. Route interception is registered only while the Agents page is mounted; hard refresh and tab close continue to use the browser's standard `beforeunload` protection.
+- Instruction-file revert uses `useConfirmDialog` plus `ConfirmDialog`, names the selected file, supports Escape/cancel, disables the trigger while open, and restores focus to that exact trigger after cancellation. Do not use `window.confirm` for this action.
+- Editor selection entry uses the `selectionMovement` interaction contract. Validation and save feedback use `inlineValidation` and `asyncFeedback`; reduced motion resolves animated duration to zero while the persistent signal border/ring and text status preserve the selected and validation states.
+
 ## Avatar Scene Motion
 - The 3D agent avatar uses standard Three.js materials, studio lights, pointer-aware head movement, and runtime tool props. Do not add flashlight beams, target glows, low-battery flicker overlays, or shell/screen emissive boosts that recolor the avatar.
 - The shared SVG/WebGL expression vocabulary is exactly `happy`, `sad`, `angry`, `sleepy`, `bored`, `hyped`, `shake_head`, `nod`, `curious`, `thinking`, `excited`, `laughing`, `surprised`, `wink`, `dance`, and `proud`. Response metadata separates semantic `emotion` from choreography `animation`: the supported animation identifiers map to expressions as `hyped` → `hyped`, `shake_head` → `shake_head`, `nod` → `nod`, `laughing` → `laughing`, `wink` → `wink`, and `dance` → `dance`; while an animation is active, that mapped expression drives choreography without changing the stored semantic emotion.

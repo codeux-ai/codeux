@@ -1,8 +1,8 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Bot, Plus, Info, ShieldCheck, AlertTriangle, Database, FileText, CheckCircle2, GitBranch, Loader2, ExternalLink } from "lucide-preact";
-import type { AgentPreset, SkillStorageRecord } from "./types.js";
+import type { AgentPreset, SkillStorageRecord, Source } from "./types.js";
 import type { BaseAgentRole, BaseAgentUpdateNotice as BaseAgentUpdateNoticeRecord } from "../../../src/contracts/agent-preset-types.js";
 import type { InstructionFileSummary, InstructionFileContent } from "./lib/instruction-file-api.js";
 import { fetchInstructionFiles } from "./lib/instruction-file-api.js";
@@ -33,11 +33,16 @@ import { AgentPresetEditorPanel } from "./components/agents/AgentPresetEditorPan
 import { BaseAgentUpdateNotice } from "./components/agents/BaseAgentUpdateNotice.js";
 import { InstructionFileCard } from "./components/agents/InstructionFileCard.js";
 import { InstructionFileEditorPanel } from "./components/agents/InstructionFileEditorPanel.js";
+import type { AgentEditorNavigationState, AgentEditorNavigationStateChange } from "./components/agents/editor-navigation-state.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { SectionDivider } from "./components/ui/SectionDivider.js";
+import { UnsavedChangesModal } from "./components/ui/UnsavedChangesModal.js";
 import { useDashboardI18n } from "./i18n/index.js";
 import type { DashboardMessageVariables, DashboardTextMessageKey } from "./i18n/index.js";
 import { agentsMessages } from "./i18n/messages/agents.js";
+import { registerNavigationBlocker } from "./router/navigation-blocker.js";
+import { useReducedMotion } from "./hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "./lib/motion/constants.js";
 
 /* ── Roster summary stat ── */
 type RosterStatProps = {
@@ -99,18 +104,32 @@ type PageActionFeedback = {
   retry?: () => void;
 } | null;
 
+type AgentsDestination =
+  | { kind: "agent"; presetId: string }
+  | { kind: "instruction-file"; fileId: string }
+  | { kind: "close-agent-editor" }
+  | { kind: "project"; project: Source | null }
+  | { kind: "route"; retry: () => void };
+
 /* ── Main Page ── */
 export const AgentsPage: FunctionComponent = () => {
   const { formatNumber, translate, translatePlural } = useDashboardI18n();
-  const t = (key: DashboardTextMessageKey<typeof agentsMessages>, variables?: DashboardMessageVariables): string => (
+  const t = useCallback((key: DashboardTextMessageKey<typeof agentsMessages>, variables?: DashboardMessageVariables): string => (
     translate(agentsMessages, key, variables)
-  );
+  ), [translate]);
   const contentRef = useRef<HTMLElement>(null);
   const pushButtonRef = useRef<HTMLButtonElement>(null);
   const pushPickerRef = useRef<HTMLDivElement>(null);
-  const { selectedProject, loading: projectLoading } = useProjectData();
-  const selectedProjectIdRef = useRef<string | null>(selectedProject?.id ?? null);
-  selectedProjectIdRef.current = selectedProject?.id ?? null;
+  const {
+    selectedProject: contextSelectedProject,
+    selectProject,
+    loading: projectLoading,
+  } = useProjectData();
+  const [pageProject, setPageProject] = useState<Source | null>(contextSelectedProject);
+  const selectedProjectIdRef = useRef<string | null>(pageProject?.id ?? null);
+  selectedProjectIdRef.current = pageProject?.id ?? null;
+  const reducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
   const [presets, setPresets] = useState<AgentPreset[]>([]);
   const [baseAgentUpdateNotices, setBaseAgentUpdateNotices] = useState<BaseAgentUpdateNoticeRecord[]>([]);
   const [baseAgentNoticesLoading, setBaseAgentNoticesLoading] = useState(false);
@@ -137,18 +156,27 @@ export const AgentsPage: FunctionComponent = () => {
   const [instructionFiles, setInstructionFiles] = useState<InstructionFileSummary[]>([]);
   const [skillStorages, setSkillStorages] = useState<SkillStorageRecord[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [editorState, setEditorState] = useState<AgentEditorNavigationState | null>(null);
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [modalSavePending, setModalSavePending] = useState(false);
+  const [waitingForActiveSave, setWaitingForActiveSave] = useState(false);
+  const pendingDestinationRef = useRef<AgentsDestination | null>(null);
+  const editorStateRef = useRef<AgentEditorNavigationState | null>(null);
+  editorStateRef.current = editorState;
+  const bypassUnloadGuardRef = useRef(false);
+  const applyingProjectIdRef = useRef<string | null>(null);
   const {
     data: effectiveSettings,
     error: effectiveSettingsError,
-  } = useProjectEffectiveSettings(selectedProject?.id || null);
+  } = useProjectEffectiveSettings(pageProject?.id || null);
 
   useEffect(() => {
     if (effectiveSettings) {
       setProjectFileSavingEnabled(effectiveSettings.settings.agents.saveToProjectDirectory);
-    } else if (!selectedProject) {
+    } else if (!pageProject) {
       setProjectFileSavingEnabled(true);
     }
-  }, [effectiveSettings, selectedProject]);
+  }, [effectiveSettings, pageProject]);
 
   useEffect(() => {
     setPushPickerOpen(false);
@@ -157,17 +185,17 @@ export const AgentsPage: FunctionComponent = () => {
     setPushBranchName("");
     setActionFeedback(null);
     setUpdatingBaseAgentRole(null);
-  }, [selectedProject?.id]);
+  }, [pageProject?.id]);
 
   const refreshPresets = async (preferredSelectedPresetId = selectedPresetId): Promise<void> => {
-    if (!selectedProject) {
+    if (!pageProject) {
       setPresets([]);
       setError(null);
       return;
     }
     setLoading(true);
     try {
-      const nextPresets = await fetchAgentPresets(selectedProject.id);
+      const nextPresets = await fetchAgentPresets(pageProject.id);
       setPresets(nextPresets);
       if (!preferredSelectedPresetId && nextPresets.length > 0) {
         setSelectedPresetId(nextPresets[0].id);
@@ -184,24 +212,24 @@ export const AgentsPage: FunctionComponent = () => {
   };
 
   const refreshInstructionFiles = async (): Promise<void> => {
-    if (!selectedProject) {
+    if (!pageProject) {
       setInstructionFiles([]);
       return;
     }
     try {
-      setInstructionFiles(await fetchInstructionFiles(selectedProject.id));
+      setInstructionFiles(await fetchInstructionFiles(pageProject.id));
     } catch {
       setInstructionFiles([]);
     }
   };
 
   const refreshSkillStorages = async (): Promise<void> => {
-    if (!selectedProject) {
+    if (!pageProject) {
       setSkillStorages([]);
       return;
     }
     try {
-      setSkillStorages(await fetchSkillStorages(selectedProject.id));
+      setSkillStorages(await fetchSkillStorages(pageProject.id));
     } catch {
       setSkillStorages([]);
     }
@@ -212,10 +240,10 @@ export const AgentsPage: FunctionComponent = () => {
     void refreshPresets();
     void refreshInstructionFiles();
     void refreshSkillStorages();
-  }, [selectedProject?.id]);
+  }, [pageProject?.id]);
 
   useEffect(() => {
-    const projectId = selectedProject?.id;
+    const projectId = pageProject?.id;
     setBaseAgentUpdateNotices([]);
     if (!projectId) {
       setBaseAgentNoticesLoading(false);
@@ -245,22 +273,157 @@ export const AgentsPage: FunctionComponent = () => {
     return () => {
       stale = true;
     };
-  }, [selectedProject?.id]);
+  }, [pageProject?.id]);
 
-  const handleInstructionFileSaved = (updated: InstructionFileContent): void => {
+  const handleInstructionFileSaved = useCallback((updated: InstructionFileContent): void => {
     setInstructionFiles((cur) => cur.map((f) => (f.id === updated.id ? { ...f, ...updated } : f)));
-  };
+  }, []);
+
+  const applyDestination = useCallback((destination: AgentsDestination): void => {
+    if (destination.kind === "agent") {
+      setSelectedPresetId(destination.presetId);
+      setSelectedFileId(null);
+      setIsEditing(false);
+      return;
+    }
+    if (destination.kind === "instruction-file") {
+      setSelectedFileId(destination.fileId);
+      setIsEditing(false);
+      return;
+    }
+    if (destination.kind === "close-agent-editor") {
+      setIsEditing(false);
+      return;
+    }
+    if (destination.kind === "project") {
+      applyingProjectIdRef.current = destination.project?.id ?? null;
+      setPageProject(destination.project);
+      setSelectedFileId(null);
+      setIsEditing(false);
+      if (destination.project) {
+        void selectProject(destination.project.id).finally(() => {
+          if (applyingProjectIdRef.current === destination.project?.id) {
+            applyingProjectIdRef.current = null;
+          }
+        });
+      }
+      return;
+    }
+    bypassUnloadGuardRef.current = true;
+    destination.retry();
+  }, [selectProject]);
+
+  const runPendingDestination = useCallback((): void => {
+    const destination = pendingDestinationRef.current;
+    pendingDestinationRef.current = null;
+    if (destination) {
+      applyDestination(destination);
+    }
+  }, [applyDestination]);
+
+  const requestDestination = useCallback((destination: AgentsDestination): void => {
+    const currentEditorState = editorStateRef.current;
+    if (currentEditorState?.dirty || currentEditorState?.pending) {
+      pendingDestinationRef.current = destination;
+      setWaitingForActiveSave(Boolean(currentEditorState.pending));
+      setShowUnsavedModal(true);
+      return;
+    }
+    applyDestination(destination);
+  }, [applyDestination]);
 
   const selectAgent = (presetId: string): void => {
-    setSelectedPresetId(presetId);
-    setSelectedFileId(null);
-    setIsEditing(false);
+    requestDestination({ kind: "agent", presetId });
   };
 
   const selectInstructionFile = (fileId: string): void => {
-    setSelectedFileId(fileId);
-    setIsEditing(false);
+    requestDestination({ kind: "instruction-file", fileId });
   };
+
+  const handleEditorStateChange = useCallback<AgentEditorNavigationStateChange>((editorKey, nextState) => {
+    setEditorState((current) => {
+      if (nextState) return nextState;
+      return current?.editorKey === editorKey ? null : current;
+    });
+  }, []);
+
+  const discardAndLeave = useCallback((): void => {
+    setShowUnsavedModal(false);
+    setWaitingForActiveSave(false);
+    runPendingDestination();
+  }, [runPendingDestination]);
+
+  const keepEditing = useCallback((): void => {
+    pendingDestinationRef.current = null;
+    setWaitingForActiveSave(false);
+    setShowUnsavedModal(false);
+  }, []);
+
+  const saveAndLeave = useCallback(async (): Promise<void> => {
+    const currentEditorState = editorStateRef.current;
+    if (!currentEditorState || currentEditorState.pending) return;
+    setModalSavePending(true);
+    const saved = await currentEditorState.save();
+    setModalSavePending(false);
+    if (!saved) return;
+    setShowUnsavedModal(false);
+    setWaitingForActiveSave(false);
+    runPendingDestination();
+  }, [runPendingDestination]);
+
+  useEffect(() => {
+    if (!waitingForActiveSave || !editorState || editorState.pending) return;
+    if (!editorState.dirty) {
+      setWaitingForActiveSave(false);
+      setShowUnsavedModal(false);
+      runPendingDestination();
+    }
+  }, [editorState, runPendingDestination, waitingForActiveSave]);
+
+  useEffect(() => {
+    const contextProjectId = contextSelectedProject?.id ?? null;
+    const pageProjectId = pageProject?.id ?? null;
+    if (contextProjectId === pageProjectId) {
+      if (applyingProjectIdRef.current === contextProjectId) {
+        applyingProjectIdRef.current = null;
+      }
+      return;
+    }
+    if (applyingProjectIdRef.current !== null) return;
+
+    const currentEditorState = editorStateRef.current;
+    if (currentEditorState?.dirty || currentEditorState?.pending) {
+      requestDestination({ kind: "project", project: contextSelectedProject });
+      if (pageProject) {
+        void selectProject(pageProject.id);
+      }
+      return;
+    }
+
+    setPageProject(contextSelectedProject);
+  }, [contextSelectedProject, pageProject, requestDestination, selectProject]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    return registerNavigationBlocker({
+      shouldBlock: () => Boolean(editorStateRef.current?.dirty || editorStateRef.current?.pending),
+      confirmNavigation: (retry) => {
+        requestDestination({ kind: "route", retry });
+        return false;
+      },
+    });
+  }, [requestDestination]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !(editorState?.dirty || editorState?.pending)) return undefined;
+    const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
+      if (bypassUnloadGuardRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [editorState?.dirty, editorState?.pending]);
 
   useLayoutEffect(() => {
     if (!contentRef.current) return;
@@ -268,12 +431,18 @@ export const AgentsPage: FunctionComponent = () => {
     const ctx = gsap.context(() => {
       gsap.fromTo(
         Array.from(el.children),
-        { opacity: 0, y: 28 },
-        { opacity: 1, y: 0, duration: 0.75, stagger: 0.08, ease: "power4.out" }
+        { opacity: reducedMotion ? 1 : 0, y: reducedMotion ? 0 : 28 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: gsapTokens.listReveal.duration,
+          stagger: reducedMotion ? 0 : gsapTokens.controlFeedback.duration / 2,
+          ease: gsapTokens.listReveal.ease,
+        }
       );
     });
     return () => ctx.revert();
-  }, []);
+  }, [gsapTokens.controlFeedback.duration, gsapTokens.listReveal.duration, gsapTokens.listReveal.ease, reducedMotion]);
 
   useEffect(() => {
     if (!pushPickerOpen) return undefined;
@@ -302,10 +471,10 @@ export const AgentsPage: FunctionComponent = () => {
   }, [pushPickerOpen]);
 
   const handleCreate = async (): Promise<void> => {
-    if (!selectedProject) return;
+    if (!pageProject) return;
     try {
       setActionFeedback({ tone: "pending", message: t("creatingPreset") });
-      const created = await createAgentPreset(selectedProject.id, {
+      const created = await createAgentPreset(pageProject.id, {
         name: `Agent ${presets.length + 1}`,
         instructionMarkdown: "",
         labels: [],
@@ -341,12 +510,12 @@ export const AgentsPage: FunctionComponent = () => {
   };
 
   const handlePullFromFiles = async (): Promise<void> => {
-    if (!selectedProject || !projectFileSavingEnabled) return;
+    if (!pageProject || !projectFileSavingEnabled) return;
     const preferredPresetId = selectedPresetId;
     setPullingFromFiles(true);
     setActionFeedback({ tone: "pending", message: t("pullingPresets") });
     try {
-      await pullAgentPresetsFromMarkdown(selectedProject.id);
+      await pullAgentPresetsFromMarkdown(pageProject.id);
       await refreshPresets(preferredPresetId);
       setError(null);
       setActionFeedback({ tone: "success", message: t("presetsPulled") });
@@ -360,12 +529,12 @@ export const AgentsPage: FunctionComponent = () => {
   };
 
   const handlePushToFiles = async (): Promise<void> => {
-    if (!selectedProject || !projectFileSavingEnabled) return;
+    if (!pageProject || !projectFileSavingEnabled) return;
     const preferredPresetId = selectedPresetId;
     setPushingToFiles(true);
     setActionFeedback({ tone: "pending", message: t("pushingPresets") });
     try {
-      await pushAgentPresetsToMarkdown(selectedProject.id);
+      await pushAgentPresetsToMarkdown(pageProject.id);
       await refreshPresets(preferredPresetId);
       setError(null);
       setActionFeedback({ tone: "success", message: t("presetsPushed") });
@@ -398,19 +567,19 @@ export const AgentsPage: FunctionComponent = () => {
   };
 
   const handlePushAgents = (): void => {
-    if (!selectedProject || pushing) return;
+    if (!pageProject || pushing) return;
     setError(null);
     setPushResult(null);
     setPushPickerOpen(true);
   };
 
   const submitPushAgents = async (): Promise<void> => {
-    if (!selectedProject || pushing) return;
+    if (!pageProject || pushing) return;
     setPushing(true);
     setPushPickerOpen(false);
 
     try {
-      const result = await pushAgentPresetsToRepository(selectedProject.id, {
+      const result = await pushAgentPresetsToRepository(pageProject.id, {
         mode: pushMode,
         branchName: pushBranchName.trim() || undefined,
       });
@@ -453,23 +622,27 @@ export const AgentsPage: FunctionComponent = () => {
     }
   };
 
-  const handleSave = async (presetId: string, next: Parameters<typeof updateAgentPreset>[1]): Promise<void> => {
+  const handleSave = useCallback(async (presetId: string, next: Parameters<typeof updateAgentPreset>[1]): Promise<boolean> => {
     setSavingId(presetId);
     setActionFeedback({ tone: "pending", message: t("savingPreset") });
     try {
       const updated = await updateAgentPreset(presetId, next);
       setPresets((cur) => cur.map((p) => (p.id === updated.id ? updated : p)));
-      setIsEditing(false);
+      if (!pendingDestinationRef.current) {
+        setIsEditing(false);
+      }
       setError(null);
       setActionFeedback({ tone: "success", message: t("presetSaved") });
+      return true;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
       setActionFeedback({ tone: "error", message: t("saveFailed", { error: message }), retry: () => void handleSave(presetId, next) });
+      return false;
     } finally {
       setSavingId(null);
     }
-  };
+  }, [t]);
 
   const handleDelete = async (presetId: string): Promise<void> => {
     setDeletingId(presetId);
@@ -496,7 +669,7 @@ export const AgentsPage: FunctionComponent = () => {
   };
 
   const handleBaseAgentUpdate = async (notice: BaseAgentUpdateNoticeRecord): Promise<void> => {
-    const projectId = selectedProject?.id;
+    const projectId = pageProject?.id;
     if (!projectId || projectId !== notice.projectId || updatingBaseAgentRole) return;
 
     const roleLabel = notice.role === "planning_agent" ? t("planningAgent") : t("projectManager");
@@ -628,7 +801,7 @@ export const AgentsPage: FunctionComponent = () => {
   const selectedPresetIsDashboardReplyAgent = selectedPresetRouteTags.includes("Dashboard Reply");
 
   useEffect(() => {
-    if (!selectedProject || !selectedPreset || selectedFileId) {
+    if (!pageProject || !selectedPreset || selectedFileId) {
       setSelectedAgentUsage(null);
       setSelectedAgentUsageLoading(false);
       return undefined;
@@ -636,7 +809,7 @@ export const AgentsPage: FunctionComponent = () => {
 
     const controller = new AbortController();
     setSelectedAgentUsageLoading(true);
-    fetchProjectInvocationsQuery(selectedProject.id, {
+    fetchProjectInvocationsQuery(pageProject.id, {
       agentPresetId: selectedPreset.id,
       limit: 8,
       sortKey: "startedAt",
@@ -667,7 +840,7 @@ export const AgentsPage: FunctionComponent = () => {
     return () => {
       controller.abort();
     };
-  }, [selectedProject?.id, selectedPreset?.id, selectedFileId]);
+  }, [pageProject?.id, selectedPreset?.id, selectedFileId]);
 
   const rosterStats = useMemo(() => {
     const synced = presets.filter((p) => p.syncStatus === "synced").length;
@@ -709,7 +882,7 @@ export const AgentsPage: FunctionComponent = () => {
   return (
     <PageContainer aria-label={t("agents")} containerRef={contentRef} padding="agents" className="gap-10 md:gap-14">
       <AgentsHero
-        selectedProject={selectedProject}
+        selectedProject={pageProject}
         projectLoading={projectLoading}
         loading={loading}
         pullingFromFiles={pullingFromFiles}
@@ -722,7 +895,7 @@ export const AgentsPage: FunctionComponent = () => {
               ref={pushButtonRef}
               type="button"
               onClick={handlePushAgents}
-              disabled={!selectedProject || pushing}
+              disabled={!pageProject || pushing}
               className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 backdrop-blur-md transition-all hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/70 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white disabled:dark:hover:bg-white/[0.03] disabled:dark:hover:text-slate-300"
             >
               {pushing ? (
@@ -837,7 +1010,7 @@ export const AgentsPage: FunctionComponent = () => {
       />
 
       {/* Roster summary strip — only when project is loaded */}
-      {selectedProject && presets.length > 0 && (
+      {pageProject && presets.length > 0 && (
         <section aria-label={t("rosterSummary")} className="grid w-full grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-4">
           <RosterStat label={t("totalAgents")} value={rosterStats.total} accent="signal" icon={Bot} />
           <RosterStat label={t("synced")} value={rosterStats.synced} accent="signal" icon={ShieldCheck} />
@@ -891,7 +1064,7 @@ export const AgentsPage: FunctionComponent = () => {
         </div>
       )}
 
-      {baseAgentNoticesLoading && selectedProject && (
+      {baseAgentNoticesLoading && pageProject && (
         <div
           role="status"
           aria-live="polite"
@@ -917,7 +1090,7 @@ export const AgentsPage: FunctionComponent = () => {
       )}
 
       {/* Info banner */}
-      {selectedProject && (
+      {pageProject && (
         <div className="flex items-start gap-3 rounded-2xl border border-black/[0.05] bg-white/40 px-5 py-3.5 text-[13px] leading-relaxed text-slate-500 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" strokeWidth={2} />
           {projectFileSavingEnabled
@@ -927,12 +1100,12 @@ export const AgentsPage: FunctionComponent = () => {
       )}
 
       {/* Section divider — pure overview-style */}
-      {selectedProject && presets.length > 0 && (
+      {pageProject && presets.length > 0 && (
         <SectionDivider label={t("roster")} className="py-1 md:py-2" />
       )}
 
       {/* Content */}
-      {!selectedProject ? (
+      {!pageProject ? (
         <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/40 px-8 py-16 text-center backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/40">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5 dark:bg-signal-500/15 dark:text-signal-400 dark:ring-white/[0.06]">
             <Bot className="h-8 w-8 text-signal-600 dark:text-signal-400" strokeWidth={1.2} />
@@ -1025,9 +1198,10 @@ export const AgentsPage: FunctionComponent = () => {
             {selectedFile ? (
               <InstructionFileEditorPanel
                 key={selectedFile.id}
-                projectId={selectedProject.id}
+                projectId={pageProject.id}
                 file={selectedFile}
                 onSaved={handleInstructionFileSaved}
+                onEditorStateChange={handleEditorStateChange}
               />
             ) : selectedPreset ? (
               isEditing ? (
@@ -1040,7 +1214,8 @@ export const AgentsPage: FunctionComponent = () => {
                   availableSkillStorages={skillStorages}
                   isDashboardReplyAgent={selectedPresetIsDashboardReplyAgent}
                   onSave={handleSave}
-                  onCancel={() => setIsEditing(false)}
+                  onCancel={() => requestDestination({ kind: "close-agent-editor" })}
+                  onEditorStateChange={handleEditorStateChange}
                 />
               ) : (
                 <AgentPresetDetailPanel
@@ -1075,6 +1250,15 @@ export const AgentsPage: FunctionComponent = () => {
           </div>
         </div>
       ) : null}
+      {showUnsavedModal && (
+        <UnsavedChangesModal
+          onConfirm={discardAndLeave}
+          onCancel={keepEditing}
+          onSave={() => void saveAndLeave()}
+          saving={modalSavePending || Boolean(editorState?.pending)}
+          discarding={false}
+        />
+      )}
     </PageContainer>
   );
 };

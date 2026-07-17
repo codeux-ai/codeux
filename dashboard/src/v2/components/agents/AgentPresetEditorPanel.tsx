@@ -35,7 +35,6 @@ import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { Popover } from "../ui/Popover.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
-import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { MarkdownEditorField } from "../ui/MarkdownEditorField.js";
 import { getAccentHex, generateRandomAgentAvatar } from "../../lib/agent-avatar.js";
 import { defaultAgentMcpAccess, normalizeAgentMcpAccess } from "../../lib/agent-mcp-display.js";
@@ -44,6 +43,10 @@ import { PersistentSkillStorageChip } from "./PersistentSkillStorageChip.js";
 import { useDashboardI18n } from "../../i18n/index.js";
 import type { DashboardMessageVariables, DashboardTextMessageKey } from "../../i18n/index.js";
 import { agentsMessages } from "../../i18n/messages/agents.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import type { AgentEditorNavigationStateChange } from "./editor-navigation-state.js";
 
 /* ─────────────────────────────────────────────────────────
  * Validation rules
@@ -262,9 +265,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   availableMcpServers?: CustomMcpServer[];
   availableSkillStorages?: SkillStorageRecord[];
   isDashboardReplyAgent?: boolean;
-  onSave: (id: string, updates: Partial<AgentPreset>) => void;
+  onSave: (id: string, updates: Partial<AgentPreset>) => Promise<boolean> | boolean;
   onCancel: () => void;
-}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], availableSkillStorages = [], isDashboardReplyAgent = false, onSave, onCancel }) => {
+  onEditorStateChange?: AgentEditorNavigationStateChange;
+}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], availableSkillStorages = [], isDashboardReplyAgent = false, onSave, onCancel, onEditorStateChange }) => {
   const { formatDate, formatNumber, locale, translate, translatePlural } = useDashboardI18n();
   const t = useCallback((key: DashboardTextMessageKey<typeof agentsMessages>, variables?: DashboardMessageVariables): string => (
     translate(agentsMessages, key, variables)
@@ -274,6 +278,9 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const instructionHostRef = useRef<HTMLDivElement>(null);
   const memoryHostRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
+  const interactionTokens = useInteractionTokens();
 
   const [name, setName] = useState(preset.name);
   const [description, setDescription] = useState(preset.description || "");
@@ -300,7 +307,6 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const memoryButtonRef = useRef<HTMLButtonElement>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [discardOpen, setDiscardOpen] = useState(false);
   const [avatarExpression, setAvatarExpression] = useState<AgentAvatarExpression>("happy");
   const [knowledgeDirty, setKnowledgeDirty] = useState(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>({
@@ -342,8 +348,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   /* Entry animation */
   useLayoutEffect(() => {
     if (!panelRef.current) return;
-    gsap.fromTo(panelRef.current, { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" });
-  }, [preset.id]);
+    gsap.fromTo(
+      panelRef.current,
+      { opacity: reducedMotion ? 1 : 0, x: reducedMotion ? 0 : 16 },
+      { opacity: 1, x: 0, duration: gsapTokens.selectionMovement.duration, ease: gsapTokens.selectionMovement.ease },
+    );
+  }, [preset.id, reducedMotion, gsapTokens.selectionMovement.duration, gsapTokens.selectionMovement.ease]);
 
   /* Validation + dirty tracking */
   const errors = useMemo(
@@ -415,20 +425,19 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     }
   };
 
-  const handleSubmit = (event: Event) => {
-    event.preventDefault();
+  const saveDraft = useCallback(async (): Promise<boolean> => {
     setTouched({ name: true, description: true, instruction: true, memory: true });
     if (hasErrors) {
       focusFirstInvalidField(errors);
       setActionStatus({ tone: "error", message: t("fixHighlighted") });
-      return;
+      return false;
     }
     if (!isDirty) {
       setActionStatus({ tone: "neutral", message: t("noChangesToSave") });
-      return;
+      return false;
     }
     setActionStatus({ tone: "pending", message: t("savingAgentChanges") });
-    onSave(preset.id, {
+    const saved = await onSave(preset.id, {
       name: name.trim(),
       description: description.trim(),
       instructionMarkdown,
@@ -443,17 +452,53 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       persistentSkillStorageIds,
       persistentSkillStorage: { enabled: persistentSkillsEnabled && persistentSkillStorageIds.length > 0 },
     });
-    setKnowledgeDirty(false);
+    if (saved) {
+      setKnowledgeDirty(false);
+    }
+    return saved;
+  }, [
+    avatarConfig,
+    containerRootMode,
+    description,
+    errors,
+    hasErrors,
+    instructionMarkdown,
+    isDirty,
+    mcpAccess,
+    memoryConfig,
+    memoryMarkdown,
+    memoryOverrideEnabled,
+    model,
+    name,
+    onSave,
+    persistentSkillStorageIds,
+    persistentSkillsEnabled,
+    preset.id,
+    providerConfigId,
+    t,
+  ]);
+
+  const handleSubmit = (event: Event): void => {
+    event.preventDefault();
+    void saveDraft();
   };
+
+  useEffect(() => {
+    if (!onEditorStateChange) return undefined;
+    const editorKey = `agent:${preset.id}`;
+    onEditorStateChange(editorKey, {
+      editorKey,
+      dirty: isDirty,
+      pending: saving,
+      save: saveDraft,
+    });
+    return () => onEditorStateChange(editorKey, null);
+  }, [isDirty, onEditorStateChange, preset.id, saveDraft, saving]);
 
   const attemptCancel = useCallback(() => {
     if (saving) return;
-    if (isDirty) {
-      setDiscardOpen(true);
-    } else {
-      onCancel();
-    }
-  }, [saving, isDirty, onCancel]);
+    onCancel();
+  }, [saving, onCancel]);
 
   /* Keyboard shortcuts: Cmd/Ctrl+S to save, Esc to cancel */
   useEffect(() => {
@@ -556,7 +601,9 @@ export const AgentPresetEditorPanel: FunctionComponent<{
         onSubmit={handleSubmit}
         noValidate
         aria-label={t("editAgentAria", { name: preset.name })}
-        className="relative flex flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
+        data-motion-contract="selectionMovement"
+        data-editor-selected="true"
+        className="relative flex flex-col overflow-hidden rounded-[1.9rem] border border-signal-500/20 bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] ring-1 ring-inset ring-signal-500/[0.06] backdrop-blur-2xl dark:border-signal-500/20 dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
       >
         <BorderTrace accentHex={accentHex} />
 
@@ -625,6 +672,11 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           <div
             role={actionStatus.tone === "error" ? "alert" : "status"}
             aria-live="polite"
+            data-motion-contract={actionStatus.tone === "error" ? "inlineValidation" : "asyncFeedback"}
+            style={{
+              transitionDuration: actionStatus.tone === "error" ? interactionTokens.inlineValidation.duration : interactionTokens.asyncFeedback.duration,
+              transitionTimingFunction: actionStatus.tone === "error" ? interactionTokens.inlineValidation.ease : interactionTokens.asyncFeedback.ease,
+            }}
             className={`min-h-[2rem] rounded-full border px-3 py-1.5 text-[11px] font-semibold ${actionStatusClass}`}
           >
             {actionStatus.message}
@@ -1215,21 +1267,6 @@ export const AgentPresetEditorPanel: FunctionComponent<{
         </div>
       </form>
 
-      <ConfirmDialog
-        isOpen={discardOpen}
-        options={{
-          title: t("discardChangesTitle"),
-          body: t("discardChangesBody"),
-          confirmLabel: t("discard"),
-          cancelLabel: t("keepEditing"),
-          destructive: true,
-        }}
-        onConfirm={() => {
-          setDiscardOpen(false);
-          onCancel();
-        }}
-        onCancel={() => setDiscardOpen(false)}
-      />
     </>
   );
 };
