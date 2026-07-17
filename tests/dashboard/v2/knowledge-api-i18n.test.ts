@@ -48,4 +48,29 @@ describe("Knowledge API localization boundary", () => {
       new File(["raw"], "RAW_Ä.md", { type: "text/x-raw" }),
     ])).rejects.toThrow(rawError);
   });
+
+  it("returns partial upload filenames, documents, and diagnostics verbatim", async () => {
+    const rawResult = {
+      documents: [{ id: "doc-ä", title: "GOOD_Überblick.md" }],
+      errors: [{ fileName: "RAW_Ä.bin", error: "Unsupported MIME application/x-raw <diagnostic>" }],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(rawResult), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const files = [
+      new File(["good"], "GOOD_Überblick.md", { type: "text/markdown" }),
+      new File(["raw"], "RAW_Ä.bin", { type: "application/x-raw" }),
+    ];
+
+    await expect(uploadKnowledgeFiles("project/ä", files)).resolves.toEqual(rawResult);
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/project%2F%C3%A4/knowledge/documents/upload", expect.objectContaining({
+      method: "POST",
+      body: expect.any(FormData),
+    }));
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const form = request.body as FormData;
+    expect(form.getAll("files").map((entry) => (entry as File).name)).toEqual(files.map((file) => file.name));
+  });
 });

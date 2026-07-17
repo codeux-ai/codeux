@@ -891,13 +891,6 @@
       "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
     },
     {
-      "path": "dashboard/src/v2/KnowledgePage.tsx",
-      "line": 214,
-      "kind": "jsx-text",
-      "text": "search_knowledge",
-      "rationale": "This is an MCP tool identifier shown as code and must remain verbatim."
-    },
-    {
       "path": "dashboard/src/v2/lib/agent-avatar.ts",
       "line": 86,
       "kind": "metadata:label",
