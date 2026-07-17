@@ -4823,6 +4823,9 @@ describe("QualityAssuranceService", () => {
       followUpPrompt: "Address QA findings",
     });
 
+    expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      allowFreshSessionFallback: true,
+    }));
     expect((service as any).prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
       expect.objectContaining({
         taskId: "Task 1",

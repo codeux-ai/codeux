@@ -261,6 +261,8 @@ For the fix track, QA does not open an isolated side-channel. Instead:
 - Jules tasks receive a follow-up message on the existing Jules session
 - CLI tasks resume the existing worker session/worktree when possible
 
+If a Codex task still has a persisted native thread id but its workspace runtime no longer contains that thread's rollout, the CLI follow-up keeps the task worktree and retries once as a fresh Codex conversation. The follow-up prompt is self-contained with the original subtask and QA fix instructions, so this repairs provider-conversation loss without discarding code or starting an unrelated task run. Continuations that explicitly require the recorded native conversation, such as strict planning recovery, disable this fallback and still fail closed.
+
 The QA row records a pending continuation before that follow-up begins. Completion updates that same handoff record, which lets startup and later watch cycles distinguish work that still needs dispatch from a follow-up that already finished before the final QA payload write.
 
 For CLI follow-up runs, Code UX:
