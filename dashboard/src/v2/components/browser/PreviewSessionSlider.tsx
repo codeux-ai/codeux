@@ -19,6 +19,8 @@ interface PreviewSessionSliderProps {
   onRemoveSession: (sessionId: string) => void;
   onManageEnvironment: (sessionId: string) => void;
   removingSessionIds?: string[];
+  targetTransitionsBlocked?: boolean;
+  targetTransitionReason?: string;
 }
 
 const statusTone: Record<SprintPreviewSession["status"], string> = {
@@ -51,6 +53,8 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
   onRemoveSession,
   onManageEnvironment,
   removingSessionIds = [],
+  targetTransitionsBlocked = false,
+  targetTransitionReason,
 }) => {
   const { formatNumber, locale, translate, translatePlural } = useDashboardI18n();
   const t = (key: BrowserPreviewMessageKey, variables?: BrowserPreviewMessageVariables) => (
@@ -95,6 +99,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
             ? t("noPreviewSessionSelected")
             : t("noPreviewSessionsAvailable")}
         {removingSessionIds.length > 0 ? ` ${t("removingSessionAnnouncement")}` : ""}
+        {targetTransitionsBlocked && targetTransitionReason ? ` ${targetTransitionReason}` : ""}
       </div>
       {hasOverflowControls && (
         <>
@@ -167,6 +172,9 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
               <button
                 type="button"
                 onClick={() => onSelectSession(session.id)}
+                disabled={targetTransitionsBlocked}
+                aria-disabled={targetTransitionsBlocked}
+                title={targetTransitionsBlocked ? targetTransitionReason : undefined}
                 aria-label={t("selectPreviewSession", { name: session.sprintName })}
                 aria-pressed={active}
                 aria-current={active ? "true" : undefined}
@@ -233,9 +241,11 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                       event.stopPropagation();
                       onManageEnvironment(session.id);
                     }}
+                    disabled={targetTransitionsBlocked}
+                    aria-disabled={targetTransitionsBlocked}
+                    title={targetTransitionsBlocked ? targetTransitionReason : t("manageEnvironmentTitle")}
                     className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] px-3 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
                     style={{ transition: controlTransition }}
-                    title={t("manageEnvironmentTitle")}
                     aria-label={t("manageEnvironmentForSession", { name: session.sprintName })}
                   >
                     <SlidersHorizontal aria-hidden="true" className="h-3 w-3" strokeWidth={2.5} />

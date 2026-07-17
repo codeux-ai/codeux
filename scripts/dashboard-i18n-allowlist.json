@@ -24,7 +24,7 @@
     },
     {
       "path": "dashboard/src/v2/components/browser/PreviewEnvironmentEditor.tsx",
-      "line": 76,
+      "line": 126,
       "kind": "attribute:placeholder",
       "text": "CODE_UX_ALLOW_PUBLIC_DASHBOARD",
       "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
