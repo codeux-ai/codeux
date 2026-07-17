@@ -2,7 +2,7 @@
 /** @jsx h */
 import { h, type ComponentChildren } from "preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, fireEvent, render as testingRender, screen, waitFor, within } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render as testingRender, screen, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import { ProjectsPage } from "../../../dashboard/src/v2/ProjectsPage.js";
@@ -25,9 +25,21 @@ const deleteProjectMock = vi.fn(() => Promise.resolve());
 const createProjectMock = vi.fn(() => Promise.resolve({}));
 const addToastMock = vi.fn();
 
+const createDeferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+};
+
 vi.mock("gsap", () => ({
   default: {
-    to: vi.fn(),
+    to: vi.fn((_target: unknown, vars: { onComplete?: () => void }) => {
+      vars.onComplete?.();
+    }),
     fromTo: vi.fn(),
     set: vi.fn(),
     killTweensOf: vi.fn(),
@@ -192,6 +204,7 @@ describe("ProjectsPage", () => {
     } as any);
 
     render(<ProjectsPage />);
+    expect(screen.getByRole("list", { name: "Projects" })).toBeInTheDocument();
 
     await waitFor(() => expect(selectProjectMock).toHaveBeenCalledWith("project-9"));
   });
@@ -296,6 +309,7 @@ describe("ProjectsPage", () => {
       const tab = screen.getByRole("tab", { name: filter.name });
       if (index > 0) fireEvent.click(tab);
       expect(tab).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByText(new RegExp(`${filter.visible.length} projects? shown for`))).toBeInTheDocument();
       expect(screen.getAllByRole("article").map((article) => article.getAttribute("aria-label"))).toEqual(
         filter.visible.map((name) => `Project: ${name}`),
       );
@@ -562,6 +576,190 @@ describe("ProjectsPage", () => {
     }));
   });
 
+  it("traps setup focus, closes with Escape, and restores the setup trigger", async () => {
+    vi.useFakeTimers();
+    render(<ProjectsPage />);
+    const setupTrigger = screen.getByRole("button", { name: "Setup project" });
+    setupTrigger.focus();
+    fireEvent.click(setupTrigger);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+    });
+    const agentsOption = screen.getByRole("button", { name: /Agents/ });
+    expect(document.activeElement).toBe(agentsOption);
+
+    screen.getByRole("button", { name: "Close project setup" }).focus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(screen.getByRole("button", { name: "Setup Project" })).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(screen.queryByRole("dialog", { name: "Setup Widget Service" })).not.toBeInTheDocument();
+    expect(setupTrigger).toHaveFocus();
+  });
+
+  it("suppresses duplicate setup launches while the first request is pending", () => {
+    const started = createDeferred<{
+      accepted: boolean;
+      projectId: string;
+      invocationId: string;
+      agentId: string;
+    }>();
+    vi.mocked(startProjectSetup).mockReturnValue(started.promise);
+    render(<ProjectsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Setup project" }));
+    const runSetup = screen.getByRole("button", { name: "Setup Project" });
+    fireEvent.click(runSetup);
+    fireEvent.click(runSetup);
+
+    expect(startProjectSetup).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Setting up..." })).toBeDisabled();
+  });
+
+  it("stops setup polling on close while retaining the background invocation action", async () => {
+    vi.useFakeTimers();
+    render(<ProjectsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Setup project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Setup Project" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("button", { name: "Open invocation" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+
+    expect(fetchProjectInvocations).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Open setup invocation" })).toBeInTheDocument();
+  });
+
+  it("ignores a polling response that completes after the setup dialog closes", async () => {
+    vi.useFakeTimers();
+    const polling = createDeferred<any[]>();
+    vi.mocked(fetchProjectInvocations).mockReturnValue(polling.promise);
+    render(<ProjectsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Setup project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Setup Project" }));
+    await act(async () => {
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(fetchProjectInvocations).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await act(async () => {
+      polling.resolve([{ id: "invocation-1", status: "completed" }]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Project setup running")).toBeInTheDocument();
+    expect(screen.queryByText("Project setup completed successfully.")).not.toBeInTheDocument();
+  });
+
+  it("cleans up scheduled setup polling when the page unmounts", async () => {
+    vi.useFakeTimers();
+    const rendered = render(<ProjectsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Setup project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Setup Project" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    rendered.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+    expect(fetchProjectInvocations).not.toHaveBeenCalled();
+  });
+
+  it("keeps setup failures retryable without replacing the project list", async () => {
+    vi.mocked(startProjectSetup)
+      .mockRejectedValueOnce(new Error("temporary setup failure"))
+      .mockResolvedValueOnce({
+        accepted: true,
+        projectId: "project-1",
+        invocationId: "invocation-2",
+        agentId: "agent-1",
+      });
+    render(<ProjectsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Setup project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Setup Project" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Setup Widget Service" });
+    await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent("temporary setup failure"));
+    expect(screen.getByRole("article", { name: "Project: Widget Service" })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(startProjectSetup).toHaveBeenCalledTimes(2));
+  });
+
+  it("restores delete focus on cancel and keeps failed deletion retryable", async () => {
+    const deletion = createDeferred<void>();
+    deleteProjectMock.mockReturnValueOnce(deletion.promise);
+    render(<ProjectsPage />);
+    const deleteTrigger = screen.getByRole("button", { name: "Delete project" });
+    deleteTrigger.focus();
+    fireEvent.click(deleteTrigger);
+    const firstDialog = screen.getByRole("dialog", { name: "Delete Widget Service?" });
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(firstDialog).not.toBeInTheDocument());
+    await waitFor(() => expect(deleteTrigger).toHaveFocus());
+
+    fireEvent.click(deleteTrigger);
+    const confirmDelete = within(screen.getByRole("dialog", { name: "Delete Widget Service?" })).getByRole("button", { name: "Delete project" });
+    fireEvent.click(confirmDelete);
+    fireEvent.click(confirmDelete);
+    expect(deleteProjectMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      deletion.reject(new Error("temporary delete failure"));
+      await Promise.resolve();
+    });
+    const card = screen.getByRole("article", { name: "Project: Widget Service" });
+    await waitFor(() => expect(within(card).getByRole("alert")).toHaveTextContent("temporary delete failure"));
+    expect(within(card).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("moves focus to the next project after deletion removes the originating card", async () => {
+    const first = createProject({ id: "project-1", name: "Project One" });
+    const second = createProject({ id: "project-2", name: "Project Two" });
+    let projects = [first, second];
+    const deletion = createDeferred<void>();
+    deleteProjectMock.mockReturnValue(deletion.promise);
+    vi.mocked(useProjectData).mockImplementation(() => ({
+      projects,
+      selectedProjectId: "project-1",
+      loading: false,
+      error: null,
+      refreshProjects: vi.fn(),
+      selectProject: selectProjectMock,
+      createProject: createProjectMock,
+      updateProject: vi.fn(),
+      deleteProject: deleteProjectMock,
+      selectedProject: first,
+    } as any));
+    const rendered = render(<ProjectsPage />);
+
+    fireEvent.click(within(screen.getByRole("article", { name: "Project: Project One" })).getByRole("button", { name: "Delete project" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Delete Project One?" })).getByRole("button", { name: "Delete project" }));
+    projects = [second];
+    rendered.rerender(<DashboardI18nProvider initialLocale="en" storage={null}><ProjectsPage /></DashboardI18nProvider>);
+    await act(async () => {
+      deletion.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Select project: Project Two" })).toHaveFocus());
+    expect(screen.getAllByText(/Deleted Project One from Code UX/)).toHaveLength(2);
+  });
+
   it("keeps German project selection and deletion confirmation operable", async () => {
     render(<ProjectsPage />, "de");
 
@@ -577,7 +775,7 @@ describe("ProjectsPage", () => {
     const dialog = screen.getByRole("dialog", { name: "Widget Service löschen?" });
     expect(deleteProjectMock).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Abbrechen" }));
-    expect(screen.queryByRole("dialog", { name: "Widget Service löschen?" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Widget Service löschen?" })).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Projekt löschen" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "Widget Service löschen?" })).getByRole("button", { name: "Projekt löschen" }));

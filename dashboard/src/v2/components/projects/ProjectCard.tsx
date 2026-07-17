@@ -24,9 +24,14 @@ export interface ProjectCardProps {
   isSelected: boolean;
   isSettingUp: boolean;
   setupInvocationId?: string | null;
+  setupFeedback?: { tone: "success" | "error"; message: string };
+  isDeleting?: boolean;
+  deleteError?: string;
   onSelect: () => void;
   onDelete: () => void;
   onSetup: () => void;
+  onRetrySetup?: () => void;
+  onRetryDelete?: () => void;
   onOpenInvocation: () => void;
   onSettings: () => void;
 }
@@ -102,6 +107,7 @@ const ActionButton: FunctionComponent<ActionButtonProps> = ({
     onPointerDown={(event) => event.stopPropagation()}
     onClick={(event) => {
       event.stopPropagation();
+      if (disabled) return;
       onClick();
     }}
     className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border motion-safe:transition-colors motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 ${
@@ -119,9 +125,14 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
   isSelected,
   isSettingUp,
   setupInvocationId,
+  setupFeedback,
+  isDeleting = false,
+  deleteError,
   onSelect,
   onDelete,
   onSetup,
+  onRetrySetup,
+  onRetryDelete,
   onOpenInvocation,
   onSettings,
 }) => {
@@ -145,6 +156,8 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
       aria-label={translate(projectMessages, "projectArticle", { name: source.name })}
       data-selected={isSelected ? "true" : "false"}
       data-running={source.status === "running" ? "true" : "false"}
+      data-pending={isSettingUp || isDeleting ? "true" : "false"}
+      data-outcome={setupFeedback?.tone}
       className={`flex h-full min-h-[390px] min-w-0 flex-col overflow-hidden rounded-[1.5rem] border bg-white/70 p-5 shadow-sm backdrop-blur-xl dark:bg-void-800/65 ${
         isSelected
           ? "border-signal-500/55 ring-1 ring-signal-500/20"
@@ -155,6 +168,7 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
     >
       <button
         type="button"
+        data-project-focus-id={source.id}
         aria-pressed={isSelected}
         aria-label={selectionLabel}
         onClick={onSelect}
@@ -232,6 +246,55 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
         </button>
       ) : null}
 
+      {!isSettingUp && setupFeedback ? (
+        <div
+          role={setupFeedback.tone === "error" ? "alert" : "status"}
+          className={`mt-4 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${
+            setupFeedback.tone === "error"
+              ? "border-status-red/25 bg-status-red/[0.07] text-status-red"
+              : "border-status-green/25 bg-status-green/[0.07] text-status-green"
+          }`}
+        >
+          <span className="min-w-0 flex-1 break-words">{setupFeedback.message}</span>
+          <span className="inline-flex items-center gap-1">
+            {setupInvocationId ? (
+              <button
+                type="button"
+                onClick={onOpenInvocation}
+                className="rounded-lg px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+              >
+                {translate(projectMessages, "openInvocation")}
+              </button>
+            ) : null}
+            {setupFeedback.tone === "error" && onRetrySetup ? (
+              <button
+                type="button"
+                onClick={onRetrySetup}
+                className="rounded-lg px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+              >
+                {translate(projectMessages, "retry")}
+              </button>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
+
+      {deleteError ? (
+        <div role="alert" className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-status-red/25 bg-status-red/[0.07] px-3 py-2 text-xs font-semibold text-status-red">
+          <span className="min-w-0 flex-1 break-words">{deleteError}</span>
+          {onRetryDelete ? (
+            <button
+              type="button"
+              onClick={onRetryDelete}
+              disabled={isDeleting}
+              className="rounded-lg px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current disabled:opacity-50"
+            >
+              {translate(projectMessages, "retry")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mt-auto pt-5">
         <div className="grid grid-cols-3 divide-x divide-black/[0.06] rounded-xl bg-black/[0.025] py-2 dark:divide-white/[0.07] dark:bg-white/[0.035]">
           <Stat label={translate(projectMessages, "sprints")} value={formatNumber(source.sprintsCount)} />
@@ -273,9 +336,9 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
           >
             {translate(projectMessages, isSelected ? "selected" : "selectProjectAction")}
           </button>
-          <ActionButton label={translate(projectMessages, isSettingUp ? "setupAlreadyRunning" : "setupProject")} icon={<Bot className="h-4 w-4" aria-hidden="true" />} onClick={onSetup} disabled={isSettingUp} busy={isSettingUp} />
+          <ActionButton label={translate(projectMessages, isSettingUp ? "setupAlreadyRunning" : "setupProject")} icon={<Bot className="h-4 w-4" aria-hidden="true" />} onClick={onSetup} disabled={isSettingUp || isDeleting} busy={isSettingUp} />
           <ActionButton label={translate(projectMessages, "projectSettings")} icon={<Settings className="h-4 w-4" aria-hidden="true" />} onClick={onSettings} />
-          <ActionButton label={translate(projectMessages, "deleteProject")} icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} onClick={onDelete} danger />
+          <ActionButton label={translate(projectMessages, isDeleting ? "deletingProject" : "deleteProject")} icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} onClick={onDelete} disabled={isDeleting} busy={isDeleting} danger />
         </div>
       </div>
     </article>
