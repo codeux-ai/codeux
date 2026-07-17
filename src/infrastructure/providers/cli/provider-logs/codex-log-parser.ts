@@ -831,6 +831,10 @@ export class CodexRolloutAccumulator {
     return this.lastResult;
   }
 
+  getCurrentResult(): CodexLogResult {
+    return this.lastResult ?? buildCodexRolloutResult(this.state);
+  }
+
   private canAppend(jsonl: string, sourceId: string | null): boolean {
     if (this.previousLength === 0 || jsonl.length < this.previousLength) {
       return false;

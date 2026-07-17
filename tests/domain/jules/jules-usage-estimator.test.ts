@@ -118,6 +118,68 @@ describe("estimateJulesUsage", () => {
     expect(result.outputTokens).toBe(wordCount("added one line")); // 3, not ~1500
   });
 
+  it("counts every progress tool activity but only the final cumulative patch snapshot", () => {
+    const firstPatch = "diff --git a/f b/f\n+++ b/f\n+first version";
+    const finalPatch = "diff --git a/f b/f\n+++ b/f\n+final version";
+    const activities: JulesActivity[] = [
+      {
+        id: "1",
+        name: "1",
+        createTime: "2026-06-01T00:00:00Z",
+        progressUpdated: { title: "Edit one" },
+        artifacts: [{ changeSet: { source: "source-1", gitPatch: { unidiffPatch: firstPatch } } }],
+      },
+      {
+        id: "2",
+        name: "2",
+        createTime: "2026-06-01T00:00:01Z",
+        progressUpdated: { title: "Edit two" },
+        artifacts: [{ changeSet: { source: "source-1", gitPatch: { unidiffPatch: firstPatch } } }],
+      },
+      {
+        id: "3",
+        name: "3",
+        createTime: "2026-06-01T00:00:02Z",
+        progressUpdated: { title: "Edit three" },
+        artifacts: [{ changeSet: { source: "source-1", gitPatch: { unidiffPatch: finalPatch } } }],
+      },
+    ];
+
+    const result = estimateJulesUsage({ prompt: "", activities, countTokens: wordCount });
+
+    expect(result.toolCallCount).toBe(3);
+    expect(result.outputTokens).toBe(
+      wordCount("Edit one\n")
+      + wordCount("Edit two\n")
+      + wordCount("Edit three\n")
+      + wordCount("final version"),
+    );
+    expect(result.transcriptChars).not.toBeGreaterThan(
+      "Edit one\nEdit two\nEdit three\nfinal version".length,
+    );
+  });
+
+  it("accounts for bash commands and output without treating stdout as model output", () => {
+    const activities: JulesActivity[] = [{
+      id: "1",
+      name: "1",
+      createTime: "2026-06-01T00:00:00Z",
+      artifacts: [{
+        bashOutput: {
+          command: "pnpm test",
+          output: "all tests passed",
+          exitCode: 0,
+        },
+      }],
+    }];
+
+    const result = estimateJulesUsage({ prompt: "", activities, countTokens: wordCount });
+
+    expect(result.toolCallCount).toBe(1);
+    expect(result.outputTokens).toBe(wordCount("pnpm test"));
+    expect(result.transcriptChars).toBe("pnpm test".length);
+  });
+
   it("caps the running context so long sessions stay bounded", () => {
     const huge = "word ".repeat(50_000); // 50k tokens by word count
     const activities: JulesActivity[] = [

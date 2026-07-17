@@ -2,6 +2,11 @@ import axios from "axios";
 import type { AxiosInstance } from "axios";
 import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
 import type { JulesClient } from "../domain/jules/jules-client.js";
+import {
+  JULES_USAGE_ACTIVITY_PAGE_SIZE,
+  JulesUsageConversationProjector,
+  type JulesUsageConversation,
+} from "../domain/jules/jules-activity-projection.js";
 
 export class JulesNotFoundError extends Error {
   readonly status = 404;
@@ -15,6 +20,7 @@ export class JulesNotFoundError extends Error {
 }
 
 const MAX_JULES_API_ERROR_MESSAGE_CHARS = 2_048;
+export const JULES_MAX_API_RESPONSE_BYTES = 64 * 1024 * 1024;
 const JULES_SESSION_CAPACITY_PATTERN = /(?:concurren\w*|too many|max(?:imum)?|limit|quota|capacity|resource\s+exhausted).{0,80}(?:active\s+)?sessions?|(?:active\s+)?sessions?.{0,80}(?:concurren\w*|too many|max(?:imum)?|limit|quota|capacity|resource\s+exhausted)/i;
 const JULES_CONCURRENT_TASK_STATES = new Set(["QUEUED", "PLANNING", "IN_PROGRESS"]);
 
@@ -304,6 +310,8 @@ export class JulesApiClient implements JulesClient {
     this.axiosInstance = axios.create({
       baseURL: options.baseUrl,
       timeout: Math.max(0, options.requestTimeoutMs ?? 30_000),
+      maxContentLength: JULES_MAX_API_RESPONSE_BYTES,
+      maxBodyLength: JULES_MAX_API_RESPONSE_BYTES,
       headers: {
         "Content-Type": "application/json",
       },
@@ -656,20 +664,30 @@ export class JulesApiClient implements JulesClient {
   }
 
   async getFullConversation(sessionId: string): Promise<JulesActivity[]> {
-    return this.listAllActivities(sessionId);
+    return (await this.getUsageConversation(sessionId)).activities;
   }
 
-  async listAllActivities(sessionId: string): Promise<JulesActivity[]> {
+  async getUsageConversation(sessionId: string): Promise<JulesUsageConversation> {
     this.ensureApiKey();
     const sessionName = this.toSessionName(sessionId);
-    let allActivities: JulesActivity[] = [];
+    const projector = new JulesUsageConversationProjector();
     let pageToken: string | undefined = undefined;
 
     try {
       do {
-        const params: JulesPageQuery = { pageToken };
-        const response = await this.axiosInstance.get<JulesListActivitiesResponse>(`/${sessionName}/activities`, { params });
-        allActivities = allActivities.concat(response.data.activities || []);
+        const params: JulesPageQuery = {
+          pageSize: JULES_USAGE_ACTIVITY_PAGE_SIZE,
+          pageToken,
+        };
+        const response = await this.axiosInstance.get<JulesListActivitiesResponse>(
+          `/${sessionName}/activities`,
+          { params },
+        );
+        const activities = response.data.activities || [];
+        projector.addPage(activities);
+        // Drop response-owned objects before requesting the next page. The
+        // projector retains only its bounded, token-relevant representation.
+        activities.length = 0;
         pageToken = response.data.nextPageToken;
       } while (pageToken);
     } catch (error) {
@@ -679,7 +697,11 @@ export class JulesApiClient implements JulesClient {
       throw error;
     }
 
-    return allActivities;
+    return projector.finish();
+  }
+
+  async listAllActivities(sessionId: string): Promise<JulesActivity[]> {
+    return (await this.getUsageConversation(sessionId)).activities;
   }
 
   async fetchRecentActivities(sessionName: string, pageSize: number): Promise<JulesActivity[]> {

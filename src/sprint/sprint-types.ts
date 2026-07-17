@@ -52,7 +52,8 @@ export interface SessionSyncDependencies {
       taskId: string,
       sessionId: string,
       sessionPrompt?: string,
-      gitMetrics?: { insertions?: number; deletions?: number; filesChanged?: number } | null
+      gitMetrics?: { insertions?: number; deletions?: number; filesChanged?: number } | null,
+      sourceRevision?: string,
     ) => Promise<void>;
   };
 }

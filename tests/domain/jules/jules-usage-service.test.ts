@@ -118,7 +118,7 @@ describe("JulesUsageService", () => {
       expect(payload.julesTokens).toBe(payload.totalTokens);
       // One progress update => one tool-style operation.
       expect(payload.toolCallCount).toBe(1);
-      expect(payload.rawUsageJson.estimator).toBe("turn-accumulation-v1");
+      expect(payload.rawUsageJson.estimator).toBe("activity-snapshot-v2");
 
       // Transcript reconciled atomically: prompt + 3 activity messages.
       expect(syncMessagesMock).toHaveBeenCalledTimes(1);
@@ -132,8 +132,14 @@ describe("JulesUsageService", () => {
       expect(progressMsg.metadata.kind).toBe("tool_call");
     });
 
-    it("is idempotent — skips remote calls when a non-zero estimate already exists", async () => {
-      getLatestMock.mockReturnValue({ id: "existing", createdAt: "2026-05-21T07:29:52.209Z", totalTokens: 1500 });
+    it("is idempotent once a completed snapshot-aware estimate exists", async () => {
+      getLatestMock.mockReturnValue({
+        id: "existing",
+        createdAt: "2026-05-21T07:29:52.209Z",
+        status: "completed",
+        totalTokens: 1500,
+        rawUsageJson: { estimator: "activity-snapshot-v2" },
+      });
 
       await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
 
@@ -145,6 +151,76 @@ describe("JulesUsageService", () => {
         "Jules usage telemetry already calculated and saved for session",
         { sessionId: "session-1" },
       );
+    });
+
+    it("recalculates legacy completed estimates with snapshot-aware parsing", async () => {
+      getLatestMock.mockReturnValue({
+        id: "existing",
+        provider: "jules",
+        createdAt: "2026-05-21T07:29:52.209Z",
+        status: "completed",
+        totalTokens: 46_000_000,
+        rawUsageJson: { estimator: "turn-accumulation-v1" },
+      });
+      getFullConversationMock.mockResolvedValue([
+        {
+          id: "1",
+          name: "1",
+          createTime: "2026-06-01T00:00:00Z",
+          progressUpdated: { title: "Done" },
+        },
+      ] as JulesActivity[]);
+
+      await service.calculateAndSaveUsageForTask(
+        "proj-1",
+        "task-1",
+        "session-1",
+        "Safe prompt",
+      );
+
+      expect(getFullConversationMock).toHaveBeenCalledTimes(1);
+      expect(updateUsageMock).toHaveBeenCalledWith(
+        "existing",
+        expect.objectContaining({
+          status: "completed",
+          rawUsageJson: expect.objectContaining({ estimator: "activity-snapshot-v2" }),
+        }),
+      );
+    });
+
+    it("defers terminal history parsing while the V8 heap is under pressure", async () => {
+      vi.useFakeTimers();
+      try {
+        const pressureService = new JulesUsageService(
+          julesClient,
+          executionRepository,
+          logger,
+          () => ({
+            heapUsedBytes: 3 * 1024 * 1024 * 1024,
+            heapLimitBytes: 4 * 1024 * 1024 * 1024,
+            headroomBytes: 1024 * 1024 * 1024,
+            usageRatio: 0.75,
+            underPressure: true,
+          }),
+        );
+
+        await pressureService.calculateAndSaveUsageForTask(
+          "proj-1",
+          "task-1",
+          "session-1",
+          "Safe prompt",
+        );
+
+        expect(getFullConversationMock).not.toHaveBeenCalled();
+        expect(updateUsageMock).not.toHaveBeenCalled();
+        expect(loggerWarnMock).toHaveBeenCalledWith(
+          "Deferred Jules usage telemetry because the Node.js heap is under pressure",
+          expect.objectContaining({ kind: "terminal", heapUsagePercent: 75 }),
+        );
+      } finally {
+        vi.clearAllTimers();
+        vi.useRealTimers();
+      }
     });
 
     it("renders code artifacts as tool_result messages", async () => {
@@ -362,6 +438,71 @@ describe("JulesUsageService", () => {
       expect(loggerWarnMock).toHaveBeenCalledWith(
         "Failed live Jules invocation sync",
         expect.objectContaining({ error: error500, sessionId: "session-1" })
+      );
+    });
+
+    it("skips unchanged provider revisions after the throttle window", async () => {
+      const nowSpy = vi.spyOn(Date, "now");
+      nowSpy.mockReturnValue(10_000);
+      getFullConversationMock.mockResolvedValue([
+        { id: "1", name: "1", createTime: "2026-06-01T00:00:00Z", agentMessaged: { agentMessage: "working" } },
+      ] as JulesActivity[]);
+
+      await service.syncLiveInvocation(
+        "proj-1",
+        "task-1",
+        "session-1",
+        "Build it",
+        null,
+        "revision-1",
+      );
+      nowSpy.mockReturnValue(30_000);
+      await service.syncLiveInvocation(
+        "proj-1",
+        "task-1",
+        "session-1",
+        "Build it",
+        null,
+        "revision-1",
+      );
+      await service.syncLiveInvocation(
+        "proj-1",
+        "task-1",
+        "session-1",
+        "Build it",
+        null,
+        "revision-2",
+      );
+
+      nowSpy.mockRestore();
+      expect(getFullConversationMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not start a live history read while the V8 heap is under pressure", async () => {
+      const pressureService = new JulesUsageService(
+        julesClient,
+        executionRepository,
+        logger,
+        () => ({
+          heapUsedBytes: 3 * 1024 * 1024 * 1024,
+          heapLimitBytes: 4 * 1024 * 1024 * 1024,
+          headroomBytes: 1024 * 1024 * 1024,
+          usageRatio: 0.75,
+          underPressure: true,
+        }),
+      );
+
+      await pressureService.syncLiveInvocation(
+        "proj-1",
+        "task-1",
+        "session-1",
+        "Build it",
+      );
+
+      expect(getFullConversationMock).not.toHaveBeenCalled();
+      expect(loggerWarnMock).toHaveBeenCalledWith(
+        "Deferred Jules usage telemetry because the Node.js heap is under pressure",
+        expect.objectContaining({ kind: "live", heapUsagePercent: 75 }),
       );
     });
   });

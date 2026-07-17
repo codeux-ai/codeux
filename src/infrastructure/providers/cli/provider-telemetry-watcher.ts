@@ -26,6 +26,7 @@ import {
   type ProviderTranscriptChunk,
   type ProviderTranscriptCursor,
 } from "./provider-transcript-chunks.js";
+import { getNodeHeapPressure } from "../../../shared/runtime/node-heap-pressure.js";
 
 export interface TelemetryWatcherOptions {
   provider: CliProviderId;
@@ -95,6 +96,7 @@ interface FullReadResult {
 
 const FAILURE_BACKOFF_MAX_SKIPPED_POLLS = 20;
 const MAX_INCREMENTAL_CHUNKS_PER_POLL = 4;
+const HEAP_PRESSURE_WARNING_INTERVAL_MS = 60_000;
 
 function buildMetadataSourceSignature(args: {
   provider: CliProviderId;
@@ -199,6 +201,7 @@ export class ProviderTelemetryWatcher {
   private readonly codexChunkDecoder = new ProviderTranscriptChunkDecoder();
   private readonly claudeChunkDecoder = new ProviderTranscriptChunkDecoder();
   private wakeWait: (() => void) | null = null;
+  private lastHeapPressureWarningMs = 0;
 
   constructor(private readonly opts: TelemetryWatcherOptions) {
     this.codexRolloutAccumulator = opts.provider === "codex"
@@ -234,6 +237,10 @@ export class ProviderTelemetryWatcher {
     ) {
       return null;
     }
+    if (getNodeHeapPressure().underPressure) {
+      this.warnHeapPressure("final");
+      return this.codexRolloutAccumulator.getCurrentResult();
+    }
     this.resolveCodexNativeSessionId(this.opts.getAccumulatedRawStdout());
     const result = await this.collectIncrementalCodexInputs(null, {
       resolvedNativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId,
@@ -254,6 +261,11 @@ export class ProviderTelemetryWatcher {
     while (this.active && !this.opts.signal?.aborted) {
       let failureSourceSignature: string | null = null;
       try {
+        if (getNodeHeapPressure().underPressure) {
+          this.warnHeapPressure("live");
+          await this.wait(this.getPollIntervalMs());
+          continue;
+        }
         const stdout = this.opts.getAccumulatedRawStdout();
         const stderr = this.opts.getAccumulatedStderr();
         if (this.opts.provider === "codex") {
@@ -405,6 +417,22 @@ export class ProviderTelemetryWatcher {
       }
       await this.wait(this.getPollIntervalMs());
     }
+  }
+
+  private warnHeapPressure(phase: "live" | "final"): void {
+    const now = Date.now();
+    if (now - this.lastHeapPressureWarningMs < HEAP_PRESSURE_WARNING_INTERVAL_MS) {
+      return;
+    }
+    this.lastHeapPressureWarningMs = now;
+    const pressure = getNodeHeapPressure();
+    this.opts.logger?.warn("Skipped provider telemetry read because the Node.js heap is under pressure", {
+      provider: this.opts.provider,
+      phase,
+      heapUsedMb: Math.round(pressure.heapUsedBytes / 1024 / 1024),
+      heapLimitMb: Math.round(pressure.heapLimitBytes / 1024 / 1024),
+      heapUsagePercent: Math.round(pressure.usageRatio * 100),
+    });
   }
 
   private async collectFullReadInputs(args: {

@@ -71,6 +71,52 @@ describe("JulesApiClient coverage", () => {
         expect(res).toHaveLength(2);
     });
 
+    it("projects usage history page-by-page and drops repeated patch snapshots", async () => {
+        vi.mocked(mockInstance.get).mockReset();
+        vi.mocked(mockInstance.get)
+            .mockResolvedValueOnce({
+                data: {
+                    activities: [{
+                        id: "1",
+                        name: "1",
+                        createTime: "2026-01-01T00:00:00Z",
+                        progressUpdated: { title: "first" },
+                        artifacts: [{ changeSet: { source: "source-1", gitPatch: { unidiffPatch: "+old" } } }],
+                    }],
+                    nextPageToken: "token",
+                },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    activities: [{
+                        id: "2",
+                        name: "2",
+                        createTime: "2026-01-01T00:00:01Z",
+                        progressUpdated: { title: "second" },
+                        artifacts: [{ changeSet: { source: "source-1", gitPatch: { unidiffPatch: "+new" } } }],
+                    }],
+                },
+            });
+
+        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
+        const result = await client.getUsageConversation("sess");
+
+        expect(result.activities).toHaveLength(2);
+        expect(result.activities.flatMap((entry) => entry.artifacts || [])).toEqual([
+            expect.objectContaining({
+                changeSet: expect.objectContaining({
+                    gitPatch: expect.objectContaining({ unidiffPatch: "+new" }),
+                }),
+            }),
+        ]);
+        expect(result.diagnostics.supersededChangeSetSnapshots).toBe(1);
+        expect(mockInstance.get).toHaveBeenNthCalledWith(
+            1,
+            "/sessions/sess/activities",
+            { params: { pageSize: 10, pageToken: undefined } },
+        );
+    });
+
     it("hasApiKey and setApiKey normalize", () => {
         const client = new JulesApiClient({ baseUrl: "http://url" });
         expect(client.hasApiKey()).toBe(false);
@@ -78,6 +124,14 @@ describe("JulesApiClient coverage", () => {
         expect(client.hasApiKey()).toBe(false);
         client.setApiKey("key");
         expect(client.hasApiKey()).toBe(true);
+    });
+
+    it("bounds Jules API response bodies before JSON history parsing", () => {
+        new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
+        expect(vi.mocked(axios.create).mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+            maxContentLength: 64 * 1024 * 1024,
+            maxBodyLength: 64 * 1024 * 1024,
+        }));
     });
 
     it("extractSessionId handling", () => {

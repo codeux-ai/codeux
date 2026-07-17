@@ -245,6 +245,18 @@ released after bounded messages and numeric usage are derived, before SQLite rec
 This keeps wide hosted-session synchronization from multiplying large patch and media payloads in
 the Node.js heap.
 
+Jules usage history is projected page-by-page in batches of ten activities. Every activity/tool
+event remains available to the estimator, including bash output, while provider-only metadata and
+base64 media bytes are discarded immediately. Because Jules repeats the complete current patch on
+many progress activities, only the newest patch snapshot per source is retained and counted.
+Response, retained-text, retained-patch, activity-count, and persisted-message bounds prevent one
+pathological session from approaching the V8 heap ceiling.
+
+Provider telemetry readers share a V8 heap-pressure circuit breaker. Live reads pause at 50% heap
+usage or low proportional headroom. Terminal Jules estimation is retried later, and Codex shutdown
+uses its current bounded accumulator rather than forcing a final read while pressure is active.
+Runtime control and sprint cancellation therefore take precedence over best-effort telemetry.
+
 Streaming provider activity is buffered for 250 ms or 50 source records, then adjacent records from
 the same originator are compacted into bounded 16 KiB rows before one batch transaction. This avoids
 duplicating a line-per-row firehose in both session tracking and the execution feed.

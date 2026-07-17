@@ -901,6 +901,7 @@ const syncExecutionRunState = async (
       sessionId,
       session.prompt,
       extractGitMetrics(session) as { insertions?: number; deletions?: number; filesChanged?: number } | null,
+      session.updateTime,
     ).catch((err) => {
       deps.logger.warn("Failed non-blocking live Jules invocation sync", { error: err });
     });
@@ -928,9 +929,7 @@ const syncExecutionRunState = async (
           });
       }
 
-      const hasCalculatedUsage = existingUsage && existingUsage.totalTokens !== undefined && existingUsage.totalTokens !== null && existingUsage.totalTokens > 0;
-
-      if (provider === "jules" && !hasCalculatedUsage && deps.julesUsage && task.project_id && task.record_id && (sessionId || sessionName || taskRun.id)) {
+      if (provider === "jules" && deps.julesUsage && task.project_id && task.record_id && (sessionId || sessionName || taskRun.id)) {
         deps.julesUsage.calculateAndSaveUsageForTask(
           task.project_id,
           task.record_id,
