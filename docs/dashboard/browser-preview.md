@@ -31,6 +31,7 @@ The browser preview provides an integrated environment for interacting with runn
 - Use `listReorder` when session cards shift after removal or filtering.
 - Use `asyncFeedback` for launch/rebuild/stop/script-save/log-refresh feedback and `ActionFeedbackRegion` progress/result surfaces.
 - Under reduced motion, spinners and rail movement must snap or stop while status badges, button labels, `aria-busy`, visible disabled reasons, and log status copy remain visible.
+- Under reduced motion, environment and unsaved-change modals enter and exit without animation or displacement; dirty, decision, pending, validation, failure, and completion states remain distinct through text, borders, disabled controls, and `aria-busy` rather than movement.
 
 ## Localization Boundary
 
@@ -44,6 +45,11 @@ The browser preview provides an integrated environment for interacting with runn
 - Iframes and embedded views must have descriptive titles indicating their purpose and target.
 - Window controls, navigation controls, session removal, external open, rebuild, stop, and script save actions must use explicit accessible names instead of relying on `title` text or icon shape.
 - Preview environment defaults in the right sidebar and container override modals from preview cards must be keyboard reachable, expose labeled key/value fields, announce save progress, and make clear that saved environment changes apply on the next rebuild or start.
+- Container environment overrides use the shared modal enter/exit and focus-trap lifecycle. Dirty state is an exact comparison between the session's persisted overrides and the current draft; closing the modal or requesting another target requires an explicit **Save and continue**, **Discard and continue**, or **Keep editing** decision.
+- Startup-script drafts receive the same decision before a dirty editor can collapse or the selected session can change. The requested session or environment target is retained until the decision completes, and discard paths never call the save API.
+- Environment save validation keeps the draft mounted, marks and focuses the first invalid key/value row, and does not submit invalid or duplicate names. Save failures keep the editor or decision available with persistent retry feedback.
+- Environment and script saves carry their originating project, sprint, session, and request identity. Late responses after a project/session/target change are ignored; session polling and the active-sessions menu apply the same latest-request rule.
+- Save, rebuild, navigation, launch, removal, session, and script operations retain independent pending state. Only conflicting target transitions are locked, with a visible reason, while the active request suppresses duplicate mutations.
 - The right sidebar startup-command editor is scoped to the selected container, shows the inherited project command when present, and announces that a rebuild is required.
 - Live regions should transparently report loading, starting, running, stopped, reconnecting/unavailable, stale-log, saving, launching, empty-session, and error states without overwhelming screen readers.
 - The address form must keep a programmatic label, describe why it is disabled when the preview container is unavailable, and announce submitted navigation attempts while keeping focus in the address field.

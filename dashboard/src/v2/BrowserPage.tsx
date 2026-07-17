@@ -44,7 +44,10 @@ import { saveProjectPreviewDockerAccess, saveProjectPreviewEnvironmentVariables 
 import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js";
 import { LaunchContainerPanel } from "./components/browser/LaunchContainerPanel.js";
-import { PreviewEnvironmentEditor } from "./components/browser/PreviewEnvironmentEditor.js";
+import {
+  getFirstInvalidEnvironmentVariableIndex,
+  PreviewEnvironmentEditor,
+} from "./components/browser/PreviewEnvironmentEditor.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
@@ -58,6 +61,7 @@ import {
   type BrowserPreviewMessageVariables,
 } from "./i18n/messages/browser-preview.js";
 import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
+import { Modal } from "./components/ui/Modal.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
@@ -67,6 +71,17 @@ const EMBER_ACCENT_HEX = "#FFB800";
 
 const getSessionPortPathKey = (sessionId: string, containerPort: number): string => `${sessionId}:${containerPort}`;
 const appendVerbatim = (localizedPrefix: string, rawValue: string): string => `${localizedPrefix} ${rawValue}`;
+
+type GuardedBrowserTransition =
+  | { source: "environment"; kind: "close-environment" }
+  | { source: "environment" | "script"; kind: "select-session"; sessionId: string }
+  | { source: "environment" | "script"; kind: "open-environment"; sessionId: string }
+  | { source: "script"; kind: "collapse-script" };
+
+const environmentVariablesMatch = (
+  left: SprintPreviewSession["environmentOverrides"],
+  right: SprintPreviewSession["environmentOverrides"],
+): boolean => JSON.stringify(left) === JSON.stringify(right);
 
 export const BrowserPage: FunctionComponent = () => {
   const { formatNumber, locale, translate, translatePlural } = useDashboardI18n();
@@ -101,8 +116,13 @@ export const BrowserPage: FunctionComponent = () => {
   const [currentPath, setCurrentPath] = useState("/");
   const [showScriptEditor, setShowScriptEditor] = useState(false);
   const [environmentDraft, setEnvironmentDraft] = useState<SprintPreviewSession["environmentOverrides"]>([]);
+  const [persistedEnvironmentDraft, setPersistedEnvironmentDraft] = useState<SprintPreviewSession["environmentOverrides"]>([]);
+  const [environmentInvalidRowIndex, setEnvironmentInvalidRowIndex] = useState<number | null>(null);
   const [defaultEnvironmentDraft, setDefaultEnvironmentDraft] = useState<SprintPreviewSession["environmentOverrides"]>([]);
   const [environmentModalSessionId, setEnvironmentModalSessionId] = useState<string | null>(null);
+  const [environmentModalSessionSnapshot, setEnvironmentModalSessionSnapshot] = useState<SprintPreviewSession | null>(null);
+  const [guardedTransition, setGuardedTransition] = useState<GuardedBrowserTransition | null>(null);
+  const [guardFailure, setGuardFailure] = useState<string | null>(null);
   const [startupCommandDraft, setStartupCommandDraft] = useState("");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [launchSprintId, setLaunchSprintId] = useState("");
@@ -121,6 +141,10 @@ export const BrowserPage: FunctionComponent = () => {
   const savingEnvironmentRef = useRef(false);
   const savingDefaultEnvironmentRef = useRef(false);
   const savingStartupCommandRef = useRef(false);
+  const scriptSaveRequestIdRef = useRef(0);
+  const environmentSaveRequestIdRef = useRef(0);
+  const scriptTargetKeyRef = useRef<string | null>(null);
+  const environmentTargetKeyRef = useRef<string | null>(null);
   const removingSessionIdsRef = useRef<Set<string>>(new Set());
   const logsCacheRef = useRef<Map<string, string>>(new Map());
   const logsRef = useRef("");
@@ -187,7 +211,8 @@ export const BrowserPage: FunctionComponent = () => {
     (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
   );
   const environmentModalSession = environmentModalSessionId
-    ? sessionCards.find((session) => session.id === environmentModalSessionId) ?? null
+    ? sessionCards.find((session) => session.id === environmentModalSessionId)
+      ?? (environmentModalSessionSnapshot?.id === environmentModalSessionId ? environmentModalSessionSnapshot : null)
     : null;
   const selectedDockerAccessEnabled = visibleSelectedSession?.dockerAccessOverride ?? projectDockerAccessEnabled;
   const navigationDisabledReason = navigationPending
@@ -251,10 +276,41 @@ export const BrowserPage: FunctionComponent = () => {
     }
     return selectedSprint || null;
   }, [visibleSelectedSession, selectedSprint, sprints]);
+  const scriptTargetKey = selectedProject && scriptTargetSprint
+    ? `${selectedProject.id}:${scriptTargetSprint.id}`
+    : null;
+  const environmentTargetKey = environmentModalSession
+    ? `${environmentModalSession.projectId}:${environmentModalSession.sprintId}:${environmentModalSession.id}`
+    : null;
+  const environmentDirty = Boolean(environmentModalSession)
+    && !environmentVariablesMatch(persistedEnvironmentDraft, environmentDraft);
+  const scriptDirty = script !== null
+    ? Boolean(scriptTargetKey) && scriptDraft !== script.content
+    : false;
+  const targetTransitionsBlocked = savingEnvironment
+    || savingScript
+    || pendingSessionAction !== null
+    || guardedTransition !== null;
+  const targetTransitionReason = savingEnvironment
+    ? t("environmentTargetBlockedSaving")
+    : savingScript
+      ? t("scriptTargetBlockedSaving")
+      : pendingSessionAction
+        ? t("sessionTargetBlockedAction")
+        : guardedTransition
+          ? t("targetBlockedDecision")
+          : undefined;
+
+  scriptTargetKeyRef.current = scriptTargetKey;
+  environmentTargetKeyRef.current = environmentTargetKey;
 
   useEffect(() => {
     if (visibleSelectedSession) {
-      setEnvironmentDraft(visibleSelectedSession.environmentOverrides ?? []);
+      if (!environmentModalSessionId) {
+        const nextEnvironment = visibleSelectedSession.environmentOverrides ?? [];
+        setEnvironmentDraft(nextEnvironment);
+        setPersistedEnvironmentDraft(nextEnvironment);
+      }
       setStartupCommandDraft(visibleSelectedSession.startupCommandOverride ?? "");
       const nextPrimary = getPrimaryPreviewPortMapping(visibleSelectedSession);
       if (nextPrimary) {
@@ -263,20 +319,34 @@ export const BrowserPage: FunctionComponent = () => {
         ));
       }
     }
-  }, [visibleSelectedSession?.id]);
+  }, [environmentModalSessionId, visibleSelectedSession?.id]);
+
+  useEffect(() => {
+    scriptSaveRequestIdRef.current += 1;
+    savingScriptRef.current = false;
+    setSavingScript(false);
+  }, [scriptTargetKey]);
+
+  useEffect(() => {
+    environmentSaveRequestIdRef.current += 1;
+    savingEnvironmentRef.current = false;
+    setSavingEnvironment(false);
+  }, [environmentTargetKey]);
 
   useEffect(() => {
     setDefaultEnvironmentDraft(defaultEnvironmentVariables);
   }, [defaultEnvironmentVariables, selectedProject?.id]);
 
   useEffect(() => {
-    if (!environmentModalSessionId) {
-      return;
-    }
-    if (!environmentModalSession) {
+    if (environmentModalSession && environmentModalSession.projectId !== selectedProject?.id) {
+      environmentSaveRequestIdRef.current += 1;
+      savingEnvironmentRef.current = false;
+      setSavingEnvironment(false);
+      setGuardedTransition((current) => current?.source === "environment" ? null : current);
       setEnvironmentModalSessionId(null);
+      setEnvironmentModalSessionSnapshot(null);
     }
-  }, [environmentModalSession?.id, environmentModalSessionId]);
+  }, [environmentModalSession?.projectId, selectedProject?.id]);
 
   useEffect(() => {
     if (visibleSelectedSession && selectedPortMapping) {
@@ -685,58 +755,236 @@ export const BrowserPage: FunctionComponent = () => {
     }
   };
 
-  const handleSaveScript = async () => {
-    if (!selectedProject || !scriptTargetSprint) return;
-    if (savingScriptRef.current) return;
+  const handleSaveScript = async (closeEditor = true): Promise<boolean> => {
+    if (!selectedProject || !scriptTargetSprint || !scriptTargetKey) return false;
+    if (savingScriptRef.current) return false;
+    const requestId = ++scriptSaveRequestIdRef.current;
+    const targetKey = scriptTargetKey;
+    const projectId = selectedProject.id;
+    const sprintId = scriptTargetSprint.id;
+    const draftToSave = scriptDraft;
     savingScriptRef.current = true;
     setSavingScript(true);
+    setGuardFailure(null);
     browserFeedback.setPending(t("savingScript"));
     try {
-      const nextScript = await savePreviewScript(selectedProject.id, scriptTargetSprint.id, scriptDraft);
+      const nextScript = await savePreviewScript(projectId, sprintId, draftToSave);
+      if (requestId !== scriptSaveRequestIdRef.current || scriptTargetKeyRef.current !== targetKey || !mountedRef.current) {
+        return false;
+      }
       setScript(nextScript);
-      setShowScriptEditor(false);
+      setScriptDraft(nextScript.content);
+      if (closeEditor) {
+        setShowScriptEditor(false);
+      }
       browserFeedback.setSuccess(t("scriptSaved"));
+      return true;
     } catch (actionError) {
-      browserFeedback.setError(appendVerbatim(t("saveScriptFailedPrefix"), actionError instanceof Error ? actionError.message : String(actionError)));
+      if (requestId !== scriptSaveRequestIdRef.current || scriptTargetKeyRef.current !== targetKey || !mountedRef.current) {
+        return false;
+      }
+      const message = appendVerbatim(t("saveScriptFailedPrefix"), actionError instanceof Error ? actionError.message : String(actionError));
+      setGuardFailure(message);
+      browserFeedback.setError(message);
+      return false;
     } finally {
-      savingScriptRef.current = false;
-      setSavingScript(false);
+      if (requestId === scriptSaveRequestIdRef.current) {
+        savingScriptRef.current = false;
+        setSavingScript(false);
+      }
     }
   };
 
-  const handleOpenEnvironmentOverrides = (sessionId: string) => {
+  const openEnvironmentOverrides = (sessionId: string): void => {
     const nextSession = sessionCards.find((session) => session.id === sessionId);
     if (!nextSession) {
       return;
     }
+    const nextEnvironment = nextSession.environmentOverrides ?? [];
     setActiveSessionId(sessionId);
-    setEnvironmentDraft(nextSession.environmentOverrides ?? []);
+    setEnvironmentDraft(nextEnvironment);
+    setPersistedEnvironmentDraft(nextEnvironment);
+    setEnvironmentInvalidRowIndex(null);
+    setEnvironmentModalSessionSnapshot(nextSession);
     setEnvironmentModalSessionId(sessionId);
+    browserFeedback.setSuccess(t("selectedPreviewSessionFeedback", { name: nextSession.sprintName }));
   };
 
-  const handleSaveEnvironmentOverrides = async () => {
+  const handleSaveEnvironmentOverrides = async (): Promise<boolean> => {
     const targetSession = environmentModalSession ?? visibleSelectedSession;
-    if (!targetSession) return;
-    if (savingEnvironmentRef.current) return;
+    if (!targetSession) return false;
+    if (savingEnvironmentRef.current) return false;
+    const invalidRowIndex = getFirstInvalidEnvironmentVariableIndex(environmentDraft);
+    if (invalidRowIndex !== null) {
+      setEnvironmentInvalidRowIndex(invalidRowIndex);
+      setGuardedTransition(null);
+      setGuardFailure(null);
+      browserFeedback.setError(t("invalidEnvironmentVariable"));
+      return false;
+    }
+    const requestId = ++environmentSaveRequestIdRef.current;
+    const targetKey = `${targetSession.projectId}:${targetSession.sprintId}:${targetSession.id}`;
+    const draftToSave = environmentDraft.map((variable) => ({ ...variable, key: variable.key.trim() }));
     savingEnvironmentRef.current = true;
     setSavingEnvironment(true);
+    setGuardFailure(null);
+    setEnvironmentInvalidRowIndex(null);
     browserFeedback.setPending(t("savingEnvironmentOverrides"));
     try {
       const updated = await savePreviewEnvironmentOverrides(
         targetSession.projectId,
         targetSession.sprintId,
         targetSession.id,
-        environmentDraft,
+        draftToSave,
       );
-      setEnvironmentDraft(updated.environmentOverrides ?? []);
+      if (requestId !== environmentSaveRequestIdRef.current || environmentTargetKeyRef.current !== targetKey || !mountedRef.current) {
+        return false;
+      }
+      const persisted = updated.environmentOverrides ?? draftToSave;
+      setEnvironmentDraft(persisted);
+      setPersistedEnvironmentDraft(persisted);
+      setEnvironmentModalSessionSnapshot(updated);
       await refreshSessions(true);
+      if (requestId !== environmentSaveRequestIdRef.current || environmentTargetKeyRef.current !== targetKey || !mountedRef.current) {
+        return false;
+      }
       browserFeedback.setSuccess(t("environmentSaved"));
+      setGuardFailure(null);
+      return true;
     } catch (actionError) {
-      browserFeedback.setError(appendVerbatim(t("saveEnvironmentFailedPrefix"), actionError instanceof Error ? actionError.message : String(actionError)));
+      if (requestId !== environmentSaveRequestIdRef.current || environmentTargetKeyRef.current !== targetKey || !mountedRef.current) {
+        return false;
+      }
+      const message = appendVerbatim(t("saveEnvironmentFailedPrefix"), actionError instanceof Error ? actionError.message : String(actionError));
+      setGuardFailure(message);
+      browserFeedback.setError(message);
+      return false;
     } finally {
-      savingEnvironmentRef.current = false;
-      setSavingEnvironment(false);
+      if (requestId === environmentSaveRequestIdRef.current) {
+        savingEnvironmentRef.current = false;
+        setSavingEnvironment(false);
+      }
     }
+  };
+
+  const completeGuardedTransition = (transition: GuardedBrowserTransition): void => {
+    setGuardFailure(null);
+    setGuardedTransition(null);
+    if (transition.kind === "close-environment") {
+      setEnvironmentModalSessionId(null);
+      setEnvironmentModalSessionSnapshot(null);
+      setEnvironmentInvalidRowIndex(null);
+      return;
+    }
+    if (transition.kind === "collapse-script") {
+      setShowScriptEditor(false);
+      return;
+    }
+    if (transition.kind === "open-environment") {
+      openEnvironmentOverrides(transition.sessionId);
+      return;
+    }
+    if (transition.source === "environment") {
+      setEnvironmentModalSessionId(null);
+      setEnvironmentModalSessionSnapshot(null);
+      setEnvironmentInvalidRowIndex(null);
+    }
+    const nextSession = sessionCards.find((session) => session.id === transition.sessionId);
+    setActiveSessionId(transition.sessionId);
+    if (nextSession) {
+      browserFeedback.setSuccess(t("selectedPreviewSessionFeedback", { name: nextSession.sprintName }));
+    }
+  };
+
+  const requestGuardedTransition = (transition: GuardedBrowserTransition): void => {
+    if (savingEnvironmentRef.current || savingScriptRef.current || pendingSessionActionRef.current) {
+      return;
+    }
+    setGuardFailure(null);
+    setGuardedTransition(transition);
+  };
+
+  const handleDiscardGuardedChanges = (): void => {
+    if (!guardedTransition || savingEnvironment || savingScript) return;
+    const transition = guardedTransition;
+    if (transition.source === "environment") {
+      setEnvironmentDraft(persistedEnvironmentDraft);
+      setEnvironmentInvalidRowIndex(null);
+    } else {
+      setScriptDraft(script?.content ?? "");
+    }
+    completeGuardedTransition(transition);
+  };
+
+  const handleSaveGuardedChanges = async (): Promise<void> => {
+    if (!guardedTransition || savingEnvironment || savingScript) return;
+    const transition = guardedTransition;
+    setGuardFailure(null);
+    const saved = transition.source === "environment"
+      ? await handleSaveEnvironmentOverrides()
+      : await handleSaveScript(false);
+    if (saved) {
+      completeGuardedTransition(transition);
+    }
+  };
+
+  const handleKeepEditing = (): void => {
+    if (savingEnvironment || savingScript) return;
+    setGuardedTransition(null);
+  };
+
+  const handleRequestEnvironmentClose = (): void => {
+    if (guardedTransition?.source === "environment") {
+      handleKeepEditing();
+      return;
+    }
+    if (environmentDirty) {
+      requestGuardedTransition({ source: "environment", kind: "close-environment" });
+      return;
+    }
+    setEnvironmentModalSessionId(null);
+    setEnvironmentModalSessionSnapshot(null);
+    setEnvironmentInvalidRowIndex(null);
+  };
+
+  const handleOpenEnvironmentOverrides = (sessionId: string): void => {
+    if (targetTransitionsBlocked) return;
+    const changesScriptTarget = scriptTargetSprint?.id !== sessionCards.find((session) => session.id === sessionId)?.sprintId;
+    if (scriptDirty && changesScriptTarget) {
+      requestGuardedTransition({ source: "script", kind: "open-environment", sessionId });
+      return;
+    }
+    if (environmentDirty && environmentModalSessionId !== sessionId) {
+      requestGuardedTransition({ source: "environment", kind: "open-environment", sessionId });
+      return;
+    }
+    openEnvironmentOverrides(sessionId);
+  };
+
+  const handleSelectSession = (sessionId: string): void => {
+    if (sessionId === activeSessionId || targetTransitionsBlocked) return;
+    if (environmentDirty) {
+      requestGuardedTransition({ source: "environment", kind: "select-session", sessionId });
+      return;
+    }
+    if (environmentModalSession) {
+      completeGuardedTransition({ source: "environment", kind: "select-session", sessionId });
+      return;
+    }
+    if (scriptDirty) {
+      requestGuardedTransition({ source: "script", kind: "select-session", sessionId });
+      return;
+    }
+    completeGuardedTransition({ source: "script", kind: "select-session", sessionId });
+  };
+
+  const handleToggleScriptEditor = (): void => {
+    if (savingScriptRef.current || guardedTransition) return;
+    if (showScriptEditor && scriptDirty) {
+      requestGuardedTransition({ source: "script", kind: "collapse-script" });
+      return;
+    }
+    setShowScriptEditor((value) => !value);
   };
 
   const handleSaveDefaultEnvironmentVariables = async () => {
@@ -900,7 +1148,8 @@ export const BrowserPage: FunctionComponent = () => {
               browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.startsWith(t("launchFailedPrefix")) ? () => handleStart() :
               browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.startsWith(t("rebuildActionFailedPrefix")) ? () => handleRebuild() :
               browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.startsWith(t("stopFailedPrefix")) ? () => handleStop() :
-              browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.startsWith(t("saveScriptFailedPrefix")) ? () => handleSaveScript() :
+              browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.startsWith(t("saveScriptFailedPrefix")) ? () => void handleSaveScript() :
+              browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.startsWith(t("saveEnvironmentFailedPrefix")) ? () => void handleSaveEnvironmentOverrides() :
               undefined
             }
           />
@@ -1076,7 +1325,9 @@ export const BrowserPage: FunctionComponent = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setShowScriptEditor((value) => !value)}
+                onClick={handleToggleScriptEditor}
+                disabled={savingScript || guardedTransition !== null}
+                aria-disabled={savingScript || guardedTransition !== null}
                 aria-expanded={showScriptEditor}
                 aria-controls="preview-script-editor"
                 aria-label={showScriptEditor ? t("hideScriptEditor") : t("showScriptEditor")}
@@ -1279,7 +1530,7 @@ export const BrowserPage: FunctionComponent = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={handleSaveScript}
+                  onClick={() => void handleSaveScript()}
                   disabled={savingScript || !scriptTargetSprint}
                   aria-disabled={savingScript || !scriptTargetSprint}
                   aria-busy={savingScript}
@@ -1369,29 +1620,50 @@ export const BrowserPage: FunctionComponent = () => {
         <PreviewSessionSlider
           sessions={sessionCards}
           selectedSessionId={activeSessionId}
-          onSelectSession={(sessionId) => {
-            if (sessionId === activeSessionId) {
-              return;
-            }
-            const nextSession = sessionCards.find((session) => session.id === sessionId);
-            setActiveSessionId(sessionId);
-            if (nextSession) {
-              browserFeedback.setSuccess(t("selectedPreviewSessionFeedback", { name: nextSession.sprintName }));
-            }
-          }}
+          onSelectSession={handleSelectSession}
           onRemoveSession={(sessionId) => void handleRemove(sessionId)}
           onManageEnvironment={handleOpenEnvironmentOverrides}
           removingSessionIds={removingSessionIds}
+          targetTransitionsBlocked={targetTransitionsBlocked}
+          targetTransitionReason={targetTransitionReason}
         />
       </div>
-      {environmentModalSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-void-950/55 px-4 py-6 backdrop-blur-sm" role="presentation">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="preview-environment-override-title"
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[1.75rem] border border-white/12 bg-white p-5 shadow-[0_28px_90px_rgba(15,23,42,0.28)] dark:bg-void-950"
-          >
+      <Modal
+        isOpen={Boolean(environmentModalSession)}
+        onClose={handleRequestEnvironmentClose}
+        disableBackdropClick={savingEnvironment}
+        titleId={guardedTransition?.source === "environment" ? "preview-environment-unsaved-title" : "preview-environment-override-title"}
+        ariaDescribedBy={guardedTransition?.source === "environment" ? "preview-environment-unsaved-description" : "preview-environment-override-description"}
+        className="w-full max-w-2xl rounded-[1.75rem] p-5"
+      >
+        {environmentModalSession && guardedTransition?.source === "environment" ? (
+          <div aria-busy={savingEnvironment}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-status-amber">{t("unsavedEnvironmentEyebrow")}</div>
+            <h2 id="preview-environment-unsaved-title" className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
+              {t("unsavedEnvironmentTitle")}
+            </h2>
+            <p id="preview-environment-unsaved-description" className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+              {t("unsavedEnvironmentDescription", { name: environmentModalSession.sprintName })}
+            </p>
+            {guardFailure ? <div role="alert" className="mt-4 rounded-xl border border-status-red/25 bg-status-red/10 px-3 py-2 text-xs font-semibold text-status-red">{guardFailure}</div> : null}
+            <div role="status" aria-live="polite" className="mt-4 min-h-4 text-xs text-slate-500 dark:text-slate-400">
+              {savingEnvironment ? t("savingBeforeContinue") : t("chooseUnsavedAction")}
+            </div>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={handleKeepEditing} disabled={savingEnvironment} className="h-10 rounded-2xl border border-black/[0.08] px-4 text-xs font-semibold disabled:opacity-50 dark:border-white/[0.08]">
+                {t("keepEditing")}
+              </button>
+              <button type="button" onClick={handleDiscardGuardedChanges} disabled={savingEnvironment} className="h-10 rounded-2xl border border-status-red/25 px-4 text-xs font-semibold text-status-red disabled:opacity-50">
+                {t("discardAndContinue")}
+              </button>
+              <button type="button" onClick={() => void handleSaveGuardedChanges()} disabled={savingEnvironment} aria-busy={savingEnvironment} className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-slate-900">
+                <Save className="h-4 w-4" strokeWidth={2} />
+                {savingEnvironment ? t("savingEllipsis") : t("saveAndContinue")}
+              </button>
+            </div>
+          </div>
+        ) : environmentModalSession ? (
+          <div aria-busy={savingEnvironment}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("containerOverrides")}</div>
@@ -1399,58 +1671,78 @@ export const BrowserPage: FunctionComponent = () => {
                   {environmentModalSession.sprintName}
                 </h2>
               </div>
-              <button
-                type="button"
-                onClick={() => setEnvironmentModalSessionId(null)}
-                aria-label={t("closeEnvironmentOverrides")}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-500 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
-              >
+              <button type="button" onClick={handleRequestEnvironmentClose} disabled={savingEnvironment} aria-label={t("closeEnvironmentOverrides")} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-500 transition hover:border-black/[0.16] hover:text-slate-900 disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300">
                 <X className="h-4 w-4" strokeWidth={2} />
               </button>
             </div>
-            <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            <p id="preview-environment-override-description" className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
               {t("overridesDescription")}
             </p>
             <div className="mt-4">
               <PreviewEnvironmentEditor
                 variables={environmentDraft}
-                onChange={setEnvironmentDraft}
+                onChange={(variables) => {
+                  setEnvironmentDraft(variables);
+                  setEnvironmentInvalidRowIndex(null);
+                }}
                 disabled={savingEnvironment}
                 inheritedVariables={defaultEnvironmentDraft}
                 addLabel={t("addOverride")}
                 valueLabel={t("environmentOverrideValue")}
+                invalidRowIndex={environmentInvalidRowIndex}
+                invalidMessage={t("invalidEnvironmentVariable")}
               />
             </div>
+            {guardFailure ? (
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-status-red/25 bg-status-red/10 px-3 py-2 text-xs font-semibold text-status-red" role="alert">
+                <span>{guardFailure}</span>
+                <button type="button" onClick={() => void handleSaveEnvironmentOverrides()} disabled={savingEnvironment} className="shrink-0 rounded-lg border border-status-red/30 px-2.5 py-1.5 disabled:opacity-50">
+                  {t("retrySave")}
+                </button>
+              </div>
+            ) : null}
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div id="preview-environment-save-status" role="status" aria-live="polite" className="min-h-4 text-xs text-slate-500 dark:text-slate-400">
-                {savingEnvironment ? t("savingOverrides") : t("saveOverridesRebuild")}
+                {savingEnvironment ? t("savingOverrides") : environmentDirty ? t("environmentUnsavedStatus") : t("saveOverridesRebuild")}
               </div>
               <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEnvironmentModalSessionId(null)}
-                  disabled={savingEnvironment}
-                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-black/[0.08] px-4 text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
-                >
+                <button type="button" onClick={handleRequestEnvironmentClose} disabled={savingEnvironment} className="h-10 rounded-2xl border border-black/[0.08] px-4 text-xs font-semibold text-slate-700 disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200">
                   {t("cancel")}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSaveEnvironmentOverrides}
-                  disabled={savingEnvironment}
-                  aria-disabled={savingEnvironment}
-                  aria-busy={savingEnvironment}
-                  aria-describedby="preview-environment-save-status"
-                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-                >
+                <button type="button" onClick={() => void handleSaveEnvironmentOverrides()} disabled={savingEnvironment || !environmentDirty} aria-disabled={savingEnvironment || !environmentDirty} aria-busy={savingEnvironment} aria-describedby="preview-environment-save-status" className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900">
                   <Save className="h-4 w-4" strokeWidth={2} />
                   {savingEnvironment ? t("savingEllipsis") : t("saveOverrides")}
                 </button>
               </div>
             </div>
           </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        isOpen={guardedTransition?.source === "script"}
+        onClose={handleKeepEditing}
+        disableBackdropClick={savingScript}
+        titleId="preview-script-unsaved-title"
+        ariaDescribedBy="preview-script-unsaved-description"
+        className="w-full max-w-lg p-5"
+      >
+        <div aria-busy={savingScript}>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-status-amber">{t("unsavedScriptEyebrow")}</div>
+          <h2 id="preview-script-unsaved-title" className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{t("unsavedScriptTitle")}</h2>
+          <p id="preview-script-unsaved-description" className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{t("unsavedScriptDescription")}</p>
+          {guardFailure ? <div role="alert" className="mt-4 rounded-xl border border-status-red/25 bg-status-red/10 px-3 py-2 text-xs font-semibold text-status-red">{guardFailure}</div> : null}
+          <div role="status" aria-live="polite" className="mt-4 min-h-4 text-xs text-slate-500 dark:text-slate-400">{savingScript ? t("savingBeforeContinue") : t("chooseUnsavedAction")}</div>
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button type="button" onClick={handleKeepEditing} disabled={savingScript} className="h-10 rounded-2xl border border-black/[0.08] px-4 text-xs font-semibold disabled:opacity-50 dark:border-white/[0.08]">{t("keepEditing")}</button>
+            <button type="button" onClick={handleDiscardGuardedChanges} disabled={savingScript} className="h-10 rounded-2xl border border-status-red/25 px-4 text-xs font-semibold text-status-red disabled:opacity-50">{t("discardAndContinue")}</button>
+            <button type="button" onClick={() => void handleSaveGuardedChanges()} disabled={savingScript || !scriptTargetSprint} aria-busy={savingScript} className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-slate-900">
+              <Save className="h-4 w-4" strokeWidth={2} />
+              {savingScript ? t("savingEllipsis") : t("saveAndContinue")}
+            </button>
+          </div>
         </div>
-      )}
+      </Modal>
     </PageContainer>
   );
 };
