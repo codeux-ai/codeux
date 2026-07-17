@@ -13,6 +13,8 @@ import * as knowledgeApi from "../../../lib/knowledge-api.js";
 import { fetchSkillStorageContents } from "../../../lib/agent-preset-api.js";
 import { TOOL_DEFINITIONS } from "../../../../../../src/contracts/mcp-tool-definitions.js";
 import { schedulerOnlyAgentMcpAccess } from "../../../lib/agent-mcp-display.js";
+import gsap from "gsap";
+import type { AgentEditorNavigationState } from "../editor-navigation-state.js";
 
 expect.extend(matchers);
 
@@ -214,6 +216,64 @@ describe("AgentPresetEditorPanel", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it("reports dirty and pending state through the typed parent navigation contract", async () => {
+    const onSave = vi.fn().mockResolvedValue(true);
+    const reportedStates: AgentEditorNavigationState[] = [];
+    const onEditorStateChange = vi.fn((_editorKey: string, state: AgentEditorNavigationState | null) => {
+      if (state) reportedStates.push(state);
+    });
+    const view = render(
+      <AgentPresetEditorPanel
+        preset={makePreset()}
+        saving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        onEditorStateChange={onEditorStateChange}
+      />
+    );
+
+    fireEvent.input(screen.getByLabelText(/Agent Name/), { target: { value: "Planning Lead" } });
+    await waitFor(() => expect(reportedStates.at(-1)?.dirty).toBe(true));
+
+    expect(await reportedStates.at(-1)?.save()).toBe(true);
+    expect(onSave).toHaveBeenCalledWith("preset_1", expect.objectContaining({ name: "Planning Lead" }));
+
+    view.rerender(
+      <AgentPresetEditorPanel
+        preset={makePreset()}
+        saving
+        onSave={onSave}
+        onCancel={vi.fn()}
+        onEditorStateChange={onEditorStateChange}
+      />
+    );
+    await waitFor(() => expect(reportedStates.at(-1)?.pending).toBe(true));
+  });
+
+  it("uses zero-duration selection motion while retaining a static selected-editor cue", () => {
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", { configurable: true, writable: true, value: vi.fn((query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) });
+
+    render(<AgentPresetEditorPanel preset={makePreset()} saving={false} onSave={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByRole("form")).toHaveAttribute("data-editor-selected", "true");
+    expect(gsap.fromTo).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ opacity: 1, x: 0 }),
+      expect.objectContaining({ duration: 0 }),
+    );
+    Object.defineProperty(window, "matchMedia", { configurable: true, writable: true, value: originalMatchMedia });
   });
 
   it.each(["click", "keyboard"] as const)(
