@@ -18,6 +18,16 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 
 If validation fails, use the report and logs to create a new revision. Do not publish around the failure; the repository rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
+## Workspace Editing and Recovery
+
+The workspace protects an edited bundle before selecting another dashboard, switching projects, creating a dashboard, or opening the published viewer. The unsaved-changes dialog keeps the requested destination and offers three outcomes: save the draft and continue, discard the local draft and continue, or keep editing. A failed save leaves the destination pending so it can be retried; invalid JSON returns to the responsible editor without erasing the draft. Browser navigation and refresh also retain the normal unsaved-work warning.
+
+Manifest, file-bundle, source-graph, and styleguide JSON is parsed when its editor loses focus and before save, revision creation, or another dependent action. Invalid JSON appears inline, marks the corresponding tab, and moves focus to the first invalid editor when an action cannot continue. Editor tabs use the standard tab pattern: `Left Arrow`/`Right Arrow` (and `Up Arrow`/`Down Arrow`) move between tabs, `Home` selects the first tab, and `End` selects the last tab. Only the selected tab is in the tab order. Panel changes do not animate code content and tab styling disables transitions when reduced motion is requested.
+
+Removing a generated file changes only the unsaved bundle. An immediately focused **Undo removal** action restores the file at its original position; no backend update occurs until the complete draft is saved.
+
+Validation polling keeps the most recent logs visible if a status or log request fails. Its connection indicator distinguishes active polling, temporarily stale data, recovery confirmation, and repeated failure. Stale and failed states offer an explicit retry. Selecting another dashboard, changing project, changing validation session, or leaving the workspace aborts or invalidates the old poll, so a late response cannot update the new selection. Status announcements are emitted only when the validation or polling state actually changes.
+
 ## Localization Boundary
 
 The feature-gated workspace follows the dashboard's active English or German locale. Its management chrome—including editor labels, lifecycle states, validation stages, publication controls, confirmations, empty states, and accessibility labels—is translated with the route-owned custom-dashboard catalog.
