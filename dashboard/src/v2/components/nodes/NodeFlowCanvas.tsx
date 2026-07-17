@@ -8,6 +8,10 @@ import {
   type NodeFlowCanvasNode,
 } from "../../lib/node-flow-view-models.js";
 import { useNodesI18n } from "../../i18n/messages/nodes.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
+
+const KEYBOARD_NUDGE_STEP = 8;
+const KEYBOARD_NUDGE_LARGE_STEP = 32;
 
 interface NodeFlowCanvasProps {
   graph: NodeFlowGraph;
@@ -23,19 +27,27 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
   onMoveNode,
 }) => {
   const { t } = useNodesI18n();
+  const interactionTokens = useInteractionTokens();
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragFrameRef = useRef<number | null>(null);
   const pendingDragRef = useRef<{ nodeId: string; position: { x: number; y: number } } | null>(null);
+  const keyboardMoveRef = useRef<{ nodeId: string; position: { x: number; y: number } } | null>(null);
   const [drag, setDrag] = useState<{
     nodeId: string;
     offsetX: number;
     offsetY: number;
     position: { x: number; y: number } | null;
   } | null>(null);
+  const [keyboardMove, setKeyboardMove] = useState<{ nodeId: string; position: { x: number; y: number } } | null>(null);
+  const [positionAnnouncement, setPositionAnnouncement] = useState("");
   const canvasGraph = useMemo(() => layoutNodeFlowGraph(graph), [graph]);
   const displayedNodes = useMemo(() => canvasGraph.nodes.map((node) => (
-    drag?.nodeId === node.id && drag.position ? { ...node, position: drag.position } : node
-  )), [canvasGraph.nodes, drag]);
+    drag?.nodeId === node.id && drag.position
+      ? { ...node, position: drag.position }
+      : keyboardMove?.nodeId === node.id
+        ? { ...node, position: keyboardMove.position }
+        : node
+  )), [canvasGraph.nodes, drag, keyboardMove]);
   const nodeById = useMemo(() => new Map(displayedNodes.map((node) => [node.id, node])), [displayedNodes]);
   const maxX = Math.max(720, ...displayedNodes.map((node) => node.position.x + NODE_FLOW_NODE_WIDTH + 80));
   const maxY = Math.max(420, ...displayedNodes.map((node) => node.position.y + NODE_FLOW_NODE_HEIGHT + 80));
@@ -43,6 +55,13 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
   useEffect(() => () => {
     if (dragFrameRef.current !== null) cancelAnimationFrame(dragFrameRef.current);
   }, []);
+
+  useEffect(() => {
+    if (keyboardMoveRef.current?.nodeId !== selectedNodeId) {
+      keyboardMoveRef.current = null;
+      setKeyboardMove(null);
+    }
+  }, [selectedNodeId]);
 
   const handlePointerMove = (event: JSX.TargetedPointerEvent<HTMLDivElement>): void => {
     if (!drag || !canvasRef.current) {
@@ -81,6 +100,29 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
     dragFrameRef.current = null; pendingDragRef.current = null; setDrag(null);
   };
 
+  const nudgeNode = (event: JSX.TargetedKeyboardEvent<HTMLButtonElement>, node: NodeFlowCanvasNode): void => {
+    if (selectedNodeId !== node.id || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    const step = event.shiftKey ? KEYBOARD_NUDGE_LARGE_STEP : KEYBOARD_NUDGE_STEP;
+    const pendingMove = keyboardMoveRef.current;
+    const current = pendingMove?.nodeId === node.id ? pendingMove.position : node.position;
+    const position = {
+      x: Math.max(24, current.x + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0)),
+      y: Math.max(24, current.y + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0)),
+    };
+    keyboardMoveRef.current = { nodeId: node.id, position };
+    setKeyboardMove(keyboardMoveRef.current);
+    setPositionAnnouncement(t("nodePositionUpdated", { title: node.title, x: Math.round(position.x), y: Math.round(position.y) }));
+  };
+
+  const commitKeyboardMove = (event?: JSX.TargetedKeyboardEvent<HTMLButtonElement>): void => {
+    if (event && !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    const pendingMove = keyboardMoveRef.current;
+    keyboardMoveRef.current = null;
+    setKeyboardMove(null);
+    if (pendingMove) onMoveNode(pendingMove.nodeId, pendingMove.position);
+  };
+
   return (
     <section
       aria-label={t("nodeFlowCanvas")}
@@ -90,6 +132,7 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
       onPointerUp={finishDrag}
       onPointerCancel={cancelDrag}
     >
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{positionAnnouncement}</div>
       <div className="relative" style={{ width: `${maxX}px`, height: `${maxY}px` }}>
         <svg
           aria-hidden="true"
@@ -130,7 +173,13 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
             key={node.id}
             node={node}
             selected={selectedNodeId === node.id}
+            moving={drag?.nodeId === node.id || keyboardMove?.nodeId === node.id}
+            movementDuration={interactionTokens.selectionMovement.duration}
+            movementEase={interactionTokens.selectionMovement.ease}
             onSelect={() => onSelectNode(node.id)}
+            onKeyDown={(event) => nudgeNode(event, node)}
+            onKeyUp={commitKeyboardMove}
+            onBlur={() => commitKeyboardMove()}
             onPointerDown={(event) => {
               const target = event.currentTarget;
               target.setPointerCapture(event.pointerId);
@@ -154,9 +203,15 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
 const CanvasNode: FunctionComponent<{
   node: NodeFlowCanvasNode;
   selected: boolean;
+  moving: boolean;
+  movementDuration: string;
+  movementEase: string;
   onSelect: () => void;
+  onKeyDown: (event: JSX.TargetedKeyboardEvent<HTMLButtonElement>) => void;
+  onKeyUp: (event: JSX.TargetedKeyboardEvent<HTMLButtonElement>) => void;
+  onBlur: () => void;
   onPointerDown: (event: JSX.TargetedPointerEvent<HTMLButtonElement>) => void;
-}> = ({ node, selected, onSelect, onPointerDown }) => {
+}> = ({ node, selected, moving, movementDuration, movementEase, onSelect, onKeyDown, onKeyUp, onBlur, onPointerDown }) => {
   const { t, tp } = useNodesI18n();
   return (
     <button
@@ -172,8 +227,13 @@ const CanvasNode: FunctionComponent<{
         width: `${NODE_FLOW_NODE_WIDTH}px`,
         height: `${NODE_FLOW_NODE_HEIGHT}px`,
         transform: `translate(${node.position.x}px, ${node.position.y}px)`,
+        transitionDuration: moving ? "0ms" : movementDuration,
+        transitionTimingFunction: movementEase,
       }}
       onClick={onSelect}
+      onKeyDown={onKeyDown}
+      onKeyUp={onKeyUp}
+      onBlur={onBlur}
       onPointerDown={onPointerDown}
     >
       <span className="max-w-full truncate text-[11px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-400">{node.type}</span>

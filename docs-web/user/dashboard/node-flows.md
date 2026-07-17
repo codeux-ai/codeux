@@ -6,6 +6,12 @@ The **Nodes** page (`/nodes`) is the project-scoped backend authoring, publicati
 
 The library loads through `GET /api/projects/:projectId/node-flows`. Drafts are created through `POST /api/projects/:projectId/node-flow-drafts` and saved through revision-checked `PATCH /api/node-flow-drafts/:flowId`. A stale revision produces a visible conflict and never overwrites newer work.
 
+Unsaved title, description, inspector, and canvas edits are protected before a flow switch, new-draft creation, selected-flow deletion, or library reload can replace the current draft. The confirmation keeps the requested destination and offers **Save changes**, **Discard without saving**, and **Keep editing**. Save-and-continue waits for the revision-checked save to finish, blocks competing transitions while pending, and remains in the current editor if saving or conflict resolution fails.
+
+Deleting a flow uses a destructive confirmation that names the affected flow, exposes progress while the request is pending, and restores focus to the delete control on cancellation or failure. After successful deletion, the first remaining flow in library order is selected when the deleted flow was active; deleting a different flow preserves the current selection.
+
+Save, validation, dry run, publication, rollback, and published-run actions report their own pending, success, validation/error, and retry states. Duplicate activation of the same pending action is ignored. Responses captured for a previous project or flow are discarded, so late work cannot replace the newly selected editor or debugger state.
+
 The former browser graph at `codeux:nodes-canvas:v1` is eligible for one import into the selected project. The bridge maps `trigger` to `input`, `agent` to `set_fields`, and `task` to `provider_prompt`; `condition` and `output` remain governed definitions, ports are remapped, and legacy configuration is retained as non-secret metadata. Code UX creates an **Imported Nodes Canvas** backend draft and only then removes the legacy value and records a project-specific marker. A failed import remains retryable and is isolated from normal library loading, while a successful marker prevents duplicates.
 
 ## Registry-driven editing and credentials
@@ -19,6 +25,8 @@ Selecting, replacing, or removing a credential updates only that slot in the nod
 Removing a required binding is allowed as a draft edit but immediately changes review and publication readiness to blocked; removing an optional binding remains valid. Publication is denied for required missing bindings and for credentials that become unavailable, unconfigured, revoked, inaccessible to the project, wrong-kind, or short of a required capability. Runtime repeats compatibility against the immutable publication, so a later custody outage, restriction, revocation, or rebinding denies execution instead of using a stale dashboard decision.
 
 The complete governed built-in set currently registered with executable handlers is `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`.
+
+Canvas nodes remain pointer-draggable and can also be moved from the keyboard after selection. Arrow keys nudge by 8 canvas units; **Shift+Arrow** uses a 32-unit step. Repeated keydown events update only the local canvas preview, and one graph edit is committed on key-up or focus departure, matching the single commit made when pointer dragging ends. The updated coordinates are announced to assistive technology. Visible focus, selection, position, pending, success, and error cues remain present when reduced motion disables animated displacement.
 
 Registered custom definitions can execute only when their validated versioned manifest, immutable artifact, and custom-node runtime are available. Raw legacy `trigger`/`agent`/`task` kinds are translated by the browser import bridge rather than executed directly. Unknown or unregistered types, mockup entries, and definitions marked non-executable are planned or unavailable definitions.
 
