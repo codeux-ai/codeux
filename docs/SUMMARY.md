@@ -72,6 +72,7 @@
 - [Interaction Patterns](./dashboard/interaction-patterns.md)
 - [Dashboard Interaction Contracts](./dashboard/interaction-patterns.md#implemented-surface-contracts)
 - [Dashboard Interaction Verification](./dashboard/interaction-patterns.md#verification-guidance)
+- [Dashboard Interaction Acceptance](./dashboard/interaction-patterns.md#executable-acceptance-contract)
 - [Dashboard Accessibility Quality Audit](./dashboard/accessibility-quality-audit.md)
 - [Shared Primitive Design System](./dashboard/design-system-shared-primitives.md)
 - [Shared Data Interaction Primitives](./dashboard/design-system-shared-primitives.md#data-interaction-primitives)

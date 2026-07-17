@@ -15,6 +15,12 @@ import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
 import { useDashboardI18n } from "../../i18n/index.js";
 import { agentsMessages } from "../../i18n/messages/agents.js";
+import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import type { AgentEditorNavigationStateChange } from "./editor-navigation-state.js";
 
 const isMac =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform);
@@ -30,11 +36,16 @@ export const InstructionFileEditorPanel: FunctionComponent<{
   projectId: string;
   file: InstructionFileSummary;
   onSaved: (updated: InstructionFileContent) => void;
-}> = ({ projectId, file, onSaved }) => {
+  onEditorStateChange?: AgentEditorNavigationStateChange;
+}> = ({ projectId, file, onSaved, onEditorStateChange }) => {
   const { formatNumber, locale, translate } = useDashboardI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const accentHex = getInstructionAccentHex(file.providerId);
+  const confirmDialog = useConfirmDialog();
+  const reducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
+  const interactionTokens = useInteractionTokens();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,17 +91,21 @@ export const InstructionFileEditorPanel: FunctionComponent<{
   /* Entry animation on file switch */
   useLayoutEffect(() => {
     if (!panelRef.current) return;
-    gsap.fromTo(panelRef.current, { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" });
-  }, [file.id]);
+    gsap.fromTo(
+      panelRef.current,
+      { opacity: reducedMotion ? 1 : 0, x: reducedMotion ? 0 : 16 },
+      { opacity: 1, x: 0, duration: gsapTokens.selectionMovement.duration, ease: gsapTokens.selectionMovement.ease },
+    );
+  }, [file.id, reducedMotion, gsapTokens.selectionMovement.duration, gsapTokens.selectionMovement.ease]);
 
-  const handleSave = useCallback(async () => {
-    if (saving || !dirty) return;
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    if (saving || !dirty) return false;
     setTouched(true);
     if (content.trim().length === 0) {
       setMode("write");
       window.setTimeout(() => textareaRef.current?.focus(), 0);
       setError(translate(agentsMessages, "instructionRequiredRetry"));
-      return;
+      return false;
     }
     setSaving(true);
     setError(null);
@@ -101,12 +116,43 @@ export const InstructionFileEditorPanel: FunctionComponent<{
       onSaved(updated);
       setJustSaved(true);
       window.setTimeout(() => setJustSaved(false), 2200);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      return false;
     } finally {
       setSaving(false);
     }
   }, [saving, dirty, projectId, file.id, content, onSaved, translate]);
+
+  useEffect(() => {
+    if (!onEditorStateChange) return undefined;
+    const editorKey = `instruction-file:${file.id}`;
+    onEditorStateChange(editorKey, {
+      editorKey,
+      dirty,
+      pending: saving,
+      save: handleSave,
+    });
+    return () => onEditorStateChange(editorKey, null);
+  }, [dirty, file.id, handleSave, onEditorStateChange, saving]);
+
+  const handleRevert = useCallback(async (trigger: HTMLButtonElement): Promise<void> => {
+    confirmDialog.triggerRef.current = trigger;
+    const confirmed = await confirmDialog.requestConfirm({
+      title: translate(agentsMessages, "revertInstructionTitle", { name: file.label }),
+      body: translate(agentsMessages, "revertInstructionBody", { name: file.label }),
+      confirmLabel: translate(agentsMessages, "revertChanges"),
+      cancelLabel: translate(agentsMessages, "keepEditing"),
+      tone: "warning",
+    });
+    if (confirmed) {
+      setContent(loadedContent);
+      setTouched(false);
+      setError(null);
+    }
+    window.setTimeout(() => confirmDialog.triggerRef.current?.focus(), 0);
+  }, [confirmDialog, file.label, loadedContent, translate]);
 
   /* Cmd/Ctrl+S to save */
   useEffect(() => {
@@ -147,7 +193,9 @@ export const InstructionFileEditorPanel: FunctionComponent<{
   return (
     <div
       ref={panelRef}
-      className="group relative flex flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
+      data-motion-contract="selectionMovement"
+      data-editor-selected="true"
+      className="group relative flex flex-col overflow-hidden rounded-[1.9rem] border border-signal-500/20 bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] ring-1 ring-inset ring-signal-500/[0.06] backdrop-blur-2xl dark:border-signal-500/20 dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
     >
       <BorderTrace accentHex={accentHex} />
 
@@ -212,15 +260,9 @@ export const InstructionFileEditorPanel: FunctionComponent<{
           {dirty && !saving && (
             <button
               type="button"
-              onClick={() => {
-                const previousFocus = document.activeElement as HTMLElement | null;
-                if (window.confirm(translate(agentsMessages, "revertConfirm"))) {
-                  setContent(loadedContent);
-                  setTouched(false);
-                  setError(null);
-                }
-                window.setTimeout(() => previousFocus?.focus(), 0);
-              }}
+              onClick={(event) => void handleRevert(event.currentTarget)}
+              disabled={confirmDialog.isOpen}
+              aria-busy={confirmDialog.isOpen ? "true" : undefined}
               title={translate(agentsMessages, "revertChanges")}
               className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/40 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-slate-600 backdrop-blur-md transition-colors hover:bg-white/70 hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
             >
@@ -251,13 +293,24 @@ export const InstructionFileEditorPanel: FunctionComponent<{
       {/* ── Body ── */}
       <div className="relative z-10 flex flex-col gap-3 p-6 md:p-8">
         {error && (
-          <div role="alert" className="flex min-h-[2.75rem] items-center gap-2 rounded-2xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-[13px] font-medium text-status-red backdrop-blur-md">
+          <div
+            role="alert"
+            data-motion-contract="inlineValidation"
+            style={{ transitionDuration: interactionTokens.inlineValidation.duration, transitionTimingFunction: interactionTokens.inlineValidation.ease }}
+            className="flex min-h-[2.75rem] items-center gap-2 rounded-2xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-[13px] font-medium text-status-red backdrop-blur-md"
+          >
             <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={2.4} />
             {error}
           </div>
         )}
         {!error && (
-          <div role="status" aria-live="polite" className="min-h-[2.75rem] rounded-2xl border border-black/[0.05] bg-white/35 px-4 py-3 text-[12px] font-medium text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400">
+          <div
+            role="status"
+            aria-live="polite"
+            data-motion-contract="asyncFeedback"
+            style={{ transitionDuration: interactionTokens.asyncFeedback.duration, transitionTimingFunction: interactionTokens.asyncFeedback.ease }}
+            className="min-h-[2.75rem] rounded-2xl border border-black/[0.05] bg-white/35 px-4 py-3 text-[12px] font-medium text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400"
+          >
             {translate(agentsMessages, saving ? "savingInstructionFile" : dirty ? "unsavedInstructionEdits" : "instructionFileSaved")}
           </div>
         )}
@@ -324,6 +377,12 @@ export const InstructionFileEditorPanel: FunctionComponent<{
           </div>
         )}
       </div>
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        options={confirmDialog.options}
+        onConfirm={confirmDialog.handleConfirm}
+        onCancel={confirmDialog.handleCancel}
+      />
     </div>
   );
 };

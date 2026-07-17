@@ -151,6 +151,41 @@ describe("ProjectCard", () => {
     expect(screen.getByText("Running")).toBeInTheDocument();
   });
 
+  it("retains static pending, success, error, and retry cues without motion", () => {
+    const { rerender } = render(withLocale(<ProjectCard {...createProps({ isSettingUp: true })} />));
+    let card = screen.getByRole("article", { name: "Project: Project One" });
+    expect(card).toHaveAttribute("data-pending", "true");
+    expect(screen.getByText("Project setup running")).toBeInTheDocument();
+
+    rerender(withLocale(<ProjectCard {...createProps({
+      setupFeedback: { tone: "success", message: "Project setup completed successfully." },
+      setupInvocationId: "invocation-123",
+    })} />));
+    card = screen.getByRole("article", { name: "Project: Project One" });
+    expect(card).toHaveAttribute("data-outcome", "success");
+    expect(screen.getByRole("status")).toHaveTextContent("Project setup completed successfully.");
+
+    const retrySetup = vi.fn();
+    rerender(withLocale(<ProjectCard {...createProps({
+      setupFeedback: { tone: "error", message: "Project setup needs attention." },
+      onRetrySetup: retrySetup,
+    })} />));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retrySetup).toHaveBeenCalledOnce();
+    expect(screen.getByRole("alert")).toHaveTextContent("Project setup needs attention.");
+  });
+
+  it("suppresses destructive card actions while deletion is pending", () => {
+    const props = createProps({ isDeleting: true });
+    render(withLocale(<ProjectCard {...props} />));
+
+    const card = screen.getByRole("article", { name: "Project: Project One" });
+    expect(card).toHaveAttribute("data-pending", "true");
+    expect(screen.getByRole("button", { name: "Deleting project..." })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Deleting project..." }));
+    expect(props.onDelete).not.toHaveBeenCalled();
+  });
+
   it("renders view-model task counts and completion", () => {
     render(withLocale(<ProjectCard {...createProps()} />));
 

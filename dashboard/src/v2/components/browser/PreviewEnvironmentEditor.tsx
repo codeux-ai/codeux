@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { Plus, Trash2 } from "lucide-preact";
 import type { PreviewEnvironmentVariable } from "../../../types.js";
+import { useEffect, useRef } from "preact/hooks";
 import { useDashboardI18n } from "../../i18n/index.js";
 import {
   browserPreviewMessages,
@@ -12,6 +13,38 @@ const isSecretKey = (key: string): boolean => /(TOKEN|KEY|SECRET|PASSWORD|AUTH|C
 
 const emptyVariable = (): PreviewEnvironmentVariable => ({ key: "", value: "", enabled: true });
 
+const ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const RESERVED_ENVIRONMENT_KEYS = new Set([
+  "HOME", "HOST", "PORT", "DASHBOARD_PORT", "SPRINT_PREVIEW_PORT",
+  "SPRINT_PREVIEW_PRIMARY_CONTAINER_PORT", "SPRINT_PREVIEW_PRIMARY_HOST_PORT",
+  "SPRINT_PREVIEW_CONTAINER_PORTS", "SPRINT_PREVIEW_HOST_PORTS",
+  "SPRINT_PREVIEW_PORT_MAPPINGS", "SPRINT_PREVIEW_PROXY_PORT",
+  "SPRINT_PREVIEW_WORKSPACE", "SPRINT_PREVIEW_WORKTREE",
+  "SPRINT_PREVIEW_INSTALL_COMMAND", "SPRINT_PREVIEW_BUILD_COMMAND",
+  "SPRINT_PREVIEW_RUN_COMMAND", "SPRINT_PREVIEW_SOURCE_COMMIT",
+  "CODE_UX_GIT_USER_NAME", "CODE_UX_GIT_USER_EMAIL",
+]);
+
+export const getFirstInvalidEnvironmentVariableIndex = (variables: PreviewEnvironmentVariable[]): number | null => {
+  const seenKeys = new Set<string>();
+  for (let index = 0; index < variables.length; index += 1) {
+    const variable = variables[index];
+    const key = variable.key.trim();
+    const invalidKey = key.length === 0
+      || key.length > 128
+      || !ENVIRONMENT_KEY_PATTERN.test(key)
+      || RESERVED_ENVIRONMENT_KEYS.has(key)
+      || key.startsWith("SPRINT_PREVIEW_")
+      || seenKeys.has(key);
+    const invalidValue = variable.value.length > 4096 || /[\r\n]/.test(variable.value);
+    if (invalidKey || invalidValue) {
+      return index;
+    }
+    seenKeys.add(key);
+  }
+  return variables.length > 100 ? 100 : null;
+};
+
 export const PreviewEnvironmentEditor: FunctionComponent<{
   variables: PreviewEnvironmentVariable[];
   onChange: (variables: PreviewEnvironmentVariable[]) => void;
@@ -19,6 +52,8 @@ export const PreviewEnvironmentEditor: FunctionComponent<{
   inheritedVariables?: PreviewEnvironmentVariable[];
   addLabel?: string;
   valueLabel?: string;
+  invalidRowIndex?: number | null;
+  invalidMessage?: string;
 }> = ({
   variables,
   onChange,
@@ -26,6 +61,8 @@ export const PreviewEnvironmentEditor: FunctionComponent<{
   inheritedVariables = [],
   addLabel,
   valueLabel,
+  invalidRowIndex = null,
+  invalidMessage,
 }) => {
   const { formatNumber, translate } = useDashboardI18n();
   const t = (key: BrowserPreviewMessageKey, variables?: BrowserPreviewMessageVariables) => (
@@ -34,6 +71,15 @@ export const PreviewEnvironmentEditor: FunctionComponent<{
   const resolvedAddLabel = addLabel ?? t("addVariable");
   const resolvedValueLabel = valueLabel ?? t("environmentVariableValue");
   const rows = variables.length > 0 ? variables : [];
+  const keyInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  useEffect(() => {
+    if (invalidRowIndex === null) {
+      return;
+    }
+    keyInputRefs.current[invalidRowIndex]?.focus({ preventScroll: true });
+  }, [invalidRowIndex]);
+
   const updateRow = (index: number, patch: Partial<PreviewEnvironmentVariable>): void => {
     onChange(rows.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
   };
@@ -71,10 +117,16 @@ export const PreviewEnvironmentEditor: FunctionComponent<{
               </label>
               <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto]">
                 <input
+                  ref={(element) => {
+                    keyInputRefs.current[index] = element;
+                  }}
                   value={variable.key}
                   disabled={disabled}
+                  maxLength={128}
                   placeholder="CODE_UX_ALLOW_PUBLIC_DASHBOARD"
                   aria-label={t("environmentVariableName")}
+                  aria-invalid={invalidRowIndex === index ? "true" : undefined}
+                  aria-describedby={invalidRowIndex === index ? `preview-environment-row-${index}-error` : undefined}
                   onInput={(event) => updateRow(index, { key: (event.currentTarget as HTMLInputElement).value })}
                   className="h-10 min-w-0 rounded-xl border border-black/[0.08] bg-white/80 px-3 font-mono text-xs text-slate-800 outline-none transition focus:border-signal-500/50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-void-950 dark:text-slate-100"
                 />
@@ -82,8 +134,11 @@ export const PreviewEnvironmentEditor: FunctionComponent<{
                   type={valueInputType}
                   value={variable.value}
                   disabled={disabled}
+                  maxLength={4096}
                   placeholder="1"
                   aria-label={resolvedValueLabel}
+                  aria-invalid={invalidRowIndex === index ? "true" : undefined}
+                  aria-describedby={invalidRowIndex === index ? `preview-environment-row-${index}-error` : undefined}
                   onInput={(event) => updateRow(index, { value: (event.currentTarget as HTMLInputElement).value })}
                   className="h-10 min-w-0 rounded-xl border border-black/[0.08] bg-white/80 px-3 font-mono text-xs text-slate-800 outline-none transition focus:border-signal-500/50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-void-950 dark:text-slate-100"
                 />
@@ -97,6 +152,11 @@ export const PreviewEnvironmentEditor: FunctionComponent<{
                 >
                   <Trash2 className="h-4 w-4" strokeWidth={2} />
                 </button>
+                {invalidRowIndex === index && invalidMessage ? (
+                  <div id={`preview-environment-row-${index}-error`} role="alert" className="sm:col-span-3 text-xs font-semibold text-status-red">
+                    {invalidMessage}
+                  </div>
+                ) : null}
               </div>
             </div>
           );

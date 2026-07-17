@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useState } from "preact/hooks";
-import { CheckCircle2, ExternalLink, FileClock, MoreHorizontal, Play, RadioTower, Rocket, ScrollText, ShieldCheck } from "lucide-preact";
+import { AlertTriangle, CheckCircle2, ExternalLink, FileClock, MoreHorizontal, Play, RadioTower, RefreshCw, Rocket, ScrollText, ShieldCheck } from "lucide-preact";
 import { Button } from "../ui/Button.js";
 import { DropdownMenu, DropdownMenuItem } from "../ui/DropdownMenu.js";
 import type {
@@ -26,6 +26,10 @@ interface CustomDashboardValidationPanelProps {
   onSelectedRevisionIdChange: (revisionId: string) => void;
   validationSession: CustomDashboardValidationSessionRecord | null;
   logs: string;
+  pollingState: "idle" | "active" | "stale" | "recovering" | "failed";
+  pollingError: string | null;
+  validationAnnouncement: string;
+  retryingPoll: boolean;
   creatingRevision: boolean;
   validating: boolean;
   refreshingLogs: boolean;
@@ -34,6 +38,7 @@ interface CustomDashboardValidationPanelProps {
   onCreateRevision: () => void;
   onStartValidation: () => void;
   onRefreshLogs: () => void;
+  onRetryPoll: () => void;
   onPublish: () => void;
   onArchive: () => void;
 }
@@ -46,6 +51,10 @@ export const CustomDashboardValidationPanel: FunctionComponent<CustomDashboardVa
   onSelectedRevisionIdChange,
   validationSession,
   logs,
+  pollingState,
+  pollingError,
+  validationAnnouncement,
+  retryingPoll,
   creatingRevision,
   validating,
   refreshingLogs,
@@ -54,6 +63,7 @@ export const CustomDashboardValidationPanel: FunctionComponent<CustomDashboardVa
   onCreateRevision,
   onStartValidation,
   onRefreshLogs,
+  onRetryPoll,
   onPublish,
   onArchive,
 }) => {
@@ -63,6 +73,15 @@ export const CustomDashboardValidationPanel: FunctionComponent<CustomDashboardVa
   const stages = getValidationStages(validationSession?.status ?? selectedRevision?.validationStatus ?? null, locale);
   const previewPath = buildValidationPreviewPath(validationSession?.id);
   const publishEnabled = canPublishRevision(selectedRevision, validationSession);
+  const pollingLabel = pollingState === "active"
+    ? translate(customDashboardMessages, "validationPollingActive")
+    : pollingState === "stale"
+      ? translate(customDashboardMessages, "validationPollingStale")
+      : pollingState === "recovering"
+        ? translate(customDashboardMessages, "validationPollingRecovering")
+        : pollingState === "failed"
+          ? translate(customDashboardMessages, "validationPollingFailed")
+          : null;
 
   return (
     <aside
@@ -182,6 +201,40 @@ export const CustomDashboardValidationPanel: FunctionComponent<CustomDashboardVa
           <ExternalLink aria-hidden="true" className="h-4 w-4" />
           {translate(customDashboardMessages, "openValidationPreview")}
         </a>
+      ) : null}
+
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {validationAnnouncement}
+      </div>
+
+      {pollingLabel ? (
+        <div
+          data-polling-state={pollingState}
+          className={`flex flex-wrap items-center justify-between gap-2 rounded-[0.9rem] border px-3 py-2 text-xs font-semibold ${
+            pollingState === "failed"
+              ? "border-status-red/25 bg-status-red/[0.07] text-status-red"
+              : pollingState === "stale"
+                ? "border-amber-500/25 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300"
+                : "border-sky-500/20 bg-sky-500/[0.07] text-sky-700 dark:text-sky-300"
+          }`}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            {pollingState === "stale" || pollingState === "failed" ? (
+              <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0" />
+            ) : (
+              <RadioTower aria-hidden="true" className="h-4 w-4 shrink-0" />
+            )}
+            <span>
+              {pollingLabel}
+              {pollingError ? <span className="block break-words font-normal opacity-85">{pollingError}</span> : null}
+            </span>
+          </span>
+          {pollingState === "stale" || pollingState === "failed" ? (
+            <Button size="sm" variant="ghost" icon={RefreshCw} pending={retryingPoll} onClick={onRetryPoll}>
+              {translate(customDashboardMessages, "retryPolling")}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col">

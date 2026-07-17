@@ -118,18 +118,22 @@ vi.mock("../../../dashboard/src/v2/components/browser/PreviewSessionSlider.js", 
     onRemoveSession,
     onManageEnvironment,
     removingSessionIds = [],
+    targetTransitionsBlocked = false,
+    targetTransitionReason,
   }: {
     sessions: Array<{ id: string; sprintName: string; hostPort?: number | null }>;
     onSelectSession: (id: string) => void;
     onRemoveSession: (id: string) => void;
     onManageEnvironment: (id: string) => void;
     removingSessionIds?: string[];
+    targetTransitionsBlocked?: boolean;
+    targetTransitionReason?: string;
   }) => (
     <div>
       {sessions.filter((session) => !removingSessionIds.includes(session.id)).map((session) => (
         <div key={session.id}>
-          <button type="button" onClick={() => onSelectSession(session.id)}>{session.sprintName}</button>
-          <button type="button" onClick={() => onManageEnvironment(session.id)}>Env {session.sprintName}</button>
+          <button type="button" disabled={targetTransitionsBlocked} title={targetTransitionReason} onClick={() => onSelectSession(session.id)}>{session.sprintName}</button>
+          <button type="button" disabled={targetTransitionsBlocked} title={targetTransitionReason} onClick={() => onManageEnvironment(session.id)}>Env {session.sprintName}</button>
           <button type="button" onClick={() => onRemoveSession(session.id)}>Remove</button>
           <a href={session.hostPort ? `http://preview-${session.id}.localhost` : undefined}>Open Link</a>
         </div>
@@ -854,8 +858,8 @@ describe("BrowserPage", () => {
     await user.click(screen.getByRole("button", { name: "Add override" }));
     const nameInputs = screen.getAllByLabelText("Environment variable name");
     const valueInputs = screen.getAllByLabelText("Preview environment override value");
-    await user.type(nameInputs.at(-1) as HTMLElement, "CODE_UX_ALLOW_PUBLIC_DASHBOARD");
-    await user.type(valueInputs.at(-1) as HTMLElement, "1");
+    fireEvent.input(nameInputs.at(-1) as HTMLInputElement, { target: { value: "CODE_UX_ALLOW_PUBLIC_DASHBOARD" } });
+    fireEvent.input(valueInputs.at(-1) as HTMLInputElement, { target: { value: "1" } });
     await user.click(screen.getByRole("button", { name: "Save overrides" }));
 
     expect(savePreviewEnvironmentOverrides).toHaveBeenCalledWith(
@@ -864,6 +868,26 @@ describe("BrowserPage", () => {
       "sess-1",
       [{ key: "CODE_UX_ALLOW_PUBLIC_DASHBOARD", value: "1", enabled: true }],
     );
+    expect(screen.getByText("Preview environment saved. Rebuild the container to apply changes.")).toBeInTheDocument();
+  });
+
+  it("keeps a failed environment draft in the modal with a persistent retry", async () => {
+    const user = userEvent.setup();
+    vi.mocked(savePreviewEnvironmentOverrides).mockRejectedValueOnce(new Error("preview API unavailable"));
+    render(<BrowserPage />);
+
+    await user.click(screen.getByRole("button", { name: "Env Sprint 1" }));
+    await user.click(screen.getByRole("button", { name: "Add override" }));
+    fireEvent.input(screen.getAllByLabelText("Environment variable name").at(-1) as HTMLInputElement, { target: { value: "RETRY_FLAG" } });
+    fireEvent.input(screen.getAllByLabelText("Preview environment override value").at(-1) as HTMLInputElement, { target: { value: "draft-value" } });
+    await user.click(screen.getByRole("button", { name: "Save overrides" }));
+
+    expect(await screen.findByRole("alert", { name: "" })).toHaveTextContent("Failed to save preview environment: preview API unavailable");
+    expect(screen.getByDisplayValue("RETRY_FLAG")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("draft-value")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry save" }));
+    await waitFor(() => expect(savePreviewEnvironmentOverrides).toHaveBeenCalledTimes(2));
     expect(screen.getByText("Preview environment saved. Rebuild the container to apply changes.")).toBeInTheDocument();
   });
 
@@ -1210,24 +1234,73 @@ describe("BrowserPage", () => {
     expect(await screen.findByText("Skript erfolgreich gespeichert")).toBeInTheDocument();
   });
 
-  it("keeps invalid environment diagnostics and entered values verbatim in German", async () => {
+  it("keeps invalid environment drafts and focuses the first invalid field in German", async () => {
     const user = userEvent.setup();
-    vi.mocked(savePreviewEnvironmentOverrides).mockRejectedValueOnce(new Error("INVALID-NAME is reserved by runtime"));
 
     renderGerman(<BrowserPage />);
     await user.click(screen.getByRole("button", { name: "Env Sprint 1" }));
     await user.click(screen.getByRole("button", { name: "Überschreibung hinzufügen" }));
-    await user.type(screen.getAllByLabelText("Name der Umgebungsvariable").at(-1) as HTMLElement, "INVALID-NAME");
-    await user.type(screen.getAllByLabelText("Wert der Vorschau-Umgebungsüberschreibung").at(-1) as HTMLElement, "literal-secret-value");
+    const nameInput = screen.getAllByLabelText("Name der Umgebungsvariable").at(-1) as HTMLInputElement;
+    const valueInput = screen.getAllByLabelText("Wert der Vorschau-Umgebungsüberschreibung").at(-1) as HTMLInputElement;
+    fireEvent.input(nameInput, { target: { value: "INVALID-NAME" } });
+    fireEvent.input(valueInput, { target: { value: "literal-secret-value" } });
     await user.click(screen.getByRole("button", { name: "Überschreibungen speichern" }));
 
-    expect(savePreviewEnvironmentOverrides).toHaveBeenCalledWith(
-      "p1",
-      "s1",
-      "sess-1",
-      [{ key: "INVALID-NAME", value: "literal-secret-value", enabled: true }],
-    );
-    expect(screen.getByText("Vorschau-Umgebung konnte nicht gespeichert werden: INVALID-NAME is reserved by runtime")).toBeInTheDocument();
+    expect(savePreviewEnvironmentOverrides).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/Gib einen eindeutigen, nicht reservierten Umgebungsnamen/).length).toBeGreaterThan(0);
+    expect(nameInput).toHaveValue("INVALID-NAME");
+    expect(valueInput).toHaveValue("literal-secret-value");
+    expect(nameInput).toHaveFocus();
+  });
+
+  it("guards dirty environment close and discards without backend work before restoring focus", async () => {
+    const user = userEvent.setup();
+    render(<BrowserPage />);
+
+    const opener = screen.getByRole("button", { name: "Env Sprint 1" });
+    await user.click(opener);
+    await user.click(screen.getByRole("button", { name: "Add override" }));
+    fireEvent.input(screen.getAllByLabelText("Environment variable name").at(-1) as HTMLInputElement, { target: { value: "LOCAL_FLAG" } });
+    fireEvent.input(screen.getAllByLabelText("Preview environment override value").at(-1) as HTMLInputElement, { target: { value: "1" } });
+
+    await user.click(screen.getByRole("button", { name: "Close environment overrides" }));
+    expect(screen.getByRole("heading", { name: "Keep these environment changes?" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByDisplayValue("LOCAL_FLAG")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close environment overrides" }));
+    await user.click(screen.getByRole("button", { name: "Discard and continue" }));
+    expect(savePreviewEnvironmentOverrides).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sprint 1" })).not.toBeInTheDocument());
+    await waitFor(() => expect(opener).toHaveFocus());
+  });
+
+  it("guards dirty script collapse and preserves the draft when editing continues", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchPreviewScript).mockResolvedValueOnce({
+      projectId: "p1",
+      sprintId: "s1",
+      content: "mock script",
+      mode: "script",
+      path: "/script.sh",
+      exists: true,
+      detectedInstallCommand: null,
+      detectedBuildCommand: null,
+      detectedRunCommand: null,
+    });
+    render(<BrowserPage />);
+    expandPanel(/Selected Sprint/);
+    const toggle = screen.getByRole("button", { name: "Show startup script editor" });
+    await user.click(toggle);
+    const editor = await screen.findByLabelText("Startup script contents");
+    fireEvent.input(editor, { target: { value: "pnpm custom-preview" } });
+
+    await user.click(screen.getByRole("button", { name: "Hide startup script editor" }));
+    expect(screen.getByRole("heading", { name: "Keep these script changes?" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Keep editing" }));
+
+    expect(screen.getByLabelText("Startup script contents")).toHaveValue("pnpm custom-preview");
+    await waitFor(() => expect(toggle).toHaveFocus());
   });
 
   it("removes a preview session from the session card", async () => {

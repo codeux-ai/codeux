@@ -19,6 +19,12 @@ Easy mode follows the short Setup mode, Installation, Introduction, Provider, an
 
 The flow and its guided dashboard tour follow the active English or German dashboard locale, including keyboard-accessible names, validation, progress, readiness framing, and completion feedback. Provider names, detected paths, model IDs, runtime diagnostics, and installation output remain unchanged, and locale selection never changes the settings values submitted by onboarding.
 
+Onboarding uses the dashboard's shared dialog and focus trap. Focus begins on the current step heading, Tab and Shift+Tab stay within the dialog, step changes immediately focus the new heading, and failed progression focuses the first invalid field. Moving backward and rechecking runtime readiness preserve values already entered.
+
+Closing a changed draft always opens a **Keep editing** or **Discard and close** decision. Escape and backdrop interaction follow that same policy and cannot bypass the decision. During settings save or dependency installation, dismissal and step navigation are disabled and the header explains why; keep the window open until the operation reports an outcome. Installation errors and partial results retain the attempted installer so it can be retried, and a retry refreshes readiness without replacing the rest of the draft.
+
+Closing or leaving onboarding stops polling and scheduled UI work, clears unsaved appearance previews, and ignores late readiness, provider preparation, installation, or save responses. Screen-reader status combines the step number with readiness and installation outcomes. With reduced motion enabled, steps and status update immediately while progress values, static focus/highlight cues, and outcome text remain available.
+
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |
@@ -44,6 +50,7 @@ Before applying changes, check:
 - Whether the value affects provider credentials, Docker runtime behavior, Git automation, memory retention, or destructive cleanup.
 - Whether a project override is masking the system value you expected to change.
 - Whether a running sprint needs to be paused, restarted, or allowed to finish before the new value can be observed.
+- Whether dependency installation or settings save is still running; these phases intentionally cannot be dismissed.
 
 ## Troubleshooting
 
@@ -53,6 +60,7 @@ If the saved setting does not appear to take effect:
 - Check for a project or sprint override that takes precedence over the system value.
 - Refresh the affected dashboard page if the setting controls a rendered surface.
 - Restart the local runtime only when the setting explicitly controls startup, listener, or process-level behavior.
+- If installation fails, use the retry action for the same installer or recheck readiness after completing the displayed manual guidance.
 
 ## Related Documentation
 

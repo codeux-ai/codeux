@@ -117,3 +117,5 @@ The dashboard targets WCAG 2.1 AA:
 - Sufficient contrast in both Light and Dark themes.
 
 If you discover a regression, file an issue with the page path and the assistive technology used.
+
+Shared confirmation, dirty-draft, pending/retry, keyboard, focus-restoration, and reduced-motion behavior is documented in [Dashboard Interaction Patterns](./interaction-patterns.md). Contributors and reviewers should also use the [Dashboard Accessibility Quality Audit](./accessibility-quality-audit.md).

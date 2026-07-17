@@ -1,0 +1,28 @@
+# Dashboard Accessibility Quality Audit
+
+Use this checklist when reviewing dashboard interaction changes.
+
+## Keyboard and focus
+
+- Menus, listboxes, tabs, node controls, and selectors support the keyboard behavior appropriate to their role.
+- Dialogs and dirty-state prompts have an accessible name, keep focus inside while open, support Escape, and restore focus after close.
+- Removing the focused row or item moves focus to the next logical control or a named fallback.
+- No action is available only on hover, through drag movement, or through animation.
+
+## Validation and asynchronous feedback
+
+- Invalid controls reference their visible error with `aria-describedby` or `aria-errormessage`.
+- Pending actions expose `aria-busy`, disabled state, or both before another activation can dispatch.
+- Success and non-blocking progress use polite status announcements. Blocking and retryable errors use an alert or assertive equivalent.
+- Retry controls remain associated with the failed target and suppress duplicate retry while pending.
+
+## Reduced motion
+
+- With `prefers-reduced-motion: reduce`, optional transitions resolve immediately.
+- Static borders, selected state, labels, progress, busy state, errors, and live announcements communicate the same result without animation.
+
+## Acceptance environment
+
+Browser acceptance runs only against the approved isolated local test project. Fixtures use generic records, wait for accessible or network state rather than fixed sleeps, clean up created data, and keep failure diagnostics free of live project names and credentials.
+
+See [Dashboard Interaction Patterns](./interaction-patterns.md) for the shared behavior contract and [The Dashboard](./overview.md) for route guidance.

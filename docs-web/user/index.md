@@ -20,6 +20,8 @@ can read on demand.
 | [Automation and CI](./automation-and-ci.md) | Auto-merge, CI autofix, attention items, and intervention modes. |
 | [MCP clients](./mcp-clients.md) | Driving Code UX from Gemini CLI, Codex, Claude Code, and others. |
 | [Dashboard](./dashboard/overview.md) | A page-by-page tour of the live web UI. |
+| [Dashboard interaction patterns](./dashboard/interaction-patterns.md) | Shared confirmation, draft, async feedback, keyboard, focus, and reduced-motion behavior. |
+| [Dashboard accessibility audit](./dashboard/accessibility-quality-audit.md) | Review and browser-acceptance checklist for dashboard changes. |
 | [Settings](../settings/index.md) | The full Settings reference hub with one page per Settings area. |
 | [Custom dashboards](./dashboard/custom-dashboards.md) | Agent-generated project dashboards, detached validation, publication, and rollback. |
 | [Troubleshooting](./troubleshooting.md) | Common issues, log locations, and recovery. |

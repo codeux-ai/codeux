@@ -8,6 +8,29 @@ Secondary pages must follow a consistent structural wrapper to maintain standard
 
 - **PageContainer Wrapper**: All secondary pages must be wrapped in a `PageContainer` component. This ensures unified padding, layout behavior, and responsive constraints.
 
+## Knowledge interaction states
+
+The Knowledge page keeps async work attached to the document or upload batch that started it. Apply
+these rules when changing `/knowledge`:
+
+- Destructive document removal uses the shared `ConfirmDialog`; native browser confirmation is not
+  permitted. The dialog names the document, states that deletion is irreversible, supports Escape
+  and cancel, remains pending through the DELETE request, and restores focus to its trigger when no
+  deletion occurs.
+- A confirmed deletion removes the document from client data immediately and leaves an in-place
+  pending tombstone. If the request fails, restore the preserved document at its recorded index
+  without refetching or replacing other client changes. If it succeeds, focus the next document,
+  then the previous document, then the library heading, and announce the result. Successful server
+  deletion has no undo unless a restoration API is available.
+- Track delete and re-embed work by document ID. Disable only the affected row, suppress repeated
+  requests, and keep pending, success, error, raw diagnostic, and retry feedback within that row.
+- File selection and drag/drop share one upload path. Show accepted filenames while the request is
+  pending, separate successful and failed files for partial results, retain failed `File` objects for
+  an explicit retry, and do not hide existing document cards when a batch fails.
+- Use the shared `asyncFeedback`, `enterExit`, and `listReorder` interaction contracts. Loading
+  indicators include reduced-motion fallbacks; state and list updates occur without delayed motion
+  when reduced motion is active.
+
 ## Watermark Headers
 
 Secondary pages utilize a standard watermark header design pattern. This pattern establishes clear context without overwhelming the operational data on the page.

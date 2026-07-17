@@ -361,8 +361,9 @@ export async function cleanupSprintFixture(
 export async function createE2EAgentPreset(
   request: APIRequestContext,
   projectId: string,
+  options: { name?: string } = {},
 ): Promise<{ id: string; name: string }> {
-  const name = `E2E Avatar Agent ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const name = options.name ?? `E2E Avatar Agent ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const created = await request.post(`/api/projects/${projectId}/agent-presets`, {
     data: {
       name,

@@ -22,6 +22,7 @@ vi.mock("gsap", () => ({
 
 import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
+import * as instructionFileApi from "../../../dashboard/src/v2/lib/instruction-file-api.js";
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import { AgentsPage } from "../../../dashboard/src/v2/AgentsPage.js";
 import { DashboardI18nProvider, type DashboardLocale } from "../../../dashboard/src/v2/i18n/index.js";
@@ -30,6 +31,11 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 
 vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js");
 vi.mock("../../../dashboard/src/v2/lib/settings-api.js");
+vi.mock("../../../dashboard/src/v2/lib/instruction-file-api.js");
+
+const { mockInstructionEditorSave } = vi.hoisted(() => ({
+  mockInstructionEditorSave: vi.fn(),
+}));
 vi.mock("../../../dashboard/src/v2/lib/invocation-api.js", () => ({
   fetchProjectInvocationsQuery: vi.fn(() => Promise.resolve({
     items: [],
@@ -163,14 +169,41 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentPresetEditorPanel.js",
   class MockEditor extends Component<any, any> {
     constructor(props: any) {
       super(props);
-      this.state = { override: !!props.preset.memoryTemplateOverrideEnabled };
+      this.state = {
+        override: !!props.preset.memoryTemplateOverrideEnabled,
+        name: props.preset.name,
+        dirty: false,
+      };
+    }
+    reportState() {
+      this.props.onEditorStateChange?.(`agent:${this.props.preset.id}`, {
+        editorKey: `agent:${this.props.preset.id}`,
+        dirty: this.state.dirty,
+        pending: this.props.saving,
+        save: async () => Boolean(await this.props.onSave(this.props.preset.id, { name: this.state.name })),
+      });
+    }
+    componentDidMount() {
+      this.reportState();
+    }
+    componentDidUpdate(previousProps: any, previousState: any) {
+      if (previousProps.saving !== this.props.saving || previousState.dirty !== this.state.dirty || previousState.name !== this.state.name) {
+        this.reportState();
+      }
+    }
+    componentWillUnmount() {
+      this.props.onEditorStateChange?.(`agent:${this.props.preset.id}`, null);
     }
     render() {
       const { props, state } = this;
       return h("div", { "data-testid": "editor-panel" },
         h("h2", null, "Edit Agent"),
         h("div", null, props.isDashboardReplyAgent ? "Dashboard reply MCP context" : "Standard MCP context"),
-        h("input", { defaultValue: props.preset.name, "aria-label": "Name" }),
+        h("input", {
+          value: state.name,
+          "aria-label": "Name",
+          onInput: (event: any) => this.setState({ name: event.currentTarget.value, dirty: true }),
+        }),
         h("input", {
           type: "checkbox",
           "aria-label": "Enable Memory Template Override",
@@ -204,6 +237,48 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentPresetEditorPanel.js",
   return {
     AgentPresetEditorPanel: (props: any) => h(MockEditor, props)
   };
+});
+
+vi.mock("../../../dashboard/src/v2/components/agents/InstructionFileEditorPanel.js", async () => {
+  const { h, Component } = await import("preact");
+  class MockInstructionEditor extends Component<any, { dirty: boolean; content: string }> {
+    constructor(props: any) {
+      super(props);
+      this.state = { dirty: false, content: "Saved instruction content" };
+    }
+    reportState() {
+      this.props.onEditorStateChange?.(`instruction-file:${this.props.file.id}`, {
+        editorKey: `instruction-file:${this.props.file.id}`,
+        dirty: this.state.dirty,
+        pending: false,
+        save: async () => {
+          const saved = await mockInstructionEditorSave(this.state.content);
+          if (saved) this.setState({ dirty: false });
+          return Boolean(saved);
+        },
+      });
+    }
+    componentDidMount() {
+      this.reportState();
+    }
+    componentDidUpdate(_previousProps: any, previousState: { dirty: boolean; content: string }) {
+      if (previousState.dirty !== this.state.dirty || previousState.content !== this.state.content) this.reportState();
+    }
+    componentWillUnmount() {
+      this.props.onEditorStateChange?.(`instruction-file:${this.props.file.id}`, null);
+    }
+    render() {
+      return h("div", { "data-testid": "instruction-editor" },
+        h("h2", null, this.props.file.label),
+        h("textarea", {
+          "aria-label": "Instruction content",
+          value: this.state.content,
+          onInput: (event: any) => this.setState({ content: event.currentTarget.value, dirty: true }),
+        }),
+      );
+    }
+  }
+  return { InstructionFileEditorPanel: (props: any) => h(MockInstructionEditor, props) };
 });
 
 vi.mock("../../../dashboard/src/v2/components/agents/AgentAvatarScene.js", () => ({
@@ -327,10 +402,13 @@ describe("AgentsPage", () => {
         updatedAt: "2023-01-01T00:00:00.000Z",
       },
     ] as any);
+    vi.mocked(instructionFileApi.fetchInstructionFiles).mockResolvedValue([]);
+    mockInstructionEditorSave.mockResolvedValue(true);
     vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(createEffectiveSettings() as any);
 
     mockProjectData.projects = [{ id: "project-1", name: "Test Project", status: "ready" }];
     mockProjectData.selectedProject = { id: "project-1", name: "Test Project", status: "ready" };
+    mockProjectData.selectProject.mockResolvedValue(undefined);
 
     // Ensure matchMedia is available for AgentAvatarScene hooks
     if (!window.matchMedia) {
@@ -795,6 +873,155 @@ describe("AgentsPage", () => {
       expect(screen.queryByText("Save Agent")).not.toBeInTheDocument();
       expect(screen.getByText("Edit Agent")).toBeInTheDocument();
     });
+  });
+
+  it("guards dirty agent selection with keep-editing and discard decisions without saving", async () => {
+    await renderPage();
+    fireEvent.click(await screen.findByText("Edit Agent"));
+    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Draft Planning Agent" } });
+
+    const cards = screen.getAllByTestId("showcase-card");
+    fireEvent.click(cards[1]);
+    expect(await screen.findByRole("dialog", { name: "Unsaved changes" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).not.toBeInTheDocument());
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Draft Planning Agent");
+
+    fireEvent.click(cards[1]);
+    fireEvent.click(await screen.findByRole("button", { name: "Discard without saving" }));
+
+    await waitFor(() => expect(screen.getByText("Review code")).toBeInTheDocument());
+    expect(agentPresetApi.updateAgentPreset).not.toHaveBeenCalled();
+  });
+
+  it("keeps the agent draft and destination modal open when save-and-leave fails", async () => {
+    vi.mocked(agentPresetApi.updateAgentPreset).mockRejectedValueOnce(new Error("Preset save unavailable"));
+    await renderPage();
+    fireEvent.click(await screen.findByText("Edit Agent"));
+    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Draft Planning Agent" } });
+    fireEvent.click(screen.getAllByTestId("showcase-card")[1]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Save failed: Preset save unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Unsaved changes" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Draft Planning Agent");
+    expect(screen.queryByText("Review code")).not.toBeInTheDocument();
+  });
+
+  it("applies only the latest concurrent selection after a successful agent save", async () => {
+    const instructionFile = {
+      id: "agents-file",
+      label: "AGENTS.md",
+      fileName: "AGENTS.md",
+      relativePath: "AGENTS.md",
+      description: "Repository instructions",
+      exists: true,
+      size: 42,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    vi.mocked(instructionFileApi.fetchInstructionFiles).mockResolvedValue([instructionFile]);
+    let resolveSave: ((preset: any) => void) | undefined;
+    vi.mocked(agentPresetApi.updateAgentPreset).mockReturnValueOnce(new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+
+    await renderPage();
+    fireEvent.click(await screen.findByText("Edit Agent"));
+    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Draft Planning Agent" } });
+    fireEvent.click(screen.getAllByTestId("showcase-card")[1]);
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /AGENTS\.md/ }));
+    await act(async () => resolveSave?.({ ...mockPresets[0], name: "Draft Planning Agent" }));
+
+    expect(await screen.findByTestId("instruction-editor")).toBeInTheDocument();
+    expect(screen.queryByText("Review code")).not.toBeInTheDocument();
+    expect(agentPresetApi.updateAgentPreset).toHaveBeenCalledTimes(1);
+  });
+
+  it("guards dirty instruction-file selection and never saves on discard", async () => {
+    const instructionFile = {
+      id: "agents-file",
+      label: "AGENTS.md",
+      fileName: "AGENTS.md",
+      relativePath: "AGENTS.md",
+      description: "Repository instructions",
+      exists: true,
+      size: 42,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    vi.mocked(instructionFileApi.fetchInstructionFiles).mockResolvedValue([instructionFile]);
+    await renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /AGENTS\.md/ }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Instruction content" }), { target: { value: "Unsaved file draft" } });
+
+    fireEvent.click(screen.getAllByTestId("showcase-card")[1]);
+    expect(await screen.findByRole("dialog", { name: "Unsaved changes" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard without saving" }));
+
+    await waitFor(() => expect(screen.getByText("Review code")).toBeInTheDocument());
+    expect(mockInstructionEditorSave).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed instruction-file save draft open", async () => {
+    const instructionFile = {
+      id: "agents-file",
+      label: "AGENTS.md",
+      fileName: "AGENTS.md",
+      relativePath: "AGENTS.md",
+      description: "Repository instructions",
+      exists: true,
+      size: 42,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    vi.mocked(instructionFileApi.fetchInstructionFiles).mockResolvedValue([instructionFile]);
+    mockInstructionEditorSave.mockResolvedValueOnce(false);
+    await renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /AGENTS\.md/ }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Instruction content" }), { target: { value: "Unsaved file draft" } });
+    fireEvent.click(screen.getAllByTestId("showcase-card")[1]);
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(mockInstructionEditorSave).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("dialog", { name: "Unsaved changes" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Instruction content" })).toHaveValue("Unsaved file draft");
+  });
+
+  it("guards project selection and applies the requested project only after discard", async () => {
+    const page = await renderPage();
+    fireEvent.click(await screen.findByText("Edit Agent"));
+    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Draft Planning Agent" } });
+
+    mockProjectData.selectedProject = { id: "project-2", name: "Second Project", status: "ready" };
+    page.rerender(
+      <ProjectDataProvider>
+        <AgentsPage />
+      </ProjectDataProvider>
+    );
+
+    expect(await screen.findByRole("dialog", { name: "Unsaved changes" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Draft Planning Agent");
+    expect(mockProjectData.selectProject).toHaveBeenCalledWith("project-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard without saving" }));
+    await waitFor(() => expect(mockProjectData.selectProject).toHaveBeenCalledWith("project-2"));
+    expect(agentPresetApi.updateAgentPreset).not.toHaveBeenCalled();
+  });
+
+  it("guards route changes inside the agents editing flow", async () => {
+    await renderPage();
+    fireEvent.click(await screen.findByText("Edit Agent"));
+    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Draft Planning Agent" } });
+    const originalHref = window.location.href;
+
+    window.history.pushState({}, "", "/projects");
+    expect(window.location.href).toBe(originalHref);
+    expect(await screen.findByRole("dialog", { name: "Unsaved changes" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(window.location.href).toBe(originalHref);
   });
 
   it("conditionally shows memory override textarea", async () => {

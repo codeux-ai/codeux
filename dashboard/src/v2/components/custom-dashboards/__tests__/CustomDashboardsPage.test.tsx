@@ -84,6 +84,10 @@ vi.mock("../../../lib/motion/index.js", () => ({
 
 vi.mock("gsap", () => ({
   default: {
+    context: vi.fn((callback: () => void) => {
+      callback();
+      return { revert: vi.fn() };
+    }),
     fromTo: vi.fn(),
     set: vi.fn(),
     to: vi.fn(),
@@ -136,7 +140,17 @@ vi.mock("../CustomDashboardList.js", async () => {
 vi.mock("../CustomDashboardValidationPanel.js", async () => {
   const { h: createElement } = await vi.importActual<typeof import("preact")>("preact");
   return {
-    CustomDashboardValidationPanel: ({ selectedRevision, validationSession, logs, onStartValidation, onPublish }: any) => {
+    CustomDashboardValidationPanel: ({
+      selectedRevision,
+      validationSession,
+      logs,
+      pollingState,
+      pollingError,
+      validationAnnouncement,
+      onStartValidation,
+      onRetryPoll,
+      onPublish,
+    }: any) => {
     const canPublish = Boolean(
       selectedRevision?.validationStatus === "passed"
         || (validationSession?.status === "passed" && validationSession.revisionId === selectedRevision?.id),
@@ -146,6 +160,11 @@ vi.mock("../CustomDashboardValidationPanel.js", async () => {
       { "aria-label": "Custom dashboard validation and publication" },
       createElement("button", { type: "button", onClick: onStartValidation }, "Validate"),
       createElement("button", { type: "button", disabled: !canPublish, onClick: onPublish }, "Publish"),
+      createElement("div", { "data-testid": "polling-state", "data-state": pollingState }, pollingError || pollingState),
+      createElement("div", { "data-testid": "validation-announcement" }, validationAnnouncement),
+      pollingState === "stale" || pollingState === "failed"
+        ? createElement("button", { type: "button", onClick: onRetryPoll }, "Retry polling")
+        : null,
       logs ? createElement("pre", null, logs) : null,
       validationSession ? createElement("a", { href: `/api/custom-dashboard-validations/${validationSession.id}/proxy/` }, "Open validation preview") : null,
     );
@@ -199,6 +218,13 @@ const dashboardWithSlots: CustomDashboardRecord = {
       },
     ],
   },
+};
+
+const secondDashboard: CustomDashboardRecord = {
+  ...dashboard,
+  id: "dashboard-2",
+  title: "Operations Radar",
+  description: "Operational health",
 };
 
 const credential = (
@@ -326,6 +352,13 @@ const passedSession: CustomDashboardValidationSessionRecord = {
   updatedAt: "2026-07-07T00:00:01.000Z",
 };
 
+const runningSession: CustomDashboardValidationSessionRecord = {
+  ...passedSession,
+  status: "running",
+  validationReport: null,
+  finishedAt: null,
+};
+
 const passedRevision: CustomDashboardRevisionRecord = {
   ...revision,
   validationStatus: "passed",
@@ -430,6 +463,218 @@ describe("CustomDashboardsPage", () => {
     });
   });
 
+  it("guards dirty dashboard changes with keep-editing and save-and-continue choices", async () => {
+    vi.mocked(fetchCustomDashboards).mockResolvedValue({ dashboards: [dashboard, secondDashboard] });
+    vi.mocked(fetchCustomDashboard).mockImplementation(async (dashboardId) => ({
+      dashboard: dashboardId === secondDashboard.id ? secondDashboard : dashboard,
+      revisions: [revision],
+    }));
+    vi.mocked(updateCustomDashboardDraft).mockImplementation(async (_dashboardId, input) => ({
+      ...dashboard,
+      title: input.title ?? dashboard.title,
+    }));
+    renderPage();
+
+    const title = await screen.findByLabelText("Title");
+    fireEvent.input(title, { target: { value: "Edited delivery pulse" } });
+    fireEvent.click(screen.getByRole("button", { name: "Operations Radar" }));
+
+    expect(screen.getByRole("dialog", { name: "Unsaved changes" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Keep editing/i }));
+    expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).not.toBeInTheDocument();
+    expect(vi.mocked(fetchCustomDashboard).mock.calls.every(([dashboardId]) => dashboardId !== secondDashboard.id)).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Operations Radar" }));
+    fireEvent.click(screen.getByRole("button", { name: /Save changes/i }));
+
+    await waitFor(() => expect(updateCustomDashboardDraft).toHaveBeenCalledWith(
+      dashboard.id,
+      expect.objectContaining({ title: "Edited delivery pulse" }),
+    ));
+    await waitFor(() => expect(fetchCustomDashboard).toHaveBeenCalledWith(secondDashboard.id, expect.any(AbortSignal)));
+  });
+
+  it("preserves a dirty draft across project changes until discard is confirmed", async () => {
+    const nextProject = { id: "project-2", name: "Second Test Project", status: "ready" };
+    const context = {
+      ...projectContext,
+      projects: [...projectContext.projects, nextProject],
+    };
+    const rendered = renderPage(context);
+    fireEvent.input(await screen.findByLabelText("Title"), { target: { value: "Project-local edit" } });
+
+    rendered.rerender(
+      <DashboardI18nProvider initialLocale="en" storage={null}>
+        <ProjectDataContext.Provider value={{
+          ...context,
+          selectedProjectId: nextProject.id,
+          selectedProject: nextProject,
+        } as any}>
+          <CustomDashboardsPage />
+        </ProjectDataContext.Provider>
+      </DashboardI18nProvider>,
+    );
+
+    expect(await screen.findByRole("dialog", { name: "Unsaved changes" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Project-local edit")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Discard without saving/i }));
+
+    await waitFor(() => expect(fetchCustomDashboards).toHaveBeenCalledWith(nextProject.id, expect.any(AbortSignal)));
+    expect(updateCustomDashboardDraft).not.toHaveBeenCalled();
+  });
+
+  it("does not open the viewer over a dirty editor without an explicit choice", async () => {
+    renderPage();
+    fireEvent.input(await screen.findByLabelText("Title"), { target: { value: "Unsaved viewer edit" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Published" }));
+    expect(screen.getByRole("dialog", { name: "Unsaved changes" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Unsaved viewer edit")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Discard without saving/i }));
+    expect(await screen.findByText("Published viewer unavailable")).toBeInTheDocument();
+    expect(updateCustomDashboardDraft).not.toHaveBeenCalled();
+  });
+
+  it("provides stable roving tabs and marks reduced-motion-safe panel changes", async () => {
+    renderPage();
+
+    const manifestTab = await screen.findByRole("tab", { name: "Manifest" });
+    const filesTab = screen.getByRole("tab", { name: "Files" });
+    expect(manifestTab).toHaveAttribute("id", "custom-dashboard-editor-tab-manifest");
+    expect(manifestTab).toHaveAttribute("aria-controls", "custom-dashboard-editor-panel-manifest");
+    expect(manifestTab).toHaveAttribute("tabindex", "0");
+    expect(filesTab).toHaveAttribute("tabindex", "-1");
+
+    manifestTab.focus();
+    fireEvent.keyDown(manifestTab, { key: "ArrowRight" });
+    await waitFor(() => expect(filesTab).toHaveFocus());
+    expect(filesTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "custom-dashboard-editor-tab-files");
+    expect(screen.getByRole("tabpanel")).toHaveClass("motion-reduce:transition-none");
+
+    fireEvent.keyDown(filesTab, { key: "End" });
+    const catalogTab = screen.getByRole("tab", { name: "Catalog" });
+    await waitFor(() => expect(catalogTab).toHaveFocus());
+    fireEvent.keyDown(catalogTab, { key: "Home" });
+    await waitFor(() => expect(manifestTab).toHaveFocus());
+  });
+
+  it("validates JSON on blur, identifies its tab, and focuses the invalid editor on save", async () => {
+    renderPage();
+
+    const manifestEditor = await screen.findByLabelText("Manifest JSON");
+    manifestEditor.focus();
+    fireEvent.input(manifestEditor, { target: { value: "{" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Files" }));
+
+    const invalidTab = await screen.findByRole("tab", { name: "Manifest contains errors" });
+    fireEvent.click(invalidTab);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Manifest contains invalid JSON");
+    fireEvent.click(screen.getByRole("button", { name: "Save Draft" }));
+
+    const activeManifestEditor = await screen.findByRole("textbox", { name: /Manifest JSON/ });
+    await waitFor(() => expect(activeManifestEditor).toHaveFocus());
+    expect(updateCustomDashboardDraft).not.toHaveBeenCalled();
+    expect(activeManifestEditor).toHaveValue("{");
+  });
+
+  it("keeps file removal draft-only and restores the file at its original position", async () => {
+    const dashboardWithFiles: CustomDashboardRecord = {
+      ...dashboard,
+      manifest: {
+        ...dashboard.manifest,
+        filePaths: ["src/dashboard.tsx", "src/helper.ts"],
+      },
+      fileBundle: {
+        files: [
+          dashboard.fileBundle.files[0]!,
+          { path: "src/helper.ts", content: "export const helper = true;" },
+        ],
+      },
+    };
+    vi.mocked(fetchCustomDashboard).mockResolvedValue({ dashboard: dashboardWithFiles, revisions: [revision] });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Files" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    const undo = await screen.findByRole("button", { name: "Undo removal" });
+    await waitFor(() => expect(undo).toHaveFocus());
+    expect(screen.queryByRole("button", { name: "src/dashboard.tsx" })).not.toBeInTheDocument();
+    expect(updateCustomDashboardDraft).not.toHaveBeenCalled();
+
+    fireEvent.click(undo);
+    const fileButtons = screen.getAllByRole("button").filter((button) => (
+      button.textContent === "src/dashboard.tsx" || button.textContent === "src/helper.ts"
+    ));
+    expect(fileButtons.map((button) => button.textContent)).toEqual(["src/dashboard.tsx", "src/helper.ts"]);
+    expect(updateCustomDashboardDraft).not.toHaveBeenCalled();
+  });
+
+  it("keeps logs through polling failure and exposes an explicit recovering retry", async () => {
+    const pollCallback = { current: null as (() => void) | null };
+    const intervalSpy = vi.spyOn(window, "setInterval").mockImplementation((callback) => {
+      pollCallback.current = callback as () => void;
+      return 1 as unknown as ReturnType<typeof window.setInterval>;
+    });
+    vi.mocked(startCustomDashboardValidation).mockResolvedValue(runningSession);
+    vi.mocked(fetchCustomDashboardValidationSession).mockRejectedValueOnce(new Error("temporary network loss"));
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Validate" }));
+    expect(await screen.findByText(/build ok/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("polling-state")).toHaveAttribute("data-state", "active"));
+
+    try {
+      pollCallback.current?.();
+      await waitFor(() => expect(screen.getByTestId("polling-state")).toHaveAttribute("data-state", "stale"));
+    } finally {
+      intervalSpy.mockRestore();
+    }
+    expect(screen.getByText("temporary network loss")).toBeInTheDocument();
+    expect(screen.getByText(/build ok/i)).toBeInTheDocument();
+
+    vi.mocked(fetchCustomDashboardValidationSession).mockResolvedValue(runningSession);
+    vi.mocked(fetchCustomDashboardValidationLogs).mockResolvedValue({ logs: "build ok\nreconnected" });
+    fireEvent.click(screen.getByRole("button", { name: "Retry polling" }));
+    await waitFor(() => expect(screen.getByTestId("polling-state")).toHaveAttribute("data-state", "recovering"));
+    expect(screen.getByText(/reconnected/i)).toBeInTheDocument();
+  });
+
+  it("ignores a stale poll result after selecting another dashboard", async () => {
+    const resolvePoll = { current: null as ((session: CustomDashboardValidationSessionRecord) => void) | null };
+    const pollCallback = { current: null as (() => void) | null };
+    const intervalSpy = vi.spyOn(window, "setInterval").mockImplementation((callback) => {
+      pollCallback.current = callback as () => void;
+      return 1 as unknown as ReturnType<typeof window.setInterval>;
+    });
+    const stalePoll = new Promise<CustomDashboardValidationSessionRecord>((resolve) => {
+      resolvePoll.current = resolve;
+    });
+    vi.mocked(fetchCustomDashboards).mockResolvedValue({ dashboards: [dashboard, secondDashboard] });
+    vi.mocked(fetchCustomDashboard).mockImplementation(async (dashboardId) => ({
+      dashboard: dashboardId === secondDashboard.id ? secondDashboard : dashboard,
+      revisions: [revision],
+    }));
+    vi.mocked(startCustomDashboardValidation).mockResolvedValue(runningSession);
+    vi.mocked(fetchCustomDashboardValidationSession).mockReturnValue(stalePoll);
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Validate" }));
+    await waitFor(() => expect(screen.getByTestId("polling-state")).toHaveAttribute("data-state", "active"));
+    pollCallback.current?.();
+    await waitFor(() => expect(fetchCustomDashboardValidationSession).toHaveBeenCalledWith("session-1", expect.any(AbortSignal)));
+    fireEvent.click(screen.getByRole("button", { name: "Operations Radar" }));
+    await waitFor(() => expect(fetchCustomDashboard).toHaveBeenCalledWith(secondDashboard.id, expect.any(AbortSignal)));
+    resolvePoll.current?.(passedSession);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    expect(screen.getByTestId("validation-announcement")).not.toHaveTextContent("Validated");
+    intervalSpy.mockRestore();
+  });
+
   it("keeps legacy dashboards without declared slots unchanged", async () => {
     renderPage();
 
@@ -496,7 +741,10 @@ describe("CustomDashboardsPage", () => {
       expect.any(AbortSignal),
     ));
     await screen.findByText("Compatible binding");
-    await waitFor(() => expect(document.activeElement).toBe(select));
+    await waitFor(() => expect([
+      screen.getByRole("button", { name: "Compatible credential for Deployment API" }),
+      screen.getByRole("button", { name: "Replace binding for Deployment API" }),
+    ]).toContain(document.activeElement));
 
     fireEvent.click(select);
     fireEvent.click(screen.getByRole("option", { name: /Replacement Key/ }));

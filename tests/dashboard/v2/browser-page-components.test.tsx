@@ -8,6 +8,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { PreviewSessionSlider } from "../../../dashboard/src/v2/components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "../../../dashboard/src/v2/components/browser/PreviewWindowChrome.js";
 import { LaunchContainerPanel } from "../../../dashboard/src/v2/components/browser/LaunchContainerPanel.js";
+import { PreviewEnvironmentEditor } from "../../../dashboard/src/v2/components/browser/PreviewEnvironmentEditor.js";
 import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 
 const render = (ui: Parameters<typeof testingRender>[0], options?: Parameters<typeof testingRender>[1]) => testingRender(ui, {
@@ -119,6 +120,40 @@ describe("PreviewSessionSlider", () => {
       fireEvent.click(button);
     }
     expect(onSelect).toHaveBeenCalledWith("slider-sess-1");
+  });
+
+  it("keeps target controls visibly disabled while a conflicting transition is pending", () => {
+    const onSelect = vi.fn();
+    const onManageEnvironment = vi.fn();
+    render(
+      <PreviewSessionSlider
+        sessions={[{
+          id: "slider-sess-locked",
+          projectId: "p1",
+          sprintId: "s1",
+          sprintName: "Locked Sprint",
+          status: "running",
+          healthStatus: "healthy",
+          hostPort: 8080,
+        } as any]}
+        selectedSessionId={null}
+        onSelectSession={onSelect}
+        onRemoveSession={vi.fn()}
+        onManageEnvironment={onManageEnvironment}
+        targetTransitionsBlocked
+        targetTransitionReason="Save the current draft first."
+      />
+    );
+
+    const select = screen.getByRole("button", { name: "Select preview session Locked Sprint" });
+    const environment = screen.getByRole("button", { name: "Manage environment overrides for preview session Locked Sprint" });
+    expect(select).toBeDisabled();
+    expect(environment).toBeDisabled();
+    expect(select).toHaveAttribute("title", "Save the current draft first.");
+    fireEvent.click(select);
+    fireEvent.click(environment);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onManageEnvironment).not.toHaveBeenCalled();
   });
 
   it("fires remove actions from the rail", () => {
@@ -295,6 +330,29 @@ describe("PreviewSessionSlider", () => {
     expect(unavailableLink).toHaveAttribute("aria-disabled", "true");
     expect(unavailableLink).toHaveAccessibleDescription("Preview link unavailable because the selected container is stopped. Rebuild or launch the container to open it.");
     expect(screen.getByText("Preview link unavailable because the selected container is stopped. Rebuild or launch the container to open it.")).toBeInTheDocument();
+  });
+});
+
+describe("PreviewEnvironmentEditor", () => {
+  it("marks and focuses the requested invalid environment row without clearing its draft", async () => {
+    const onChange = vi.fn();
+    render(
+      <PreviewEnvironmentEditor
+        variables={[
+          { key: "VALID_KEY", value: "1", enabled: true },
+          { key: "INVALID-NAME", value: "draft", enabled: true },
+        ]}
+        onChange={onChange}
+        invalidRowIndex={1}
+        invalidMessage="Fix this environment variable."
+      />
+    );
+
+    const inputs = screen.getAllByLabelText("Environment variable name");
+    expect(inputs[1]).toHaveAttribute("aria-invalid", "true");
+    expect(inputs[1]).toHaveAccessibleDescription("Fix this environment variable.");
+    expect(inputs[1]).toHaveValue("INVALID-NAME");
+    expect(inputs[1]).toHaveFocus();
   });
 });
 

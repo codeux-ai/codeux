@@ -21,6 +21,10 @@ Project Initialization runs a repository-specific setup pass through the `Projec
 - New remote init clones into the selected clone directory, or `~/.code-ux/projects` when the field is blank, and stores the project base directory as the single checkout root `~/.code-ux/projects/<repo-name>`.
 - Existing projects expose a `Setup Project` action from the project card agent button.
 
+The existing-project setup scope opens in the shared dashboard modal. Initial focus lands on the first scope option, focus remains trapped, and Escape, Cancel, the close control, or the backdrop return focus to the originating card. A setup request may continue on the server after this modal closes: closing invalidates and clears only that modal's client poll. Once the setup endpoint has returned an invocation ID, the project card retains an **Open invocation** action for the active background run.
+
+Setup state is keyed by project. A project cannot launch a second setup while its start request or accepted invocation is active, and polling responses are checked against both the project operation token and polling generation before they update feedback. Changing the dialog project, closing the dialog, removing the project, or unmounting the page invalidates stale poll work and clears its timer. Start, tracking, and terminal invocation errors stay visible on the card with a retry action; a tracking retry resumes the known invocation rather than launching a duplicate setup. Successful completion remains visible with the invocation action.
+
 Imported-project setup lets the operator choose which generated artifacts to create. The dashboard keeps Docs disabled by default; selecting it embeds discovered repository documentation into Knowledge docs. Backend and MCP setup requests can also explicitly enable docs embedding:
 
 - `Agents`

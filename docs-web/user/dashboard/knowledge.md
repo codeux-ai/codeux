@@ -15,6 +15,11 @@ Add knowledge from four sources:
 | **Repo path** | One or more paths inside the project repository, imported as documents. |
 | **Project** | Import existing knowledge from another Code UX project. |
 
+The Upload dialog and the page drop target use the same upload behavior. Once files are accepted,
+their names and progress remain visible. A partial upload lists successful and failed files
+separately, preserves the server's diagnostic text, and offers a retry containing only the failed
+files. Documents already in the library stay visible if an upload fails.
+
 ## How documents are processed
 
 Each document is split into chunks and embedded with the active embedding model. The card shows its
@@ -39,8 +44,19 @@ quick way to sanity-check what an agent would find for a given query.
 
 ## Managing documents
 
-- **Re-embed** a document after switching embedding models, or to reprocess a failed import.
-- **Delete** a document to remove it and its chunks from the index.
+- **Re-embed** a document after switching embedding models, or to reprocess a failed import. The
+  affected card shows pending, success, or persistent error feedback; repeated clicks do not start
+  duplicate requests, and a failed request can be retried from the card.
+- **Delete** a document to remove it and its chunks from the index. Code UX asks for confirmation in
+  an accessible dialog that identifies the document and explains that deletion is irreversible.
+  The dialog remains pending while deletion runs, and the card becomes a pending placeholder while
+  other document actions retain their independent state. A failed request restores the document in
+  its previous position and shows the raw diagnostic with a retry. A successful deletion is
+  announced and is not offered as undoable.
+
+Escape or **Keep document** cancels the confirmation and returns keyboard focus to the delete
+control. After successful deletion, focus moves to the next document, the previous document, or the
+library heading so keyboard navigation retains a predictable position.
 
 Knowledge uses the embedding models managed on the [Memory](./memory.md) page. If search returns
 nothing, confirm documents are **Ready** and embedded with the currently active model.

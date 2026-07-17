@@ -45,6 +45,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     const containerRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const pendingMenuFocusRef = useRef<"first" | "last" | null>(null);
+    const sessionsRequestIdRef = useRef(0);
     const [menuId] = useState(() => `browser-menu-${Math.random().toString(36).substr(2, 9)}`);
 
     const isMenuVisible = interactionState !== 'closed';
@@ -76,23 +77,34 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     }, [restoreTriggerFocus]);
 
     const loadSessions = useCallback(async () => {
-        if (!selectedProject?.id) {
+        const projectId = selectedProject?.id;
+        const requestId = ++sessionsRequestIdRef.current;
+        if (!projectId) {
             setSessions([]);
             setLoadError(null);
+            setLoading(false);
             return;
         }
         try {
             setLoading(true);
-            const data = await fetchPreviewSessions(selectedProject.id);
+            const data = await fetchPreviewSessions(projectId);
+            if (requestId !== sessionsRequestIdRef.current) return;
             setSessions(data || []);
             setLoadError(null);
         } catch (error) {
+            if (requestId !== sessionsRequestIdRef.current) return;
             console.error("Failed to fetch browser sessions:", error);
             setLoadError(error instanceof Error ? error.message : t("couldNotLoadSessions"));
         } finally {
-            setLoading(false);
+            if (requestId === sessionsRequestIdRef.current) {
+                setLoading(false);
+            }
         }
     }, [selectedProject?.id, t]);
+
+    useEffect(() => () => {
+        sessionsRequestIdRef.current += 1;
+    }, [selectedProject?.id]);
 
     useEffect(() => {
         if (isMenuVisible) {

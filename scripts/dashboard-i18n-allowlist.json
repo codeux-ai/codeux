@@ -3,14 +3,14 @@
   "entries": [
     {
       "path": "dashboard/src/v2/AgentsPage.tsx",
-      "line": 802,
+      "line": 975,
       "kind": "attribute:placeholder",
       "text": "feature/agents-update",
       "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/agents/AgentPresetEditorPanel.tsx",
-      "line": 1213,
+      "line": 1265,
       "kind": "jsx-text",
       "text": "id",
       "rationale": "This is a persisted record field identifier shown as technical metadata and must remain verbatim."
@@ -24,7 +24,7 @@
     },
     {
       "path": "dashboard/src/v2/components/browser/PreviewEnvironmentEditor.tsx",
-      "line": 76,
+      "line": 126,
       "kind": "attribute:placeholder",
       "text": "CODE_UX_ALLOW_PUBLIC_DASHBOARD",
       "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
@@ -73,21 +73,21 @@
     },
     {
       "path": "dashboard/src/v2/components/onboarding/OnboardingExperience.tsx",
-      "line": 1687,
+      "line": 1837,
       "kind": "attribute:placeholder",
       "text": "agents@codeux.ai",
       "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/onboarding/OnboardingInstallationStep.tsx",
-      "line": 421,
+      "line": 431,
       "kind": "jsx-text",
       "text": "stderr:",
       "rationale": "This labels verbatim process output streams using their technical identifiers."
     },
     {
       "path": "dashboard/src/v2/components/onboarding/OnboardingInstallationStep.tsx",
-      "line": 422,
+      "line": 432,
       "kind": "jsx-text",
       "text": "stdout:",
       "rationale": "This labels verbatim process output streams using their technical identifiers."
@@ -889,13 +889,6 @@
       "kind": "metadata:label",
       "text": "Cleanup Empty",
       "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/KnowledgePage.tsx",
-      "line": 214,
-      "kind": "jsx-text",
-      "text": "search_knowledge",
-      "rationale": "This is an MCP tool identifier shown as code and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/lib/agent-avatar.ts",

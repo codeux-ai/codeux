@@ -136,6 +136,30 @@ describe("usePreviewSessions", () => {
     expect(result.current.sessions).toEqual([{ id: "current", sprintId: "sp-current" }]);
   });
 
+  it("invalidates an in-flight response when the project is cleared", async () => {
+    let resolveRequest: ((value: Array<{ id: string; sprintId: string }>) => void) | null = null;
+    vi.mocked(fetchPreviewSessions).mockImplementationOnce(() => new Promise((resolve) => {
+      resolveRequest = resolve as typeof resolveRequest;
+    }) as any);
+
+    const { result, rerender } = renderHook(
+      ({ projectId }) => usePreviewSessions({ projectId, pollInterval: 0 }),
+      { initialProps: { projectId: "p1" as string | null } },
+    );
+
+    rerender({ projectId: null });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.sessions).toEqual([]);
+
+    await act(async () => {
+      resolveRequest?.([{ id: "late", sprintId: "late-sprint" }]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.sessions).toEqual([]);
+    expect(result.current.selectedSession).toBeNull();
+  });
+
   it("retries after a network failure and preserves the raw diagnostic", async () => {
     vi.mocked(fetchPreviewSessions)
       .mockRejectedValueOnce(new Error("ECONNREFUSED preview-network"))

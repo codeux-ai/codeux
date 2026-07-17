@@ -311,6 +311,117 @@ describe('ChatPage Accessibility', () => {
     expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
   });
 
+  it.each([
+    ["ready", { input: "Ready now", sending: false, error: null, pendingDashboardMessages: 0, messages: [] }, "Ready to send", "status", "polite"],
+    ["sending", { input: "Sending now", sending: true, error: null, pendingDashboardMessages: 0, messages: [] }, "Sending message to Code UX", "status", "polite"],
+    ["queued", { input: "", sending: false, error: null, pendingDashboardMessages: 1, messages: [] }, "queued for delivery", "status", "polite"],
+    ["sent", { input: "", sending: false, error: null, pendingDashboardMessages: 0, messages: [{ id: "sent", threadId: "thread1", direction: "dashboard_to_connection", bodyMarkdown: "Sent", deliveryStatus: "delivered", createdAt: "2026-03-10T12:00:00.000Z" }] }, "Message sent to Code UX", "status", "polite"],
+    ["failed", { input: "Recovered", sending: false, error: "Network unavailable", pendingDashboardMessages: 0, messages: [] }, "Your draft is preserved", "alert", "assertive"],
+  ])('keeps %s delivery state semantics identical in Threads and 3D Chat', (_tone, state, copy, role, live) => {
+    const renderPage = () => (
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+    mocks.data = {
+      ...mocks.data,
+      ...state,
+      chatMode: "threads",
+      selectedThread: mocks.data.threads[0],
+    };
+    const { rerender } = render(renderPage());
+
+    const threadStatus = document.getElementById("composer-status");
+    expect(threadStatus).toHaveTextContent(copy);
+    expect(threadStatus).toHaveAttribute("role", role);
+    expect(threadStatus).toHaveAttribute("aria-live", live);
+    expect(threadStatus).toHaveAttribute("data-motion-contract", "asyncFeedback");
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveAttribute("aria-describedby", "composer-help composer-status");
+
+    mocks.data = { ...mocks.data, chatMode: "stage" };
+    rerender(renderPage());
+
+    const stageStatus = document.getElementById("composer-status");
+    expect(stageStatus).toHaveTextContent(copy);
+    expect(stageStatus).toHaveAttribute("role", role);
+    expect(stageStatus).toHaveAttribute("aria-live", live);
+    expect(stageStatus).toHaveAttribute("data-motion-contract", "asyncFeedback");
+    expect(screen.getByRole("textbox", { name: "Message the project manager" })).toHaveAttribute("aria-describedby", "composer-help composer-status");
+  });
+
+  it('blocks duplicate sends, preserves a failed draft, and retries only in its original context', async () => {
+    const failedSend = vi.fn()
+      .mockRejectedValueOnce(new Error("Connection reset"))
+      .mockResolvedValue(undefined);
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "threads",
+      selectedThread: mocks.data.threads[0],
+      selectedThreadId: "thread1",
+      activeConnection: { id: "agent-one", displayName: "Agent One", status: "connected" },
+      sending: false,
+      input: "Recover this exact draft",
+      error: null,
+      handleSend: failedSend,
+      setInput: vi.fn(),
+    };
+    const renderPage = () => (
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>
+    );
+    const { rerender } = render(renderPage());
+    const send = screen.getByRole("button", { name: "Send message" });
+
+    fireEvent.click(send);
+    fireEvent.click(send);
+
+    expect(failedSend).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your draft is preserved");
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("Recover this exact draft");
+    const retry = screen.getByRole("button", { name: "Retry failed message" });
+    expect(retry).toHaveAttribute("data-motion-contract", "controlFeedback");
+
+    await userEvent.click(retry);
+    expect(failedSend).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(mocks.data.setInput).toHaveBeenCalledWith(""));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Message" })).toHaveFocus());
+
+    failedSend.mockRejectedValueOnce(new Error("Fails again"));
+    fireEvent.click(send);
+    const staleAgentRetry = await screen.findByRole("button", { name: "Retry failed message" });
+    mocks.data = {
+      ...mocks.data,
+      activeConnection: { id: "agent-two", displayName: "Agent Two", status: "connected" },
+      input: "Agent two draft",
+    };
+    rerender(renderPage());
+
+    expect(screen.queryByRole("button", { name: "Retry failed message" })).not.toBeInTheDocument();
+    fireEvent.click(staleAgentRetry);
+    expect(failedSend).toHaveBeenCalledTimes(3);
+
+    failedSend.mockRejectedValueOnce(new Error("Thread one fails for agent two"));
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    const staleThreadRetry = await screen.findByRole("button", { name: "Retry failed message" });
+    const nextThread = { ...mocks.data.threads[0], id: "thread2", title: "Thread 2" };
+    mocks.data = {
+      ...mocks.data,
+      threads: [mocks.data.threads[0], nextThread],
+      selectedThread: nextThread,
+      selectedThreadId: "thread2",
+      input: "Thread two draft",
+    };
+    rerender(renderPage());
+
+    expect(screen.queryByRole("button", { name: "Retry failed message" })).not.toBeInTheDocument();
+    fireEvent.click(staleThreadRetry);
+    expect(failedSend).toHaveBeenCalledTimes(4);
+    const nextComposer = screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
+    await waitFor(() => expect(nextComposer).toHaveFocus());
+    expect(nextComposer.selectionStart).toBe(nextComposer.value.length);
+  });
+
   it('uses invocation message loading state for invocation transcript announcements', () => {
     const invocation = {
       id: "inv-1",
@@ -586,9 +697,13 @@ describe('ChatPage Accessibility', () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Create Web App" }));
+    await waitFor(() => expect(handleCreateAppQuickaction).toHaveBeenCalledWith("web_app"));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const desktopAction = screen.getByRole("button", { name: "Create Desktop App" });
     desktopAction.focus();
     await user.keyboard("{Enter}");
+    await waitFor(() => expect(handleCreateAppQuickaction).toHaveBeenCalledWith("desktop_app"));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const statusAction = screen.getByRole("button", { name: "Status Report" });
     statusAction.focus();
     await user.keyboard("{Enter}");

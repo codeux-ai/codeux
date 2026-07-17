@@ -345,6 +345,42 @@ describe("ChatPage speech input", () => {
     expect(mocks.data.setInput).toHaveBeenCalledWith("Dictated task");
   });
 
+  it("uses the shared 3D caret insertion and restores focus when the routed agent changes", async () => {
+    speechButtonMock.transcript = "go";
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      input: "Please  now",
+      activeConnection: { id: "agent-one", displayName: "Agent One", status: "connected" },
+    };
+    const view = renderChatPage();
+    const composer = screen.getByRole("textbox", { name: "Message the project manager" }) as HTMLTextAreaElement;
+    composer.focus();
+    composer.setSelectionRange(7, 7);
+    fireEvent.select(composer);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start speech recording" }));
+
+    expect(mocks.data.setInput).toHaveBeenCalledWith("Please go now");
+    await waitFor(() => expect(composer).toHaveFocus());
+    await waitFor(() => expect(composer.selectionStart).toBe(9));
+
+    mocks.data = {
+      ...mocks.data,
+      input: "Draft for agent two",
+      activeConnection: { id: "agent-two", displayName: "Agent Two", status: "connected" },
+    };
+    view.rerender(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: mocks.data.selectedProject } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>,
+    );
+
+    const nextComposer = screen.getByRole("textbox", { name: "Message the project manager" }) as HTMLTextAreaElement;
+    await waitFor(() => expect(nextComposer).toHaveFocus());
+    expect(nextComposer.selectionStart).toBe(nextComposer.value.length);
+  });
+
   it("seeds loaded 3D history without speaking it, then auto-plays one newly appended agent reply", async () => {
     const historicalReply = {
       id: "reply-historical",
@@ -440,9 +476,8 @@ describe("ChatPage speech input", () => {
     renderChatPage();
     fireEvent.click(await screen.findByRole("button", { name: "Replay message from Project Manager" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Voice error: Configured voice is unavailable.",
-    );
+    const voiceError = await screen.findByText("Voice error: Configured voice is unavailable.");
+    expect(voiceError).toHaveAttribute("role", "status");
   });
 
   it("reports thread replay failures through the existing composer status without hiding the transcript", async () => {

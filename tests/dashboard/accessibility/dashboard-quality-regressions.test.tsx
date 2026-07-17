@@ -763,4 +763,92 @@ describe("dashboard accessibility quality regressions", () => {
     expect(taskCard).not.toMatch(/group-hover:opacity-100/);
     expect(taskActionMenu).not.toMatch(/group-hover:opacity-100/);
   });
+
+  it("keeps route-owned confirmation and draft protection on focus-managed shared primitives", () => {
+    const touchedRouteSources = [
+      "dashboard/src/v2/NodesPage.tsx",
+      "dashboard/src/v2/SchedulerPage.tsx",
+      "dashboard/src/v2/CustomDashboardsPage.tsx",
+      "dashboard/src/v2/AgentsPage.tsx",
+      "dashboard/src/v2/components/onboarding/OnboardingExperience.tsx",
+      "dashboard/src/v2/ProjectsPage.tsx",
+      "dashboard/src/v2/KnowledgePage.tsx",
+      "dashboard/src/v2/BrowserPage.tsx",
+      "dashboard/src/v2/ChatPage.tsx",
+    ];
+    for (const relativePath of touchedRouteSources) {
+      expect(readSource(relativePath), `${relativePath} must not invoke a native confirmation prompt`).not.toMatch(
+        /\bwindow\.confirm\s*\(/,
+      );
+    }
+
+    const confirmationRoutes = [
+      "dashboard/src/v2/NodesPage.tsx",
+      "dashboard/src/v2/SchedulerPage.tsx",
+      "dashboard/src/v2/CustomDashboardsPage.tsx",
+      "dashboard/src/v2/ProjectsPage.tsx",
+      "dashboard/src/v2/KnowledgePage.tsx",
+      "dashboard/src/v2/ChatPage.tsx",
+    ];
+    for (const relativePath of confirmationRoutes) {
+      const source = readSource(relativePath);
+      expect(source, `${relativePath} must retain the shared confirmation primitive`).toMatch(/<ConfirmDialog\b/);
+    }
+
+    const protectedDraftRoutes = [
+      "dashboard/src/v2/NodesPage.tsx",
+      "dashboard/src/v2/CustomDashboardsPage.tsx",
+      "dashboard/src/v2/AgentsPage.tsx",
+    ];
+    for (const relativePath of protectedDraftRoutes) {
+      expect(readSource(relativePath), `${relativePath} must retain shared dirty-state protection`).toMatch(
+        /<UnsavedChangesModal\b/,
+      );
+    }
+
+    const confirmDialog = readSource("dashboard/src/v2/components/ui/ConfirmDialog.tsx");
+    const unsavedChanges = readSource("dashboard/src/v2/components/ui/UnsavedChangesModal.tsx");
+    for (const [name, source] of [["ConfirmDialog", confirmDialog], ["UnsavedChangesModal", unsavedChanges]] as const) {
+      expect(source, `${name} must focus-trap its modal instead of exposing a raw unfocused dialog`).toMatch(/useFocusTrap/);
+      expect(source, `${name} must expose modal semantics`).toMatch(/aria-modal="true"/);
+    }
+  });
+
+  it("keeps refined validation messages associated with their fields", () => {
+    const agentEditor = readSource("dashboard/src/v2/components/agents/AgentPresetEditorPanel.tsx");
+    expect(agentEditor).toMatch(/aria-errormessage=\{touched\.name && errors\.name \? "agent-name-error" : undefined\}/);
+    expect(agentEditor).toMatch(/id="agent-name-error"|id=\{errorId\}/);
+
+    const customDashboardEditor = readSource("dashboard/src/v2/components/custom-dashboards/CustomDashboardEditorPanel.tsx");
+    expect(customDashboardEditor).toMatch(/aria-errormessage=\{error \? `\$\{id\}-error` : undefined\}/);
+    expect(customDashboardEditor).toMatch(/<span id=\{`\$\{id\}-error`\} role="alert"/);
+
+    const scheduler = readSource("dashboard/src/v2/SchedulerPage.tsx");
+    expect(scheduler).toMatch(/aria-describedby=\{fieldErrors\.nodeFlow \? `\$\{SCHEDULER_FIELD_IDS\.nodeFlow\}-error` : undefined\}/);
+    expect(scheduler).toMatch(/<SchedulerFieldError field="nodeFlow" message=\{fieldErrors\.nodeFlow\} \/>/);
+  });
+
+  it("keeps route status communication semantic when motion resolves to zero", () => {
+    const touchedSurfaceSources = [
+      ["Nodes", "dashboard/src/v2/NodesPage.tsx"],
+      ["Scheduler", "dashboard/src/v2/SchedulerPage.tsx"],
+      ["Custom Dashboards", "dashboard/src/v2/CustomDashboardsPage.tsx", "dashboard/src/v2/components/custom-dashboards/CustomDashboardEditorPanel.tsx"],
+      ["Agents", "dashboard/src/v2/AgentsPage.tsx"],
+      ["Onboarding", "dashboard/src/v2/components/onboarding/OnboardingExperience.tsx", "dashboard/src/v2/components/onboarding/OnboardingInstallationStep.tsx"],
+      ["Projects", "dashboard/src/v2/ProjectsPage.tsx"],
+      ["Knowledge", "dashboard/src/v2/KnowledgePage.tsx"],
+      ["Browser Preview", "dashboard/src/v2/BrowserPage.tsx"],
+      ["Chat", "dashboard/src/v2/ChatPage.tsx"],
+    ];
+
+    for (const [surface, ...relativePaths] of touchedSurfaceSources) {
+      const source = relativePaths.map(readSource).join("\n");
+      expect(source, `${surface} must expose status independently of visual movement`).toMatch(
+        /role="(?:status|alert)"|aria-live=|<ActionFeedbackRegion\b/,
+      );
+      expect(source, `${surface} must resolve or disable optional motion`).toMatch(
+        /useReducedMotion|useInteractionTokens|useGsapInteractionTokens|motion-reduce:|data-motion-contract=/,
+      );
+    }
+  });
 });

@@ -343,6 +343,22 @@ describe("ChatPageShell", () => {
     expect(queryByText(/Background.*Codex/i)).not.toBeInTheDocument();
   });
 
+  it("keeps the reduced-motion stage composer status visible and wired to both fields", () => {
+    motionPreference.reduced = true;
+    const { getByRole, getByText } = renderStageForInvocation({ status: "completed" });
+
+    const composer = getByRole("textbox", { name: "Message the project manager" });
+    const send = getByRole("button", { name: /Write a message before sending/ });
+    const status = getByText("Write a message to enable send. Queued delivery will be shown here.");
+
+    expect(composer).toHaveAttribute("aria-describedby", "composer-help composer-status");
+    expect(send).toHaveAttribute("aria-describedby", "composer-help composer-status");
+    expect(status).toHaveAttribute("id", "composer-status");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveAttribute("data-motion-contract", "asyncFeedback");
+    expect(send).toHaveAttribute("data-motion-contract", "controlFeedback");
+  });
+
   it("activates the Project Manager tool and progress bubble at zero-message startup", () => {
     const { container, getByTestId, getByText } = renderStageForInvocation({
       agentPresetId: "pm-agent",
