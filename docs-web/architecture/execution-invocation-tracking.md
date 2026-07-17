@@ -34,6 +34,12 @@ All local CLI providers with agent transcripts have structured parser coverage:
 | OpenCode | `opencode-log-parser.ts` | `run --format json` stdout for conversation, `opencode export <sessionID>` for authoritative tokens. | Exported usage is cumulative for a resumed session, so Code UX subtracts the previous raw export snapshot. |
 | Antigravity | `antigravity-log-parser.ts` | Transcript JSONL plus the resolved conversation database. | Database usage rows are cumulative, so resumed runs sum only rows with `idx` greater than the stored baseline. |
 
+Parser memory is bounded at the provider edge. Codex and Claude consume JSONL incrementally and
+reject oversized records; Qwen projects oversized or excess host records to usage-only objects;
+Antigravity copies its database in chunks and scans only the known token fields without recursively
+materializing unrelated Protobuf payloads. Shared conversation limits truncate display fields and
+retain the newest 2,048 turns without changing provider-reported numeric usage.
+
 The normalized turn kinds are:
 
 - `user`: provider-visible user prompts and recovered historical prompt records.

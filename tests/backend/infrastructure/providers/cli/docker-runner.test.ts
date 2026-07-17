@@ -164,6 +164,29 @@ describe("DockerRunner", () => {
     expect(helperScript).not.toMatch(/\bbs=1\b/);
   });
 
+  it("bounds Docker transcript tail reads at eight MiB", async () => {
+    const exec = vi.fn().mockResolvedValue({
+      ok: true,
+      code: 0,
+      stdout: "tail contents",
+      stderr: "",
+    });
+    (runner as any).volumeHelperPool = { exec };
+
+    await expect(runner.readWorkspaceFileTail(
+      "docker-volume://workspace-one",
+      "/code-ux-runtime-home/transcript.jsonl",
+      64 * 1024 * 1024,
+    )).resolves.toBe("tail contents");
+
+    expect(exec).toHaveBeenCalledWith(
+      "workspace-one",
+      ["tail", "-c", String(8 * 1024 * 1024), "/code-ux-runtime-home/transcript.jsonl"],
+      "workspace-one-runtime",
+      { maxStdoutChars: 8 * 1024 * 1024 },
+    );
+  });
+
   it("creates and cleans up snapshot workspaces for repo paths", async () => {
     const createSnapshotWorkspace = vi.spyOn<any, any>(Object.getPrototypeOf((runner as any).workspaceManager), "createSnapshotWorkspace")
       .mockResolvedValue("docker-volume://snapshot-1");

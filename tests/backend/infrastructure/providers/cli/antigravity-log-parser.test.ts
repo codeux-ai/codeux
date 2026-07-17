@@ -7,6 +7,7 @@ import {
   parseAntigravityTranscript,
   parseAntigravityDatabase,
 } from "../../../../../src/infrastructure/providers/cli/provider-logs/antigravity-log-parser.js";
+import { MAX_RETAINED_PROVIDER_TURNS } from "../../../../../src/infrastructure/providers/cli/provider-logs/provider-conversation-limits.js";
 
 // Protobuf encoders for testing
 function encodeVarint(value: number): Buffer {
@@ -386,6 +387,28 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
       timestampMs: Date.parse(timestamp),
     }]);
   });
+
+  it("bounds transcript turns while preserving the initial user request", () => {
+    const rows = [
+      JSON.stringify({ type: "USER_INPUT", content: "initial request" }),
+      ...Array.from(
+        { length: MAX_RETAINED_PROVIDER_TURNS + 20 },
+        (_, index) => JSON.stringify({
+          type: "PLANNER_RESPONSE",
+          content: `response-${index}`,
+        }),
+      ),
+    ];
+
+    const turns = parseAntigravityTranscript(rows.join("\n"));
+
+    expect(turns).toHaveLength(MAX_RETAINED_PROVIDER_TURNS);
+    expect(turns[0]).toMatchObject({ kind: "user", text: "initial request" });
+    expect(turns[1]?.text).toBe("response-21");
+    expect(turns.at(-1)?.text).toBe(
+      `response-${MAX_RETAINED_PROVIDER_TURNS + 19}`,
+    );
+  });
 });
 
 describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
@@ -575,5 +598,30 @@ describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
       generationCount: 1,
     });
     expect(result.lastIdx).toBe(1);
+  });
+
+  it("skips large unrelated length-delimited metadata without recursively decoding it", () => {
+    const db = new DatabaseSync(tempDbPath);
+    db.exec("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);");
+    // Model metadata is opaque. A generic recursive decoder treated every
+    // length-delimited value as a nested protobuf; this protobuf-shaped noise
+    // previously created roughly one million temporary field objects.
+    const unrelatedPayload = Buffer.alloc(2 * 1024 * 1024, 0x08);
+    const row = Buffer.concat([
+      encodeLengthDelimited(99, unrelatedPayload),
+      buildTestProto(321, 45, 12, 33, 210),
+    ]);
+    db.prepare("INSERT INTO gen_metadata (idx, data) VALUES (?, ?)").run(1, row);
+    db.close();
+
+    expect(parseAntigravityDatabase(tempDbPath)).toMatchObject({
+      usage: {
+        inputTokens: 321,
+        outputTokens: 45,
+        reasoningTokens: 12,
+        cachedInputTokens: 210,
+      },
+      lastIdx: 1,
+    });
   });
 });

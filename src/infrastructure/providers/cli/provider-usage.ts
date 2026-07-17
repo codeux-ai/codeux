@@ -126,6 +126,7 @@ type TiktokenEncoding = ReturnType<typeof encodingForModel>;
 
 const CODEX_ENCODING_CACHE_LIMIT = 8;
 const CODEX_TOKEN_CACHE_LIMIT = 768;
+const MAX_FALLBACK_SESSION_LOG_BYTES = 8 * 1024 * 1024;
 const codexEncodingCache = new Map<string, TiktokenEncoding>();
 const codexTokenCountCache = new Map<string, number>();
 let codexTokenCountCacheHits = 0;
@@ -272,7 +273,18 @@ async function parseClaudeSessionTelemetry(
   const slug = cwd.replace(/[/\\:]/g, "-");
   const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
   const sessionPath = path.join(homeDir, ".claude", "projects", slug, `${nativeSessionId}.jsonl`);
-  const raw = await fs.readFile(sessionPath, "utf8").catch(() => "");
+  const stat = await fs.stat(sessionPath).catch(() => null);
+  if (!stat?.isFile()) return null;
+  const byteCount = Math.min(stat.size, MAX_FALLBACK_SESSION_LOG_BYTES);
+  const buffer = Buffer.allocUnsafe(byteCount);
+  const handle = await fs.open(sessionPath, "r").catch(() => null);
+  if (!handle) return null;
+  try {
+    await handle.read(buffer, 0, byteCount, Math.max(0, stat.size - byteCount));
+  } finally {
+    await handle.close();
+  }
+  const raw = buffer.toString("utf8");
   if (!raw.trim()) return null;
   return claudeJsonlToTelemetry(raw, nativeSessionId, { sessionPath }, sinceMs);
 }

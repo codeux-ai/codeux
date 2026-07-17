@@ -1,5 +1,12 @@
 import type { ParsedConversationTurn, ParsedProviderLogResult } from "./provider-conversation-types.js";
 import { parseJsonObject, parseTimestampMs, toNumber } from "./usage-parse-utils.js";
+import {
+  boundProviderConversationTurn,
+  MAX_RETAINED_PROVIDER_TURNS,
+} from "./provider-conversation-limits.js";
+
+export const CLAUDE_MAX_JSONL_RECORD_CHARS = 2 * 1024 * 1024;
+const CLAUDE_MAX_TRACKED_USAGE_MESSAGES = 50_000;
 
 /**
  * Token-usage totals aggregated across all assistant turns in a Claude Code
@@ -308,7 +315,17 @@ function applyClaudeUsage(
   state.totalOutputTokens += next.outputTokens - (previous?.outputTokens ?? 0);
   state.totalCacheCreation += next.cacheCreationTokens - (previous?.cacheCreationTokens ?? 0);
   state.totalCacheRead += next.cacheReadTokens - (previous?.cacheReadTokens ?? 0);
-  if (messageId) state.usageByMessageId.set(messageId, next);
+  if (messageId) {
+    if (previous) {
+      state.usageByMessageId.delete(messageId);
+    } else if (state.usageByMessageId.size >= CLAUDE_MAX_TRACKED_USAGE_MESSAGES) {
+      const oldestMessageId = state.usageByMessageId.keys().next().value;
+      if (typeof oldestMessageId === "string") {
+        state.usageByMessageId.delete(oldestMessageId);
+      }
+    }
+    state.usageByMessageId.set(messageId, next);
+  }
   state.latestRawUsage = usage;
   state.hasUsage = true;
 }
@@ -316,8 +333,9 @@ function applyClaudeUsage(
 function appendClaudeTurns(state: ClaudeCodeParserState, turns: ParsedConversationTurn[]): void {
   if (turns.length === 0) return;
   const changedFrom = state.conversation.length;
-  state.conversation.push(...turns);
+  state.conversation.push(...turns.map(boundProviderConversationTurn));
   markClaudeConversationChanged(state, changedFrom);
+  trimClaudeConversation(state);
 }
 
 function upsertClaudeAssistantTurns(
@@ -325,29 +343,50 @@ function upsertClaudeAssistantTurns(
   messageId: string | null,
   turns: ParsedConversationTurn[],
 ): void {
+  const boundedTurns = turns.map(boundProviderConversationTurn);
   if (!messageId || turns.length === 0) {
-    appendClaudeTurns(state, turns);
+    appendClaudeTurns(state, boundedTurns);
     return;
   }
-  const signature = turnSignature(turns);
+  const signature = turnSignature(boundedTurns);
   const existing = state.assistantMessageRanges.get(messageId);
   if (!existing) {
     const start = state.conversation.length;
-    state.assistantMessageRanges.set(messageId, { start, count: turns.length, signature });
-    state.conversation.push(...turns);
+    state.assistantMessageRanges.set(messageId, { start, count: boundedTurns.length, signature });
+    state.conversation.push(...boundedTurns);
     markClaudeConversationChanged(state, start);
+    trimClaudeConversation(state);
     return;
   }
   if (existing.signature === signature) return;
-  state.conversation.splice(existing.start, existing.count, ...turns);
-  const delta = turns.length - existing.count;
+  state.conversation.splice(existing.start, existing.count, ...boundedTurns);
+  const delta = boundedTurns.length - existing.count;
   for (const [id, range] of state.assistantMessageRanges.entries()) {
     if (id !== messageId && range.start > existing.start) {
       state.assistantMessageRanges.set(id, { ...range, start: range.start + delta });
     }
   }
-  state.assistantMessageRanges.set(messageId, { start: existing.start, count: turns.length, signature });
+  state.assistantMessageRanges.set(messageId, {
+    start: existing.start,
+    count: boundedTurns.length,
+    signature,
+  });
   markClaudeConversationChanged(state, existing.start);
+  trimClaudeConversation(state);
+}
+
+function trimClaudeConversation(state: ClaudeCodeParserState): void {
+  const removed = state.conversation.length - MAX_RETAINED_PROVIDER_TURNS;
+  if (removed <= 0) return;
+  state.conversation.splice(0, removed);
+  for (const [id, range] of state.assistantMessageRanges.entries()) {
+    if (range.start < removed) {
+      state.assistantMessageRanges.delete(id);
+    } else {
+      state.assistantMessageRanges.set(id, { ...range, start: range.start - removed });
+    }
+  }
+  markClaudeConversationChanged(state, 0);
 }
 
 function processClaudeCodeLine(state: ClaudeCodeParserState, rawLine: string): boolean {
@@ -389,12 +428,36 @@ function processClaudeCodeLine(state: ClaudeCodeParserState, rawLine: string): b
   return true;
 }
 
-function processClaudeCodeChunk(state: ClaudeCodeParserState, chunk: string, pendingLine: string): string {
-  const lines = (pendingLine + chunk).split("\n");
-  const finalLine = lines.pop() ?? "";
-  for (const line of lines) processClaudeCodeLine(state, line);
-  if (!finalLine) return "";
-  return processClaudeCodeLine(state, finalLine) ? "" : finalLine;
+function processClaudeCodeChunk(
+  state: ClaudeCodeParserState,
+  chunk: string,
+  pendingLine: string,
+  discardingOversizedLine: boolean,
+): { pendingLine: string; discardingOversizedLine: boolean } {
+  const value = pendingLine + chunk;
+  let cursor = 0;
+  let discarding = discardingOversizedLine;
+  while (cursor < value.length) {
+    const newline = value.indexOf("\n", cursor);
+    if (newline < 0) break;
+    const line = value.slice(cursor, newline);
+    cursor = newline + 1;
+    if (discarding) {
+      discarding = false;
+    } else if (line.length <= CLAUDE_MAX_JSONL_RECORD_CHARS) {
+      processClaudeCodeLine(state, line);
+    }
+  }
+  if (cursor >= value.length) {
+    return { pendingLine: "", discardingOversizedLine: discarding };
+  }
+  const finalLine = value.slice(cursor);
+  if (discarding || finalLine.length > CLAUDE_MAX_JSONL_RECORD_CHARS) {
+    return { pendingLine: "", discardingOversizedLine: true };
+  }
+  return processClaudeCodeLine(state, finalLine)
+    ? { pendingLine: "", discardingOversizedLine: false }
+    : { pendingLine: finalLine, discardingOversizedLine: false };
 }
 
 function buildClaudeCodeLogResult(state: ClaudeCodeParserState): ClaudeCodeLogResult {
@@ -422,6 +485,7 @@ function buildClaudeCodeLogResult(state: ClaudeCodeParserState): ClaudeCodeLogRe
 export class ClaudeCodeLogAccumulator {
   private state: ClaudeCodeParserState;
   private pendingLine = "";
+  private discardingOversizedLine = false;
   private sourceId: string | null = null;
 
   constructor(private readonly sinceMs?: number) {
@@ -432,10 +496,22 @@ export class ClaudeCodeLogAccumulator {
     if (reset || (this.sourceId !== null && this.sourceId !== sourceId)) {
       this.state = createClaudeCodeParserState(this.sinceMs);
       this.pendingLine = "";
+      this.discardingOversizedLine = false;
     }
     this.state.conversationChangedFromIndex = null;
-    this.pendingLine = processClaudeCodeChunk(this.state, text, this.pendingLine);
+    const parsed = processClaudeCodeChunk(
+      this.state,
+      text,
+      this.pendingLine,
+      this.discardingOversizedLine,
+    );
+    this.pendingLine = parsed.pendingLine;
+    this.discardingOversizedLine = parsed.discardingOversizedLine;
     this.sourceId = sourceId;
+    return buildClaudeCodeLogResult(this.state);
+  }
+
+  getCurrentResult(): ClaudeCodeLogResult {
     return buildClaudeCodeLogResult(this.state);
   }
 }

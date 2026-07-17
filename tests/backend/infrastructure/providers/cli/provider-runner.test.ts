@@ -1600,6 +1600,8 @@ describe("ProviderRunner", () => {
   });
 
   it("captures Codex text output from the isolated workspace", async () => {
+    dockerRunner.readWorkspaceFileTail = vi.fn(async () => "captured text");
+
     const result = await runner.runProviderForText({
       provider: "codex",
       prompt: "hello",
@@ -1612,12 +1614,49 @@ describe("ProviderRunner", () => {
       onActivity: vi.fn(),
     });
 
-    expect(dockerRunner.readWorkspaceFile).toHaveBeenCalledWith(
+    expect(dockerRunner.readWorkspaceFileTail).toHaveBeenCalledWith(
+      "docker-volume://workspace-1",
+      "/workspace/provider-last-message-session-1.txt",
+      2 * 1024 * 1024,
+    );
+    expect(dockerRunner.readWorkspaceFile).not.toHaveBeenCalledWith(
       "docker-volume://workspace-1",
       "/workspace/provider-last-message-session-1.txt",
     );
     expect(result.text).toBe("captured text");
     expect(result.usageTelemetry.transcriptText).toBe("captured text");
+  });
+
+  it("copies Antigravity databases from Docker in bounded decoded chunks", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "codeux-antigravity-copy-"));
+    const destination = path.join(tempDir, "conversation.db");
+    const content = Buffer.from("sqlite bytes split across provider chunks");
+    dockerRunner.readWorkspaceFileChunk = vi.fn(async (
+      _cwd: string,
+      _sourcePath: string,
+      cursor: { offset: number },
+    ) => {
+      const nextOffset = Math.min(content.length, cursor.offset + 7);
+      return {
+        sourceId: "conversation-source",
+        startOffset: cursor.offset,
+        nextOffset,
+        totalBytes: content.length,
+        contentBase64: content.subarray(cursor.offset, nextOffset).toString("base64"),
+      };
+    });
+
+    await expect((runner as any).copyDockerWorkspaceFileInChunks(
+      "docker-volume://workspace-1",
+      "/code-ux-runtime-home/conversation.db",
+      destination,
+    )).resolves.toBe(true);
+
+    await expect(fs.readFile(destination)).resolves.toEqual(content);
+    expect(dockerRunner.readWorkspaceFileChunk).toHaveBeenCalledTimes(
+      Math.ceil(content.length / 7),
+    );
+    await fs.rm(tempDir, { recursive: true, force: true });
   });
 
   it("reads Codex reported usage and conversation from the latest rollout .jsonl", async () => {

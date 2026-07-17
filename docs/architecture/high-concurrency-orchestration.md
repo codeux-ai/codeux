@@ -216,9 +216,12 @@ The parser discards any single JSONL record above 2 MiB, bounds retained message
 keeps only the newest 256 conversation item groups. Large generated assets or command output can
 therefore remain in the provider-owned rollout without exhausting the server heap; normalized usage,
 session identity, and later records continue to be processed.
-Claude transport also reads appended bytes.
-Qwen mutable JSON files and the Antigravity SQLite source use a coherent full read only after their
-cheap metadata changes; unchanged polls do not copy or parse them.
+Claude transport also reads appended bytes, discards a JSONL record above 2 MiB, bounds retained
+fields, and uses the same bounded accumulator for final collection. Qwen host logs retain at most
+64 MiB of full records before projecting later calls to usage-only records. Antigravity transcript
+reads use a bounded tail, while its SQLite source is copied in 2 MiB chunks and scanned one row at a
+time. Unrelated Protobuf fields remain opaque instead of being recursively decoded. Unchanged
+metadata still avoids all of that work.
 Antigravity's explicit `--conversation` argument is reserved for ids parsed from that provider's
 own log. Generic logical/workspace continuation ids use `--continue` within the isolated paired
 runtime volume, preventing an orchestration id from being mistaken for a provider conversation.

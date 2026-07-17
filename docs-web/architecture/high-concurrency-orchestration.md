@@ -104,6 +104,13 @@ the dashboard, and interactive replies.
 - Codex rollout parsing skips any single JSONL record above 2 MiB, truncates retained transcript
   fields, and keeps the newest 256 conversation item groups. Oversized generated assets or command
   output cannot exhaust the server heap, and parsing resumes at the next record.
+- Claude uses the same incremental/final accumulator, skips JSONL records above 2 MiB, and retains
+  only bounded message/tool fields in the newest 2,048 turns.
+- Qwen retains at most 64 MiB of full host log records; later or individually oversized records are
+  projected to the provider usage fields needed for exact token aggregation.
+- Antigravity copies Docker databases in 2 MiB chunks and scans only the known numeric Protobuf
+  usage path one SQLite row at a time. Transcript and diagnostic reads are bounded tails, and
+  arbitrary model/tool payloads are never recursively decoded.
 - Jules full-history telemetry is serialized process-wide, joins duplicate in-flight session reads,
   tokenizes text in slices of at most 64 KiB, and releases raw activities before SQLite
   reconciliation. Wide hosted-session syncs therefore cannot multiply large patch payloads in heap.
@@ -111,7 +118,7 @@ the dashboard, and interactive replies.
   bash output is modeled explicitly, base64 media is discarded, and only the newest cumulative
   patch snapshot per source is retained. API responses and retained history have hard size bounds.
 - Provider telemetry pauses under V8 heap pressure. Terminal Jules estimation retries later, while
-  Codex cancellation uses its already bounded accumulator instead of forcing another rollout read.
+  Codex and Claude cancellation use their bounded accumulators instead of forcing full-history reads.
 - Antigravity sends `--conversation` only for provider-native ids. Logical/workspace continuation
   markers use `--continue` inside the isolated paired runtime volume instead.
 

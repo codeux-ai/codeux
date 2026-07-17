@@ -1,6 +1,16 @@
 import type { ParsedConversationTurn, ParsedProviderLogResult } from "./provider-conversation-types.js";
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { parseJsonObject } from "./usage-parse-utils.js";
+import {
+  appendBoundedProviderTurns,
+  retainProviderConversationTail,
+} from "./provider-conversation-limits.js";
+
+const ANTIGRAVITY_MAX_JSONL_RECORD_CHARS = 2 * 1024 * 1024;
+const ANTIGRAVITY_MAX_DEDUPE_ENTRIES = 4_096;
+const ANTIGRAVITY_MAX_METADATA_ROW_BYTES = 64 * 1024 * 1024;
+const ANTIGRAVITY_MAX_NESTED_ENTRY_DEPTH = 32;
 
 export interface AntigravityUsageTotals {
   inputTokens: number;
@@ -11,101 +21,96 @@ export interface AntigravityUsageTotals {
 
 export type AntigravityLogResult = ParsedProviderLogResult<AntigravityUsageTotals>;
 
-type ProtoField =
-  | { fieldNumber: number; type: "varint"; value: number }
-  | { fieldNumber: number; type: "fixed64"; value: number }
-  | { fieldNumber: number; type: "fixed32"; value: number }
-  | { fieldNumber: number; type: "string"; value: string }
-  | { fieldNumber: number; type: "bytes"; value: Buffer }
-  | { fieldNumber: number; type: "message"; value: ProtoField[] };
-
-function decodeVarint(buffer: Buffer, pos: number): { value: number; pos: number } {
-  let value = 0;
-  let shift = 0;
-  while (true) {
-    if (pos >= buffer.length) {
-      throw new Error("Varint out of bounds");
-    }
-    const b = buffer[pos];
-    pos++;
-    value |= (b & 0x7f) << shift;
-    if (!(b & 0x80)) {
-      break;
-    }
-    shift += 7;
-  }
-  return { value, pos };
+interface ProtoSlice {
+  start: number;
+  end: number;
 }
 
-function decodeProto(buffer: Buffer, pos = 0, end?: number): ProtoField[] {
-  const limit = end ?? buffer.length;
-  const fields: ProtoField[] = [];
-  while (pos < limit) {
-    try {
-      const keyResult = decodeVarint(buffer, pos);
-      const key = keyResult.value;
-      pos = keyResult.pos;
-      
-      const fieldNumber = key >> 3;
-      const wireType = key & 7;
-      
-      if (wireType === 0) {
-        const varintResult = decodeVarint(buffer, pos);
-        fields.push({ fieldNumber, type: "varint", value: varintResult.value });
-        pos = varintResult.pos;
-      } else if (wireType === 1) {
-        if (pos + 8 > buffer.length) break;
-        const val = buffer.readBigUInt64LE(pos);
-        fields.push({ fieldNumber, type: "fixed64", value: Number(val) });
-        pos += 8;
-      } else if (wireType === 2) {
-        const lenResult = decodeVarint(buffer, pos);
-        const len = lenResult.value;
-        pos = lenResult.pos;
-        if (pos + len > buffer.length) break;
-        const val = buffer.subarray(pos, pos + len);
-        pos += len;
-        
-        try {
-          const sub = decodeProto(val);
-          if (sub.length > 0) {
-            fields.push({ fieldNumber, type: "message", value: sub });
-          } else {
-            throw new Error();
-          }
-        } catch {
-          try {
-            const str = val.toString("utf8");
-            let isPrintable = true;
-            for (let i = 0; i < str.length; i++) {
-              const code = str.charCodeAt(i);
-              if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
-                isPrintable = false;
-                break;
-              }
-            }
-            if (isPrintable) {
-              fields.push({ fieldNumber, type: "string", value: str });
-            } else {
-              throw new Error();
-            }
-          } catch {
-            fields.push({ fieldNumber, type: "bytes", value: val });
-          }
-        }
-      } else if (wireType === 5) {
-        if (pos + 4 > buffer.length) break;
-        const val = buffer.readUInt32LE(pos);
-        fields.push({ fieldNumber, type: "fixed32", value: val });
-        pos += 4;
-      } else {
-        break;
-      }
-    } catch {
-      break;
+interface ProtoVarint {
+  value: number;
+  pos: number;
+}
+
+/**
+ * Reads a protobuf varint without 32-bit bitwise coercion. Token counters and
+ * length prefixes can exceed 2^31, while all values accepted here must remain
+ * exactly representable by JavaScript.
+ */
+function readProtoVarint(buffer: Buffer, pos: number, limit: number): ProtoVarint | null {
+  let value = 0;
+  let multiplier = 1;
+  for (let byteIndex = 0; byteIndex < 10 && pos < limit; byteIndex += 1) {
+    const b = buffer[pos];
+    pos += 1;
+    value += (b & 0x7f) * multiplier;
+    if (!Number.isSafeInteger(value)) return null;
+    if (!(b & 0x80)) {
+      return { value, pos };
     }
+    multiplier *= 128;
   }
-  return fields;
+  return null;
+}
+
+function skipProtoValue(
+  buffer: Buffer,
+  pos: number,
+  limit: number,
+  wireType: number,
+): number | null {
+  if (wireType === 0) {
+    return readProtoVarint(buffer, pos, limit)?.pos ?? null;
+  }
+  if (wireType === 1) {
+    return pos + 8 <= limit ? pos + 8 : null;
+  }
+  if (wireType === 2) {
+    const length = readProtoVarint(buffer, pos, limit);
+    if (!length) return null;
+    const next = length.pos + length.value;
+    return Number.isSafeInteger(next) && next <= limit ? next : null;
+  }
+  if (wireType === 5) {
+    return pos + 4 <= limit ? pos + 4 : null;
+  }
+  return null;
+}
+
+/**
+ * Locates one known length-delimited field while treating every unrelated
+ * field as opaque bytes. The old generic decoder recursively guessed that
+ * every length-delimited payload was another protobuf. Arbitrary model
+ * metadata can accidentally look protobuf-shaped at many nested offsets,
+ * turning a 246 KiB row into gigabytes of temporary objects.
+ */
+function findLengthDelimitedField(
+  buffer: Buffer,
+  slice: ProtoSlice,
+  targetFieldNumber: number,
+): ProtoSlice | null {
+  let pos = slice.start;
+  while (pos < slice.end) {
+    const key = readProtoVarint(buffer, pos, slice.end);
+    if (!key || key.value === 0) return null;
+    pos = key.pos;
+    const fieldNumber = Math.floor(key.value / 8);
+    const wireType = key.value % 8;
+    if (wireType === 2) {
+      const length = readProtoVarint(buffer, pos, slice.end);
+      if (!length) return null;
+      const end = length.pos + length.value;
+      if (!Number.isSafeInteger(end) || end > slice.end) return null;
+      if (fieldNumber === targetFieldNumber) {
+        return { start: length.pos, end };
+      }
+      pos = end;
+      continue;
+    }
+    const next = skipProtoValue(buffer, pos, slice.end, wireType);
+    if (next === null) return null;
+    pos = next;
+  }
+  return null;
 }
 
 /**
@@ -125,31 +130,50 @@ function decodeProto(buffer: Buffer, pos = 0, end?: number): ProtoField[] {
  * much smaller fresh input. No official schema exists for this internal proto,
  * so this mapping is inferred from that pattern rather than documented.
  */
-function extractAntigravityUsageFromProto(fields: ProtoField[]): {
+function extractAntigravityUsageFromProto(buffer: Buffer): {
   usage: AntigravityUsageTotals | null;
   rawUsageJson: Record<string, unknown> | null;
 } | null {
-  const f1 = fields.find(f => f.fieldNumber === 1);
-  if (!f1 || f1.type !== "message") return null;
+  const root: ProtoSlice = { start: 0, end: buffer.length };
+  const generation = findLengthDelimitedField(buffer, root, 1);
+  const response = generation
+    ? findLengthDelimitedField(buffer, generation, 17)
+    : null;
+  const usageMessage = response
+    ? findLengthDelimitedField(buffer, response, 2)
+    : null;
+  if (!usageMessage) return null;
 
-  const f17 = f1.value.find(f => f.fieldNumber === 17);
-  if (!f17 || f17.type !== "message") return null;
-
-  const f2 = f17.value.find(f => f.fieldNumber === 2);
-  if (!f2 || f2.type !== "message") return null;
-
-  const f2Msg = f2.value;
-  const f_input = f2Msg.find(f => f.fieldNumber === 2);
-  const f_output = f2Msg.find(f => f.fieldNumber === 3);
-  const f_cached = f2Msg.find(f => f.fieldNumber === 5);
-  const f_reasoning = f2Msg.find(f => f.fieldNumber === 9);
-  const f_candidates = f2Msg.find(f => f.fieldNumber === 10);
-
-  const inputTokens = f_input && f_input.type === "varint" ? f_input.value : 0;
-  const outputTokens = f_output && f_output.type === "varint" ? f_output.value : 0;
-  const cachedInputTokens = f_cached && f_cached.type === "varint" ? f_cached.value : 0;
-  const reasoningTokens = f_reasoning && f_reasoning.type === "varint" ? f_reasoning.value : 0;
-  const candidatesTokens = f_candidates && f_candidates.type === "varint" ? f_candidates.value : 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cachedInputTokens = 0;
+  let reasoningTokens = 0;
+  let candidatesTokens = 0;
+  const seen = new Set<number>();
+  let pos = usageMessage.start;
+  while (pos < usageMessage.end) {
+    const key = readProtoVarint(buffer, pos, usageMessage.end);
+    if (!key || key.value === 0) return null;
+    pos = key.pos;
+    const fieldNumber = Math.floor(key.value / 8);
+    const wireType = key.value % 8;
+    if (wireType === 0) {
+      const field = readProtoVarint(buffer, pos, usageMessage.end);
+      if (!field) return null;
+      pos = field.pos;
+      if (seen.has(fieldNumber)) continue;
+      seen.add(fieldNumber);
+      if (fieldNumber === 2) inputTokens = field.value;
+      else if (fieldNumber === 3) outputTokens = field.value;
+      else if (fieldNumber === 5) cachedInputTokens = field.value;
+      else if (fieldNumber === 9) reasoningTokens = field.value;
+      else if (fieldNumber === 10) candidatesTokens = field.value;
+      continue;
+    }
+    const next = skipProtoValue(buffer, pos, usageMessage.end, wireType);
+    if (next === null) return null;
+    pos = next;
+  }
 
   const usage: AntigravityUsageTotals = {
     inputTokens,
@@ -375,22 +399,35 @@ export function parseAntigravityDatabase(tempDbPath: string, sinceIdx?: number):
   let db: DatabaseSync | null = null;
   try {
     db = new DatabaseSync(tempDbPath, { readOnly: true });
-    const rows = db.prepare("SELECT idx, data FROM gen_metadata WHERE idx > ? ORDER BY idx ASC")
-      .all(typeof sinceIdx === "number" ? sinceIdx : -1) as { idx: number; data: Uint8Array | null }[];
-    if (rows.length === 0) {
-      return { usage: null, rawUsageJson: null, lastIdx: null };
-    }
-
     const totals: AntigravityUsageTotals = { inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cachedInputTokens: 0 };
     let rowsWithUsage = 0;
     let lastIdx: number | null = null;
+    let skippedOversizedRow = false;
+    const rows = db.prepare(`
+      SELECT
+        idx,
+        length(data) AS data_bytes,
+        CASE WHEN length(data) <= ? THEN data ELSE NULL END AS data
+      FROM gen_metadata
+      WHERE idx > ?
+      ORDER BY idx ASC
+    `).iterate(
+      ANTIGRAVITY_MAX_METADATA_ROW_BYTES,
+      typeof sinceIdx === "number" ? sinceIdx : -1,
+    ) as Iterable<{ idx: number; data_bytes: number | null; data: Uint8Array | null }>;
     for (const row of rows) {
       lastIdx = row.idx;
+      if (
+        typeof row.data_bytes === "number"
+        && row.data_bytes > ANTIGRAVITY_MAX_METADATA_ROW_BYTES
+      ) {
+        skippedOversizedRow = true;
+        continue;
+      }
       if (!(row.data instanceof Uint8Array)) {
         continue;
       }
-      const fields = decodeProto(Buffer.from(row.data));
-      const extracted = extractAntigravityUsageFromProto(fields);
+      const extracted = extractAntigravityUsageFromProto(Buffer.from(row.data));
       if (!extracted?.usage) {
         continue;
       }
@@ -401,6 +438,9 @@ export function parseAntigravityDatabase(tempDbPath: string, sinceIdx?: number):
       rowsWithUsage += 1;
     }
 
+    if (skippedOversizedRow) {
+      return { usage: null, rawUsageJson: null, lastIdx };
+    }
     if (rowsWithUsage === 0) {
       return { usage: null, rawUsageJson: null, lastIdx };
     }
@@ -431,7 +471,10 @@ export function parseAntigravityTranscript(
 
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();
-    if (!trimmed.startsWith("{")) continue;
+    if (
+      !trimmed.startsWith("{")
+      || trimmed.length > ANTIGRAVITY_MAX_JSONL_RECORD_CHARS
+    ) continue;
 
     const entry = parseJsonObject(trimmed);
     if (!entry) continue;
@@ -439,7 +482,7 @@ export function parseAntigravityTranscript(
     appendAntigravityEntryTurns(entry, conversation, minMs, seenEntries);
   }
 
-  return conversation;
+  return retainProviderConversationTail(conversation);
 }
 
 function appendAntigravityEntryTurns(
@@ -447,10 +490,16 @@ function appendAntigravityEntryTurns(
   conversation: ParsedConversationTurn[],
   minMs: number | null,
   seenEntries: Set<string>,
+  depth = 0,
 ): void {
-  const entryKey = JSON.stringify(entry);
+  if (depth > ANTIGRAVITY_MAX_NESTED_ENTRY_DEPTH) return;
+  const entryKey = createHash("sha256")
+    .update(JSON.stringify(entry))
+    .digest("hex");
   if (seenEntries.has(entryKey)) return;
-  seenEntries.add(entryKey);
+  if (seenEntries.size < ANTIGRAVITY_MAX_DEDUPE_ENTRIES) {
+    seenEntries.add(entryKey);
+  }
   const timestampMs = readTimestampMs(entry);
   if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
     return;
@@ -461,7 +510,13 @@ function appendAntigravityEntryTurns(
     for (const nested of nestedEntries) {
       const nestedRecord = asRecord(nested);
       if (nestedRecord) {
-        appendAntigravityEntryTurns(nestedRecord, conversation, minMs, seenEntries);
+        appendAntigravityEntryTurns(
+          nestedRecord,
+          conversation,
+          minMs,
+          seenEntries,
+          depth + 1,
+        );
       }
     }
     return;
@@ -476,7 +531,7 @@ function appendAntigravityEntryTurns(
     .map((part) => buildToolResultTurn(part, timestampMs))
     .filter((turn): turn is ParsedConversationTurn => Boolean(turn));
   if (partToolResults.length > 0) {
-    conversation.push(...partToolResults);
+    appendBoundedProviderTurns(conversation, partToolResults);
     return;
   }
 
@@ -487,7 +542,7 @@ function appendAntigravityEntryTurns(
       text = requestMatch[1].trim();
     }
     if (text) {
-      conversation.push({ kind: "user", text, timestampMs });
+      appendBoundedProviderTurns(conversation, [{ kind: "user", text, timestampMs }]);
     }
     return;
   }
@@ -500,7 +555,7 @@ function appendAntigravityEntryTurns(
   ) {
     const toolResult = buildToolResultTurn(entry, timestampMs);
     if (toolResult) {
-      conversation.push(toolResult);
+      appendBoundedProviderTurns(conversation, [toolResult]);
     }
     return;
   }
@@ -517,12 +572,18 @@ function appendAntigravityEntryTurns(
     const reasoningText = extractVisibleTranscriptText(entry.reasoning ?? entry.planner_reasoning ?? entry.summary ?? entry.thinking)
       || extractReasoningTextFromParts(parts);
     if (reasoningText) {
-      conversation.push({ kind: "reasoning", text: reasoningText, timestampMs });
+      appendBoundedProviderTurns(
+        conversation,
+        [{ kind: "reasoning", text: reasoningText, timestampMs }],
+      );
     }
 
     const text = extractAssistantText(entry.content ?? entry.text ?? entry.message ?? entry.parts ?? entry.response);
     if (text) {
-      conversation.push({ kind: "assistant", text, timestampMs });
+      appendBoundedProviderTurns(
+        conversation,
+        [{ kind: "assistant", text, timestampMs }],
+      );
     }
 
     const toolCalls = Array.isArray(entry.tool_calls)
@@ -535,13 +596,13 @@ function appendAntigravityEntryTurns(
     for (const tc of toolCalls) {
       const toolCall = buildToolCallTurn(tc, timestampMs);
       if (toolCall) {
-        conversation.push(toolCall);
+        appendBoundedProviderTurns(conversation, [toolCall]);
       }
     }
     for (const part of parts.filter((item) => extractFunctionCall(item))) {
       const toolCall = buildToolCallTurn(part, timestampMs);
       if (toolCall) {
-        conversation.push(toolCall);
+        appendBoundedProviderTurns(conversation, [toolCall]);
       }
     }
     return;
@@ -550,11 +611,11 @@ function appendAntigravityEntryTurns(
   if (actor === "SYSTEM" && entry.content) {
     const text = extractVisibleTranscriptText(entry.content);
     if (text) {
-      conversation.push({
+      appendBoundedProviderTurns(conversation, [{
         kind: "reasoning",
         text,
         timestampMs,
-      });
+      }]);
     }
   }
 }
