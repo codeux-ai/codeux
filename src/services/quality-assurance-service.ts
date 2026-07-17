@@ -2936,7 +2936,12 @@ export class QualityAssuranceService {
     });
 
     const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, followUpProviderSettings.thinkingMode, args.provider);
-    const previousInvocation = this.deps.executionRepository.getLatestProviderInvocationUsageBySession(args.sessionId, "task_coding");
+    const previousInvocation = this.resolveQaCodingInvocation({
+      provider: args.provider,
+      logicalSessionId: args.sessionId,
+      workspaceSessionId,
+      workspaceTaskRunId: durableWorkspaceTarget?.taskRunId || args.taskRun?.id || null,
+    });
     let persistedContinuationPayload = args.qaContinuationRunId
       ? this.deps.qaReviewRepository.getRun(args.qaContinuationRunId)?.payload ?? null
       : null;
@@ -3248,6 +3253,49 @@ export class QualityAssuranceService {
       mergeIndicator: null,
     });
     return { producedMergeWork: true, providerOutcome };
+  }
+
+  private resolveQaCodingInvocation(args: {
+    provider: CliQaProvider;
+    logicalSessionId: string;
+    workspaceSessionId: string;
+    workspaceTaskRunId: string | null;
+  }): ProviderInvocationUsageRecord | null {
+    const sessionIds = Array.from(new Set([
+      args.logicalSessionId.trim(),
+      args.workspaceSessionId.trim(),
+    ].filter(Boolean)));
+    const candidates = sessionIds
+      .map((sessionId) => (
+        this.deps.executionRepository.getLatestProviderInvocationUsageBySession(
+          sessionId,
+          "task_coding",
+        )
+      ))
+      .filter((invocation): invocation is ProviderInvocationUsageRecord => (
+        invocation !== null && invocation.provider === args.provider
+      ));
+    if (candidates.length === 0) {
+      return null;
+    }
+    const byNewest = (left: ProviderInvocationUsageRecord, right: ProviderInvocationUsageRecord) => (
+      Date.parse(right.finishedAt || right.updatedAt || right.startedAt)
+      - Date.parse(left.finishedAt || left.updatedAt || left.startedAt)
+    );
+    const exactTaskRun = args.workspaceTaskRunId
+      ? candidates
+          .filter((invocation) => invocation.taskRunId === args.workspaceTaskRunId)
+          .sort(byNewest)[0]
+      : null;
+    if (exactTaskRun) {
+      return exactTaskRun;
+    }
+    const workspaceOwned = candidates
+      .filter((invocation) => (
+        invocation.sessionId.replace(/^sessions\//, "") === args.workspaceSessionId.replace(/^sessions\//, "")
+      ))
+      .sort(byNewest)[0];
+    return workspaceOwned || candidates.sort(byNewest)[0] || null;
   }
 
   private async cleanupCliWorkspaceIfNeeded(task: Subtask, repoPath: string, scope: DashboardSettingsScope): Promise<void> {

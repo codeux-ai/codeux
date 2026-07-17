@@ -38,7 +38,18 @@ import {
   resolveAntigravityContainerLogPath,
   cleanupProviderRuntimeArtifacts
 } from "./provider-runtime-artifacts.js";
-import { readQwenLogData, readCodexLatestSessionChunk, readCodexLatestSessionJson, readClaudeSessionJsonl, readClaudeSessionJsonlChunk, parseAntigravityConversationId, readAntigravityTranscript } from "./provider-transcripts.js";
+import {
+  readQwenLogData,
+  readCodexHostSessionMetadata,
+  readCodexLatestSessionJson,
+  readCodexSessionChunk,
+  readCodexSessionJson,
+  readClaudeSessionJsonl,
+  readClaudeSessionJsonlChunk,
+  parseAntigravityConversationId,
+  readAntigravityTranscript,
+} from "./provider-transcripts.js";
+import { parseCodexExecStdout } from "./provider-logs/codex-log-parser.js";
 import { parseOpenCodeJsonLines } from "./provider-logs/opencode-log-parser.js";
 import { parseAntigravityDatabase } from "./provider-logs/antigravity-log-parser.js";
 import { runMockupCliProvider } from "./mockup-cli-provider.js";
@@ -303,6 +314,7 @@ export class ProviderRunner implements IProviderRunner {
     customBaseUrl?: string;
     customModel?: string;
     sessionId: string;
+    workspaceSessionId?: string;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
     githubToken?: string;
@@ -353,11 +365,28 @@ export class ProviderRunner implements IProviderRunner {
     if (provider === "mockup-cli") {
       providerEnv.CODE_UX_MOCKUP_SESSION_ID = sessionId;
     }
-    let nativeSessionId = provider === "opencode"
-      ? isOpenCodeNativeSessionId(input.continueSessionId) ? input.continueSessionId! : null
-      : provider === "qwen-code"
-        ? null
-      : input.continueSessionId || (provider === "claude-code" ? randomUUID() : null);
+    const requestedContinuationId = input.continueSessionId?.trim() || null;
+    const logicalContinuationIds = new Set(
+      [input.sessionId, input.workspaceSessionId]
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    );
+    const explicitContinuationId = requestedContinuationId
+      && !logicalContinuationIds.has(requestedContinuationId)
+      ? requestedContinuationId
+      : null;
+    let nativeSessionId: string | null;
+    if (provider === "opencode") {
+      nativeSessionId = isOpenCodeNativeSessionId(requestedContinuationId)
+        ? requestedContinuationId
+        : null;
+    } else if (provider === "qwen-code") {
+      nativeSessionId = null;
+    } else if (provider === "antigravity") {
+      nativeSessionId = explicitContinuationId;
+    } else {
+      nativeSessionId = requestedContinuationId || (provider === "claude-code" ? randomUUID() : null);
+    }
 
     const applicableCustomServers = enabledCustomServersFor(input.customMcpServers, provider);
     const hasMcpConfig = !!input.mcpConnection || applicableCustomServers.length > 0;
@@ -514,7 +543,7 @@ export class ProviderRunner implements IProviderRunner {
         antigravitySinceIdx: antigravityBaselineIdx,
         logger: this.logger,
         ...(workflowSettings.executionMode === "HOST"
-          ? { getCodexLatestSessionJsonMetadata: async () => this.readCodexLatestSessionMetadata() }
+          ? { getCodexSessionJsonMetadata: async (id: string) => readCodexHostSessionMetadata(id) }
           : {}),
         readClaudeSessionJsonl: async (id) => readClaudeSessionJsonl(cwd, id, workflowSettings.executionMode, this.dockerRunner),
         ...(this.dockerRunner.readWorkspaceFileChunk || workflowSettings.executionMode === "HOST"
@@ -522,9 +551,11 @@ export class ProviderRunner implements IProviderRunner {
               readClaudeSessionJsonlChunk(cwd, id, workflowSettings.executionMode, cursor, this.dockerRunner) }
           : {}),
         readCodexLatestSessionJson: async () => readCodexLatestSessionJson(cwd, workflowSettings.executionMode, this.dockerRunner),
+        readCodexSessionJson: async (id: string) =>
+          readCodexSessionJson(cwd, id, workflowSettings.executionMode, this.dockerRunner),
         ...(this.dockerRunner.readLatestWorkspaceFileChunk || workflowSettings.executionMode === "HOST"
-          ? { readCodexLatestSessionChunk: async (cursor: ProviderTranscriptCursor) =>
-              readCodexLatestSessionChunk(cwd, workflowSettings.executionMode, cursor, this.dockerRunner) }
+          ? { readCodexSessionChunk: async (id: string, cursor: ProviderTranscriptCursor) =>
+              readCodexSessionChunk(cwd, id, workflowSettings.executionMode, cursor, this.dockerRunner) }
           : {}),
         ...(workflowSettings.executionMode === "HOST"
           ? { getQwenLogDataMetadata: async () => this.readQwenLogMetadata(sessionId) }
@@ -649,8 +680,19 @@ export class ProviderRunner implements IProviderRunner {
       const claudeSessionJsonl = provider === "claude-code" && nativeSessionId
         ? await readClaudeSessionJsonl(cwd, nativeSessionId, workflowSettings.executionMode, this.dockerRunner)
         : null;
+      const codexStdoutSessionId = provider === "codex"
+        ? parseCodexExecStdout(result.stdout).nativeSessionId
+        : null;
+      const exactCodexSessionId = codexStdoutSessionId || nativeSessionId;
       const codexSessionJson = provider === "codex" && !finalCodexRollout
-        ? await readCodexLatestSessionJson(cwd, workflowSettings.executionMode, this.dockerRunner)
+        ? exactCodexSessionId
+          ? await readCodexSessionJson(
+              cwd,
+              exactCodexSessionId,
+              workflowSettings.executionMode,
+              this.dockerRunner,
+            )
+          : await readCodexLatestSessionJson(cwd, workflowSettings.executionMode, this.dockerRunner)
         : null;
       const qwenLog = provider === "qwen-code"
         ? await readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs, this.dockerRunner)
@@ -714,7 +756,9 @@ export class ProviderRunner implements IProviderRunner {
         stdout: result.stdout,
         stderr: result.stderr,
         capturedText,
-        nativeSessionId: resolvedNativeSessionId || nativeSessionId,
+        nativeSessionId: provider === "codex"
+          ? codexStdoutSessionId || resolvedNativeSessionId || nativeSessionId
+          : resolvedNativeSessionId || nativeSessionId,
         claudeSessionJsonl,
         codexSessionJson,
         codexRollout: finalCodexRollout,
@@ -948,36 +992,6 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     return (await fs.readFile(outputPath, "utf8").catch(() => "")).trim();
-  }
-
-  private async readCodexLatestSessionMetadata(): Promise<string | null> {
-    const now = new Date();
-    const year = now.getFullYear().toString();
-    const month = (now.getMonth() + 1).toString().padStart(2, "0");
-    const day = now.getDate().toString().padStart(2, "0");
-    const sessionsDir = path.join(os.homedir(), ".codex", "sessions", year, month, day);
-    try {
-      const files = (await fs.readdir(sessionsDir)).filter(f => f.endsWith(".jsonl"));
-      if (files.length === 0) {
-        return "none";
-      }
-      const withStats = await Promise.all(
-        files.map(async (fileName) => {
-          const filePath = path.join(sessionsDir, fileName);
-          const stat = await fs.stat(filePath).catch(() => null);
-          return {
-            fileName,
-            size: stat?.size ?? 0,
-            mtimeMs: stat?.mtimeMs ?? 0,
-          };
-        }),
-      );
-      withStats.sort((a, b) => b.mtimeMs - a.mtimeMs);
-      const latest = withStats[0];
-      return `${latest.fileName}:${latest.size}:${Math.floor(latest.mtimeMs)}`;
-    } catch {
-      return "missing";
-    }
   }
 
   private async readQwenLogMetadata(sessionId: string): Promise<string | null> {
@@ -1310,8 +1324,12 @@ export class ProviderRunner implements IProviderRunner {
         // to this log file, never to stdout/stderr. Placed ahead of the terminal -p flag.
         args.push("--log-file", antigravityLogPath);
       }
-      if (continueSession && nativeSessionId) {
-        args.push(`--conversation=${nativeSessionId}`);
+      if (continueSession) {
+        // `--conversation` accepts only an Antigravity-native conversation id.
+        // Generic orchestration paths can use a logical Code UX id as a
+        // continuation sentinel for providers with workspace-local "latest"
+        // semantics. Never send that sentinel as a native conversation id.
+        args.push(nativeSessionId ? `--conversation=${nativeSessionId}` : "--continue");
       }
       args.push("-p", prompt);
       return { command: "agy", args };

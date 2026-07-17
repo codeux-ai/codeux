@@ -200,6 +200,79 @@ describe("ProviderTelemetryWatcher", () => {
     await watcher.stop();
   });
 
+  it("reads the rollout named by the current Codex exec stream instead of the latest file", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const nativeSessionId = "019f6df9-aaaf-7e71-a5f3-5fd7c6a88a3a";
+    const rollout = Buffer.from([
+      JSON.stringify({ type: "session_meta", payload: { id: nativeSessionId } }),
+      JSON.stringify({
+        type: "response_item",
+        timestamp: "2026-07-17T02:48:27.000Z",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "current answer" }],
+        },
+      }),
+    ].join("\n"));
+    const readExactChunk = vi.fn(async (
+      requestedSessionId: string,
+      cursor: { sourceId: string | null; offset: number },
+    ) => ({
+      sourceId: `rollout:${requestedSessionId}`,
+      startOffset: cursor.offset,
+      nextOffset: rollout.length,
+      totalBytes: rollout.length,
+      contentBase64: cursor.offset === 0 ? rollout.toString("base64") : "",
+      reset: cursor.offset === 0,
+    }));
+    const readLatestChunk = vi.fn();
+    const opts = {
+      provider: "codex" as const,
+      model: "test-model",
+      prompt: "test",
+      cwd: "/cwd",
+      startedMs: Date.parse("2026-07-17T02:48:26.000Z"),
+      workflowSettings: { executionMode: "DOCKER" as const },
+      signal: controller.signal,
+      getAccumulatedRawStdout: () => JSON.stringify({
+        type: "thread.started",
+        thread_id: nativeSessionId,
+      }),
+      getAccumulatedStderr: () => "",
+      nativeSessionId: null,
+      sessionId: "logical-session",
+      antigravityLogPath: null,
+      readClaudeSessionJsonl: vi.fn(),
+      readCodexLatestSessionJson: vi.fn(),
+      readCodexLatestSessionChunk: readLatestChunk,
+      readCodexSessionChunk: readExactChunk,
+      readQwenLogData: vi.fn(),
+      parseAntigravityConversationId: vi.fn(),
+      readAntigravityTranscript: vi.fn(),
+      resolveAntigravityDatabase: vi.fn(),
+      onTelemetry: vi.fn(),
+    };
+    const watcher = new ProviderTelemetryWatcher(opts as any);
+    watcher.start();
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(readExactChunk).toHaveBeenCalledWith(
+      nativeSessionId,
+      { sourceId: null, offset: 0 },
+    );
+    expect(readLatestChunk).not.toHaveBeenCalled();
+    expect(collectProviderUsageTelemetry).toHaveBeenCalledWith(expect.objectContaining({
+      nativeSessionId,
+      codexRollout: expect.objectContaining({ nativeSessionId }),
+    }));
+
+    controller.abort();
+    await watcher.stop();
+  });
+
   it("passes append-parsed Claude deltas without retaining or joining the raw JSONL", async () => {
     vi.useFakeTimers();
     const controller = new AbortController();

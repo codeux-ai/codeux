@@ -208,10 +208,16 @@ launch once the invocation signal is aborted. The normal launch path does not ru
 ## Telemetry And Persistence
 
 Live telemetry is metadata-first. A provider source must change before transcript content is read.
-Codex rollout parsing and transport retain a byte cursor, handle split UTF-8/JSONL records, cap work
-per poll, and reset on source rotation or truncation. Claude transport also reads appended bytes.
+Codex rollout transport binds every read to the native thread id emitted by the current
+`codex exec --json` stream (or the exact requested resume id); it never treats an unrelated newest
+rollout in a reused runtime home as the invocation's identity. Parsing retains a byte cursor,
+handles split UTF-8/JSONL records, caps work per poll, and resets on source rotation or truncation.
+Claude transport also reads appended bytes.
 Qwen mutable JSON files and the Antigravity SQLite source use a coherent full read only after their
 cheap metadata changes; unchanged polls do not copy or parse them.
+Antigravity's explicit `--conversation` argument is reserved for ids parsed from that provider's
+own log. Generic logical/workspace continuation ids use `--continue` within the isolated paired
+runtime volume, preventing an orchestration id from being mistaken for a provider conversation.
 
 Provider stdout/stderr uses bounded append-efficient buffers rather than repeated whole-string
 concatenation. Structured Docker JSON is parsed for telemetry without duplicating it into the raw
