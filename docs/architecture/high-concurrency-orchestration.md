@@ -212,6 +212,10 @@ Codex rollout transport binds every read to the native thread id emitted by the 
 `codex exec --json` stream (or the exact requested resume id); it never treats an unrelated newest
 rollout in a reused runtime home as the invocation's identity. Parsing retains a byte cursor,
 handles split UTF-8/JSONL records, caps work per poll, and resets on source rotation or truncation.
+The parser discards any single JSONL record above 2 MiB, bounds retained message/tool fields, and
+keeps only the newest 256 conversation item groups. Large generated assets or command output can
+therefore remain in the provider-owned rollout without exhausting the server heap; normalized usage,
+session identity, and later records continue to be processed.
 Claude transport also reads appended bytes.
 Qwen mutable JSON files and the Antigravity SQLite source use a coherent full read only after their
 cheap metadata changes; unchanged polls do not copy or parse them.

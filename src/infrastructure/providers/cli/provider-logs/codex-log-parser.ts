@@ -18,8 +18,53 @@ export interface CodexLogResult extends ParsedProviderLogResult<ParsedUsageCount
   conversationChangedFromIndex?: number;
 }
 
+/**
+ * Rollout records can contain raw command output or generated binary assets in
+ * one JSONL line. Keep parser state comfortably below V8's heap ceiling even
+ * when a provider emits an unexpectedly large record.
+ */
+export const CODEX_MAX_JSONL_RECORD_CHARS = 2 * 1024 * 1024;
+export const CODEX_MAX_RETAINED_CONVERSATION_GROUPS = 256;
+export const CODEX_MAX_RETAINED_TURN_TEXT_CHARS = 16_000;
+export const CODEX_MAX_RETAINED_TOOL_PAYLOAD_CHARS = 8_000;
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function truncateRetainedField(value: string, maxChars: number): string {
+  if (!value || value.length <= maxChars) {
+    return value;
+  }
+  const omitted = value.length - maxChars;
+  const marker = `\n\n… [${omitted.toLocaleString("en-US")} characters truncated] …\n\n`;
+  const budget = Math.max(0, maxChars - marker.length);
+  const headChars = Math.ceil(budget * 0.7);
+  const tailChars = budget - headChars;
+  return `${value.slice(0, headChars)}${marker}${tailChars > 0 ? value.slice(-tailChars) : ""}`;
+}
+
+function boundConversationTurn(turn: ParsedConversationTurn): ParsedConversationTurn {
+  return {
+    ...turn,
+    text: truncateRetainedField(turn.text, CODEX_MAX_RETAINED_TURN_TEXT_CHARS),
+    ...(turn.toolArguments !== undefined
+      ? {
+          toolArguments: truncateRetainedField(
+            turn.toolArguments,
+            CODEX_MAX_RETAINED_TOOL_PAYLOAD_CHARS,
+          ),
+        }
+      : {}),
+    ...(turn.toolOutput !== undefined
+      ? {
+          toolOutput: truncateRetainedField(
+            turn.toolOutput,
+            CODEX_MAX_RETAINED_TOOL_PAYLOAD_CHARS,
+          ),
+        }
+      : {}),
+  };
 }
 
 /** Flattens a Codex message `content` array (input_text / output_text / text parts) to plain text. */
@@ -243,17 +288,43 @@ function upsertConversationGroup(
   if (turns.length === 0) {
     return null;
   }
+  const boundedTurns = turns.map(boundConversationTurn);
   const key = conversationItemKey(item);
   if (key) {
     const existingIndex = groupIndexes.get(key);
     if (existingIndex !== undefined) {
-      groups[existingIndex] = { key, turns };
+      groups[existingIndex] = { key, turns: boundedTurns };
       return existingIndex;
     }
     groupIndexes.set(key, groups.length);
   }
-  groups.push({ key, turns });
-  return groups.length - 1;
+  groups.push({ key, turns: boundedTurns });
+  if (groups.length <= CODEX_MAX_RETAINED_CONVERSATION_GROUPS) {
+    return groups.length - 1;
+  }
+
+  groups.splice(0, groups.length - CODEX_MAX_RETAINED_CONVERSATION_GROUPS);
+  groupIndexes.clear();
+  for (let index = 0; index < groups.length; index += 1) {
+    const retainedKey = groups[index]?.key;
+    if (retainedKey) {
+      groupIndexes.set(retainedKey, index);
+    }
+  }
+  return 0;
+}
+
+function appendBoundedFallbackTurns(
+  conversation: ParsedConversationTurn[],
+  turns: ParsedConversationTurn[],
+): number {
+  const changedFrom = conversation.length;
+  conversation.push(...turns.map(boundConversationTurn));
+  if (conversation.length <= CODEX_MAX_RETAINED_CONVERSATION_GROUPS) {
+    return changedFrom;
+  }
+  conversation.splice(0, conversation.length - CODEX_MAX_RETAINED_CONVERSATION_GROUPS);
+  return 0;
 }
 
 function flattenConversationGroups(groups: ConversationTurnGroup[]): ParsedConversationTurn[] {
@@ -579,8 +650,7 @@ function processCodexRolloutLine(state: CodexRolloutParserState, rawLine: string
     }
     const turns = eventMsgToTurns(payload, timestampMs);
     if (turns.length > 0 && isInWindow(timestampMs)) {
-      const changedFrom = state.fallbackEventConversation.length;
-      state.fallbackEventConversation.push(...turns);
+      const changedFrom = appendBoundedFallbackTurns(state.fallbackEventConversation, turns);
       state.conversationRevision += 1;
       state.conversationChangedFromIndex = state.conversationChangedFromIndex === null
         ? changedFrom
@@ -643,20 +713,58 @@ function buildCodexRolloutResult(state: CodexRolloutParserState): CodexLogResult
   };
 }
 
+interface CodexRolloutChunkState {
+  pendingLine: string;
+  discardingOversizedLine: boolean;
+}
+
 function processCodexRolloutChunk(
   state: CodexRolloutParserState,
   chunk: string,
   pendingLine: string,
-): string {
-  const lines = (pendingLine + chunk).split("\n");
-  const finalLine = lines.pop() ?? "";
-  for (const line of lines) {
-    processCodexRolloutLine(state, line);
+  discardingOversizedLine: boolean,
+): CodexRolloutChunkState {
+  let cursor = 0;
+  let retainedPendingLine = pendingLine;
+  let discarding = discardingOversizedLine;
+
+  while (cursor < chunk.length) {
+    const newlineIndex = chunk.indexOf("\n", cursor);
+    const segmentEnd = newlineIndex >= 0 ? newlineIndex : chunk.length;
+    const segment = chunk.slice(cursor, segmentEnd);
+
+    if (discarding) {
+      if (newlineIndex < 0) {
+        return { pendingLine: "", discardingOversizedLine: true };
+      }
+      discarding = false;
+      cursor = newlineIndex + 1;
+      continue;
+    }
+
+    if (retainedPendingLine.length + segment.length > CODEX_MAX_JSONL_RECORD_CHARS) {
+      retainedPendingLine = "";
+      if (newlineIndex < 0) {
+        return { pendingLine: "", discardingOversizedLine: true };
+      }
+      cursor = newlineIndex + 1;
+      continue;
+    }
+
+    const record = retainedPendingLine ? retainedPendingLine + segment : segment;
+    retainedPendingLine = "";
+    if (newlineIndex < 0) {
+      retainedPendingLine = processCodexRolloutLine(state, record) ? "" : record;
+      break;
+    }
+    processCodexRolloutLine(state, record);
+    cursor = newlineIndex + 1;
   }
-  if (!finalLine) {
-    return "";
-  }
-  return processCodexRolloutLine(state, finalLine) ? "" : finalLine;
+
+  return {
+    pendingLine: retainedPendingLine,
+    discardingOversizedLine: discarding,
+  };
 }
 
 /** Incremental parser for the append-only Codex rollout used by live telemetry. */
@@ -666,6 +774,7 @@ export class CodexRolloutAccumulator {
   private previousHead = "";
   private previousBoundary = "";
   private pendingLine = "";
+  private discardingOversizedLine = false;
   private sourceId: string | null = null;
   private lastResult: CodexLogResult | null = null;
 
@@ -684,7 +793,14 @@ export class CodexRolloutAccumulator {
 
     const chunk = canAppend ? jsonl.slice(this.previousLength) : jsonl;
     this.state.conversationChangedFromIndex = null;
-    this.pendingLine = processCodexRolloutChunk(this.state, chunk, this.pendingLine);
+    const chunkState = processCodexRolloutChunk(
+      this.state,
+      chunk,
+      this.pendingLine,
+      this.discardingOversizedLine,
+    );
+    this.pendingLine = chunkState.pendingLine;
+    this.discardingOversizedLine = chunkState.discardingOversizedLine;
     this.previousLength = jsonl.length;
     this.previousHead = jsonl.slice(0, Math.min(4096, jsonl.length));
     this.previousBoundary = jsonl.slice(Math.max(0, jsonl.length - 4096));
@@ -698,7 +814,14 @@ export class CodexRolloutAccumulator {
       this.reset(sourceId);
     }
     this.state.conversationChangedFromIndex = null;
-    this.pendingLine = processCodexRolloutChunk(this.state, text, this.pendingLine);
+    const chunkState = processCodexRolloutChunk(
+      this.state,
+      text,
+      this.pendingLine,
+      this.discardingOversizedLine,
+    );
+    this.pendingLine = chunkState.pendingLine;
+    this.discardingOversizedLine = chunkState.discardingOversizedLine;
     this.sourceId = sourceId;
     // Full-snapshot prefix checks do not apply while consuming byte deltas.
     this.previousLength = 0;
@@ -728,6 +851,7 @@ export class CodexRolloutAccumulator {
     this.previousHead = "";
     this.previousBoundary = "";
     this.pendingLine = "";
+    this.discardingOversizedLine = false;
     this.sourceId = sourceId;
     this.lastResult = null;
   }
@@ -802,7 +926,10 @@ export function parseCodexExecStdout(stdout: string): CodexLogResult {
     }
 
     if (type === "event_msg" && payload) {
-      fallbackEventConversation.push(...eventMsgToTurns(payload, timestampMs));
+      appendBoundedFallbackTurns(
+        fallbackEventConversation,
+        eventMsgToTurns(payload, timestampMs),
+      );
       continue;
     }
 

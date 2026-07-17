@@ -126,6 +126,12 @@ initial target. Code UX derives the rollout date from that id and reads only
 lookup remains only as a compatibility fallback when a legacy caller has no native id, so prior
 sessions in the same runtime home cannot overwrite the persisted continuation identity.
 
+Live rollout parsing is bounded independently of rollout file size. A JSONL record larger than
+2 MiB is skipped until its terminating newline, per-turn text/tool payloads are truncated with an
+explicit marker, and only the newest 256 conversation item groups remain in memory. This protects
+the runtime from generated binary assets and extreme command output while preserving cumulative
+usage snapshots, native session identity, and every later well-formed record.
+
 ### Qwen Code
 
 Qwen Code runs via its OpenAI-compatible request/response logging (`enableOpenAILoggingDir`), written to a directory that is reset at the start of every run so usage aggregation only ever sums the current invocation's own log files — unlike Codex/OpenCode, there is no cross-run cumulative counter to isolate.
