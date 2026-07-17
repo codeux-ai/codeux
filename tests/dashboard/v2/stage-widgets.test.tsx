@@ -5,10 +5,54 @@ import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 import { parseBubbleSegments, StageWidgetRenderer } from "../../../dashboard/src/v2/components/chat/cinematic/StageWidgets.js";
+import { buildComposerStatus } from "../../../dashboard/src/v2/components/chat/chat-composer-controls.js";
 
 expect.extend(matchers);
 
 afterEach(cleanup);
+
+describe("shared chat composer state", () => {
+  const base = {
+    activeConnectionName: "Project Manager",
+    error: null,
+    latestDashboardMessage: null,
+    pendingDashboardMessages: 0,
+    selectedProject: true,
+    sending: false,
+    speechError: null,
+    trimmedInput: "",
+  };
+
+  it("derives stable disabled, ready, sending, queued, sent, and failed feedback", () => {
+    expect(buildComposerStatus({ ...base, selectedProject: false }).tone).toBe("disabled");
+    expect(buildComposerStatus({ ...base, trimmedInput: "Ship it" })).toMatchObject({
+      tone: "ready",
+      disabledReason: null,
+      liveText: "Composer ready.",
+    });
+    expect(buildComposerStatus({ ...base, trimmedInput: "Ship it", sending: true })).toMatchObject({
+      tone: "sending",
+      disabledReason: "Message is already sending.",
+      liveText: "Sending message.",
+    });
+    expect(buildComposerStatus({ ...base, pendingDashboardMessages: 2 })).toMatchObject({
+      tone: "queued",
+      liveText: "2 messages queued for delivery.",
+    });
+    expect(buildComposerStatus({
+      ...base,
+      latestDashboardMessage: {
+        direction: "dashboard_to_connection",
+        deliveryStatus: "processed",
+      } as any,
+    })).toMatchObject({ tone: "sent", liveText: "Latest message processed." });
+    expect(buildComposerStatus({ ...base, error: "Offline", trimmedInput: "Preserved" })).toMatchObject({
+      tone: "failed",
+      visibleText: "Send failed: Offline Your draft is preserved.",
+      liveText: "Failed: Offline",
+    });
+  });
+});
 
 describe("parseBubbleSegments", () => {
   it("splits markdown around a widget fence and parses the JSON", () => {
