@@ -101,6 +101,12 @@ the dashboard, and interactive replies.
 - Incremental Codex telemetry follows the native thread id emitted by the current exec stream (or
   the exact requested resume id) and reads only that rollout from the paired runtime volume. A
   previous invocation's newer file cannot replace the persisted continuation identity.
+- Codex rollout parsing skips any single JSONL record above 2 MiB, truncates retained transcript
+  fields, and keeps the newest 256 conversation item groups. Oversized generated assets or command
+  output cannot exhaust the server heap, and parsing resumes at the next record.
+- Jules full-history telemetry is serialized process-wide, joins duplicate in-flight session reads,
+  tokenizes text in slices of at most 64 KiB, and releases raw activities before SQLite
+  reconciliation. Wide hosted-session syncs therefore cannot multiply large patch payloads in heap.
 - Antigravity sends `--conversation` only for provider-native ids. Logical/workspace continuation
   markers use `--continue` inside the isolated paired runtime volume instead.
 

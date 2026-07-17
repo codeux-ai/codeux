@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  CODEX_MAX_JSONL_RECORD_CHARS,
+  CODEX_MAX_RETAINED_CONVERSATION_GROUPS,
+  CODEX_MAX_RETAINED_TOOL_PAYLOAD_CHARS,
   CodexRolloutAccumulator,
   parseCodexExecStdout,
   parseCodexRolloutJsonl,
@@ -521,6 +524,70 @@ describe("CodexRolloutAccumulator", () => {
     expect(accumulator.update(record).conversation).toEqual([
       expect.objectContaining({ kind: "user", text: "complete later" }),
     ]);
+  });
+
+  it("discards an oversized split JSONL record and resumes at the next record", () => {
+    const accumulator = new CodexRolloutAccumulator();
+    const oversizedPrefix = JSON.stringify({
+      type: "response_item",
+      timestamp: "2026-06-01T10:00:00.000Z",
+      payload: { type: "function_call_output", call_id: "huge-output" },
+    }).slice(0, -2) + ',"output":"';
+    const oversized = oversizedPrefix + "x".repeat(CODEX_MAX_JSONL_RECORD_CHARS);
+    const splitAt = Math.floor(oversized.length / 2);
+
+    accumulator.appendChunk(oversized.slice(0, splitAt), "rollout-large", true);
+    const result = accumulator.appendChunk([
+      oversized.slice(splitAt),
+      userMessage("2026-06-01T10:00:01.000Z", "parser recovered"),
+      "",
+    ].join("\n"), "rollout-large");
+
+    expect(result.conversation).toEqual([
+      expect.objectContaining({ kind: "user", text: "parser recovered" }),
+    ]);
+  });
+
+  it("bounds retained Codex tool payloads before live persistence", () => {
+    const largeOutput = `head-${"x".repeat(50_000)}-tail`;
+    const result = parseCodexRolloutJsonl(responseItem(
+      "2026-06-01T10:00:00.000Z",
+      {
+        type: "function_call_output",
+        call_id: "large-tool",
+        output: largeOutput,
+      },
+    ));
+
+    expect(result.conversation[0]?.toolOutput?.length)
+      .toBeLessThanOrEqual(CODEX_MAX_RETAINED_TOOL_PAYLOAD_CHARS);
+    expect(result.conversation[0]?.toolOutput).toContain("head-");
+    expect(result.conversation[0]?.toolOutput).toContain("-tail");
+    expect(result.conversation[0]?.toolOutput).toContain("characters truncated");
+  });
+
+  it("retains only the newest bounded window of Codex conversation groups", () => {
+    const extraGroups = 12;
+    const jsonl = Array.from(
+      { length: CODEX_MAX_RETAINED_CONVERSATION_GROUPS + extraGroups },
+      (_, index) => responseItem(
+        "2026-06-01T10:00:00.000Z",
+        {
+          id: `message-${index}`,
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: `answer-${index}` }],
+        },
+      ),
+    ).join("\n");
+
+    const result = parseCodexRolloutJsonl(jsonl);
+
+    expect(result.conversation).toHaveLength(CODEX_MAX_RETAINED_CONVERSATION_GROUPS);
+    expect(result.conversation[0]?.text).toBe(`answer-${extraGroups}`);
+    expect(result.conversation.at(-1)?.text)
+      .toBe(`answer-${CODEX_MAX_RETAINED_CONVERSATION_GROUPS + extraGroups - 1}`);
+    expect(result.conversationChangedFromIndex).toBe(0);
   });
 });
 

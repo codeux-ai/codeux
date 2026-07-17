@@ -4,6 +4,10 @@ import type { JulesClient } from "../../../src/domain/jules/jules-client.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import type { Logger } from "../../../src/shared/logging/logger.js";
 import type { JulesActivity } from "../../../src/contracts/app-types.js";
+import {
+  MAX_MESSAGE_CONTENT_CHARS,
+  MAX_TOOL_PAYLOAD_CHARS,
+} from "../../../src/services/invocation-message-limits.js";
 
 describe("JulesUsageService", () => {
   let getFullConversationMock: ReturnType<typeof vi.fn>;
@@ -163,6 +167,37 @@ describe("JulesUsageService", () => {
       expect(toolMsg!.metadata.toolName).toBe("apply_patch");
     });
 
+    it("bounds patch messages and releases raw activities before persistence", async () => {
+      const patch = `+${"generated asset data".repeat(20_000)}`;
+      const activities = [
+        {
+          id: "1",
+          name: "1",
+          createTime: "2026-06-01T00:00:00Z",
+          artifacts: [{ changeSet: { gitPatch: { unidiffPatch: patch } } }],
+        },
+      ] as JulesActivity[];
+      getFullConversationMock.mockResolvedValue(activities);
+      syncMessagesMock.mockImplementation((_invocationId, messages) => {
+        expect(activities).toHaveLength(0);
+        const toolMessage = messages.find(
+          (message: { metadata?: { kind?: string } }) => message.metadata?.kind === "tool_result",
+        );
+        expect(toolMessage.contentMarkdown.length).toBeLessThanOrEqual(MAX_MESSAGE_CONTENT_CHARS);
+        expect(toolMessage.toolCallsJson.output.length).toBeLessThanOrEqual(MAX_TOOL_PAYLOAD_CHARS);
+        return { inserted: 0, updated: 0, deleted: 0, unchanged: 0 };
+      });
+
+      await service.calculateAndSaveUsageForTask(
+        "proj-1",
+        "task-1",
+        "session-1",
+        "Initial prompt for testing",
+      );
+
+      expect(syncMessagesMock).toHaveBeenCalledTimes(1);
+    });
+
     it("handles API failure gracefully and logs an error", async () => {
       getFullConversationMock.mockRejectedValue(new Error("API Error"));
 
@@ -265,6 +300,41 @@ describe("JulesUsageService", () => {
       await service.syncLiveInvocation("proj-1", "task-1", "session-a", "x");
       await service.syncLiveInvocation("proj-1", "task-2", "session-b", "y");
       expect(getFullConversationMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("deduplicates concurrent syncs for the same session", async () => {
+      let resolveConversation!: (activities: JulesActivity[]) => void;
+      getFullConversationMock.mockImplementation(() => new Promise<JulesActivity[]>((resolve) => {
+        resolveConversation = resolve;
+      }));
+
+      const first = service.syncLiveInvocation("proj-1", "task-1", "session-a", "x");
+      const second = service.syncLiveInvocation("proj-1", "task-1", "session-a", "x");
+      await vi.waitFor(() => expect(getFullConversationMock).toHaveBeenCalledTimes(1));
+      resolveConversation([]);
+      await Promise.all([first, second]);
+
+      expect(getFullConversationMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("serializes full-conversation fetches across distinct sessions", async () => {
+      const resolvers = new Map<string, (activities: JulesActivity[]) => void>();
+      getFullConversationMock.mockImplementation((sessionId: string) => (
+        new Promise<JulesActivity[]>((resolve) => {
+          resolvers.set(sessionId, resolve);
+        })
+      ));
+
+      const first = service.syncLiveInvocation("proj-1", "task-1", "session-a", "x");
+      const second = service.syncLiveInvocation("proj-1", "task-2", "session-b", "y");
+      await vi.waitFor(() => expect(getFullConversationMock).toHaveBeenCalledTimes(1));
+      expect(getFullConversationMock).toHaveBeenLastCalledWith("session-a");
+
+      resolvers.get("session-a")?.([]);
+      await vi.waitFor(() => expect(getFullConversationMock).toHaveBeenCalledTimes(2));
+      expect(getFullConversationMock).toHaveBeenLastCalledWith("session-b");
+      resolvers.get("session-b")?.([]);
+      await Promise.all([first, second]);
     });
 
     it("handles 404 gracefully without logging a warning during live sync", async () => {

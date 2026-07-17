@@ -212,6 +212,10 @@ Codex rollout transport binds every read to the native thread id emitted by the 
 `codex exec --json` stream (or the exact requested resume id); it never treats an unrelated newest
 rollout in a reused runtime home as the invocation's identity. Parsing retains a byte cursor,
 handles split UTF-8/JSONL records, caps work per poll, and resets on source rotation or truncation.
+The parser discards any single JSONL record above 2 MiB, bounds retained message/tool fields, and
+keeps only the newest 256 conversation item groups. Large generated assets or command output can
+therefore remain in the provider-owned rollout without exhausting the server heap; normalized usage,
+session identity, and later records continue to be processed.
 Claude transport also reads appended bytes.
 Qwen mutable JSON files and the Antigravity SQLite source use a coherent full read only after their
 cheap metadata changes; unchanged polls do not copy or parse them.
@@ -234,7 +238,12 @@ Structured invocation messages reconcile by stable ordinal in one SQLite transac
 
 Text-only completion fallback remains append-only so retry and audit messages are not removed.
 Hosted Jules activity-to-message sync uses the same atomic suffix reconciliation instead of clearing
-and reinserting the invocation transcript on each poll.
+and reinserting the invocation transcript on each poll. Full Jules histories are fetched and
+tokenized through a one-at-a-time process queue, duplicate in-flight requests for the same session
+join the existing work, and tokenizer input is sliced to at most 64 KiB. The raw activity array is
+released after bounded messages and numeric usage are derived, before SQLite reconciliation begins.
+This keeps wide hosted-session synchronization from multiplying large patch and media payloads in
+the Node.js heap.
 
 Streaming provider activity is buffered for 250 ms or 50 source records, then adjacent records from
 the same originator are compacted into bounded 16 KiB rows before one batch transaction. This avoids
