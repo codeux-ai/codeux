@@ -52,6 +52,10 @@ Save creates the preset and broadcasts a real-time event so connected clients re
 
 Open the detail panel and click **Edit**. All fields are editable; saving creates a new revision (older revisions are discarded — agent presets are mutable, not versioned).
 
+If you select another agent, an instruction file, a different project, or another dashboard route with unsaved edits, Code UX keeps the current editor open and asks what to do. You can **Save changes** and continue, **Discard without saving**, or **Keep editing**. A failed save leaves the draft and dialog open so you can retry, and if you request another destination while saving, only the latest destination opens after the save succeeds. Closing or refreshing the browser tab still uses the browser's standard unsaved-change warning.
+
+These states do not depend on animation. Reduced-motion mode removes the editor transition while keeping the selected border, status text, validation messages, and focus indicators visible.
+
 ## Importing, pulling, and pushing markdown
 
 Agent presets can be defined as markdown files inside `<repo>/.code-ux/agents/<preset_name>.md` with JSON frontmatter (the filename stem is normalized to become the preset's display name):
@@ -105,6 +109,8 @@ Destructive. Requires confirmation. Threads and tasks that referenced the delete
 ## Instruction Files
 
 Instruction files are separate markdown documents that act as reusable prompt components. You can manage them with the Instruction Files editor and include them inside agent instructions.
+
+Instruction-file drafts receive the same save, discard, and keep-editing protection as agent drafts. **Revert changes** opens a named Code UX dialog for the selected file instead of a browser confirmation; Escape or **Keep editing** cancels and returns focus to the Revert button, while confirmation restores the last saved file content.
 
 ## Routing presets to invocation types
 

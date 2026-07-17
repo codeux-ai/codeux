@@ -35,6 +35,10 @@ Preview containers can also receive custom environment variables:
 - Runtime-owned names such as `PORT`, `HOST`, `HOME`, `DASHBOARD_PORT`, `SPRINT_PREVIEW_*`, and `CODE_UX_GIT_USER_*` are reserved for Code UX routing.
 - Disabled override rows suppress an inherited default with the same key.
 
+Container overrides open in a keyboard-trapped modal and return focus to the exact **Env** control that opened it. If the override draft differs from the saved session values, closing it or moving to another preview target asks you to **Save and continue**, **Discard and continue**, or **Keep editing**. Invalid, duplicate, reserved, multiline, or oversized entries stay in the editor and the first invalid name receives focus; no backend update runs until the draft is valid.
+
+Saving and rebuilding are separate operations. A failed environment save leaves the full draft available with retry feedback, while a discarded draft performs no backend work. Session and target controls remain visibly unavailable only while a conflicting save or container transition is pending. Late results for a project, session, or target you have already left are ignored.
+
 For example, a Code UX app running inside a preview container can set `CODE_UX_ALLOW_PUBLIC_DASHBOARD=1` as a container override while Code UX still binds the host-facing preview port to `127.0.0.1`.
 
 The right sidebar provides a selected-container startup command override. Preview proxy headers use one coherent `localhost:<mapped-port>` upstream boundary so strict host validation works in the embedded view and external preview link.
@@ -74,6 +78,10 @@ The preview session cards sit below the browser pane, keeping the browser worksp
 ## Editing the preview script
 
 The script can be customized directly through the Browser page and saves to the project's runtime or the sprint snapshot. Editing it via the dashboard saves it using the `update_script` API/MCP tool so it applies directly to the specific sprint workspace.
+
+Collapsing a changed script editor or selecting a different preview session requires the same save/discard/keep-editing decision used by environment overrides. Code UX retains the requested destination until saving or discarding completes. Failed saves keep the script text and retry feedback available, and late responses from a previous project or sprint cannot replace the current draft.
+
+The environment and script dialogs trap keyboard focus and restore it to their exact opener. With reduced motion enabled, modal entry, exit, and session-rail movement occur without animation or displacement; dirty, pending, invalid, failed, and completed states remain visible through text and control state.
 
 ## Quotas
 

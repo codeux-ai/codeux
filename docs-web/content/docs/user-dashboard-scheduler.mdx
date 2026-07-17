@@ -103,6 +103,16 @@ From the page you can:
 - **Pause / resume** an entry without deleting it.
 - **Delete** an entry.
 
+Pause/resume and delete actions run independently for each row. While one action is running, only that action is disabled, so other schedule entries remain available. Repeated clicks do not send duplicate requests. A successful pause or resume is confirmed in the affected row; a failure remains visible there with a **Retry** action.
+
+Delete opens an in-dashboard confirmation dialog that names the schedule. The dialog can be dismissed with **Cancel** or Escape, returning focus to the Delete action that opened it. Its confirmation remains pending until the request finishes. After a successful deletion, focus moves to the next surviving schedule row, the previous row when needed, or the Scheduled entries heading when the list is empty. A visible success message confirms deletion even when motion is reduced.
+
+Form validation stays next to the field that needs attention. Submitting an invalid draft marks and describes the field, moves focus to the first invalid control, and preserves everything already entered so it can be corrected in place.
+
+Refresh keeps the last usable calendar and entry list visible while updated data loads. If refresh fails, those cached rows remain on screen with an error that can be retried; an older refresh response cannot overwrite newer results.
+
+Scheduler tabs, target choices, expanding recurrence fields, and list updates follow the dashboard's shared motion settings. Reduced-motion mode removes transition time without removing selected, pending, success, or error states, so feedback never depends on animation alone.
+
 Scheduler changes broadcast over the dashboard's realtime channel, so the calendar stays in sync
 across open clients. Scheduled runs appear in the [Live Session](/docs/user-dashboard-live-session) and
 [Stats](/docs/user-dashboard-stats) views just like manually started work.

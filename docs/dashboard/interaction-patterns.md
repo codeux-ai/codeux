@@ -68,6 +68,18 @@ Current refined dashboard surfaces use the interaction contracts as follows:
 | Memory workspace | `controlFeedback`, `selectionMovement`, `listReveal`, `listReorder`, `expansionCollapse`, `inlineValidation`, `asyncFeedback` | Search/filter/selection changes announce counts and selected state; background refresh or failed refresh keeps the last useful list visible; batch delete uses confirmation, optimistic feedback, retry, and focus restoration; reduced motion keeps badges, rings, and live-region copy for selected graph/list state. |
 | Task cards and active streams | `controlFeedback`, `selectionMovement`, `listReorder`, `asyncFeedback` | Status, dependency blockers, QA review, and PR/live metadata keep stable text equivalents; quick actions sit in the card footer and are visually revealed on hover or keyboard focus while remaining in the keyboard path with task-specific names. Low-value metadata such as the default `Auto` executor and pointer-only drag helper chip are omitted from visible card metadata, while screen-reader drag guidance, pending dispatch, `aria-busy`, disabled state, and reason text remain available. Task-board cards are keyed by stable card view-model identities so unrelated live events and filter announcements preserve mounted card controls instead of rerendering unchanged cards. Sprint selector running dots keep color, shadow, option labels, and selected/loading badges available when reduced motion disables pulse animation. |
 
+### Route-owned refinement contract
+
+Nodes, Scheduler, Custom Dashboards, Agents, Onboarding, Projects, Knowledge, Browser Preview, and Chat own their feature-specific workflows, but share the following acceptance boundary:
+
+- Dirty editors defer route, project, selection, or environment changes through `UnsavedChangesModal`. Cancel and Escape keep the draft and current surface; save or explicit discard applies the retained destination once.
+- Destructive work uses `useConfirmDialog` with `ConfirmDialog`. The dialog owns naming, focus containment, Escape, duplicate-confirm suppression, pending state, and restoration to the trigger. When the trigger is removed by the confirmed mutation, the route moves focus to the next logical row or a named list/page fallback.
+- Pending, success, warning, and retryable error results remain operation-specific. Pending controls expose `aria-busy` or disabled state, repeated activation does not issue another request, and retry remains attached to the failed target.
+- Nodes and tabbed workbenches expose keyboard state through pressed/tab semantics and live announcements. Pointer movement or an animated indicator is never the only way to understand the change.
+- Reduced motion resolves optional movement to zero duration while leaving the resulting selection, position, pending state, error, retry, and live-region message immediately available.
+
+Feature details stay on the route-owned pages: [Node Flows](./node-flows.md), [Scheduler](./scheduler.md), [Custom Dashboards](./custom-dashboards.md), [Agents](./design-system-agents.md), [Onboarding](./onboarding.md), [Projects](./design-system-projects.md), [Knowledge and secondary pages](./design-system-secondary-pages.md), [Browser Preview](./browser-preview.md), and [Chat](./design-system-chat.md).
+
 ## Cross-Surface Interaction Rules
 
 - The delivery workflow badge replaces the standalone QA/CI disclosures wherever task or sprint delivery state is shown. Live also uses it instead of the separate task lifecycle badge; Tasks, Sprints, and Overview keep their surrounding lifecycle context.
@@ -183,3 +195,24 @@ pnpm run typecheck:dashboard
 ```
 
 Run `pnpm run build` when changes touch shared contracts, routing, CSS token boundaries, imports, or production bundling behavior. Do not record a check as passed unless it was run for the current change.
+
+## Executable Acceptance Contract
+
+`tests/e2e/navigation/interaction-refinement.spec.ts` fans representative route behavior into one browser-level contract. It runs only with the Playwright isolated local Git project fixture, creates generic records, never dispatches provider work, removes the project and its children after each case, and attaches only generic fixture metadata on failure. Playwright retains trace, screenshot, and video diagnostics for failures through the repository configuration.
+
+The suite proves:
+
+- dirty-agent cancellation and retained-route continuation;
+- confirmation focus containment, Escape cancellation, and trigger restoration;
+- scheduler duplicate-delete suppression, operation-specific pending/error/retry state, and logical focus after removal;
+- keyboard node movement with an announced position; and
+- reduced-motion equivalence without animation sleeps or delayed polling assertions.
+
+Run the source/rendered regression guards and browser contract with:
+
+```bash
+pnpm exec vitest run tests/dashboard/accessibility/dashboard-quality-regressions.test.tsx
+pnpm run test:e2e -- tests/e2e/navigation/interaction-refinement.spec.ts
+```
+
+Browser assertions wait for roles, focus, request completion, and visible state. Do not replace those waits with fixed sleeps.

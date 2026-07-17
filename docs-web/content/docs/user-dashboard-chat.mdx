@@ -195,7 +195,15 @@ The composer at the bottom supports:
 - **Slash commands** that invoke management actions inline.
 - **Attachments** *(planned)*.
 
+Threads and 3D Chat show the same delivery panel beneath the field. It tells you when the composer is unavailable, ready, sending, queued, sent/processed, or failed, and both the field and Send button reference that explanation for assistive technology. Normal progress is announced politely; failures remain visible and are announced assertively. Reduced-motion mode removes decorative timing, not the status text, disabled styling, or delivery cues.
+
+Send, Enter, stage quick actions, and Retry share one in-flight guard, so repeated clicks or key presses cannot submit the same action while it is pending. Code UX does not show a sent state until the current server delivery contract confirms one.
+
+If a composer send fails, its exact text remains in the field and an explicit **Retry** action appears. Retry is tied to the project, thread, and routed agent where the failure occurred. Switching project, thread, or agent removes that retry candidate, preventing an old message from being sent to the newly selected recipient. A successful retry clears the unchanged recovered draft; editing the text keeps your edit but invalidates retry for the old version. Delivery records that later report failure can likewise be retried from their stored message text.
+
 Use the microphone control to dictate into the current thread draft. When transcription succeeds, Code UX inserts the transcript at the current caret position when the composer selection is available; otherwise it appends the text to the end of the draft with normal spacing. The composer resizes after insertion, and you can edit the dictated text before pressing Enter or Send.
+
+After sending, retrying, dictating, or switching threads or routed agents, focus returns to the active composer. Code UX restores that chat context's remembered selection when possible and otherwise places the caret at the end of its draft. Recent-message ArrowUp/ArrowDown behavior remains boundary-aware, so multi-line cursor movement is not mistaken for history recall.
 
 Speech input is available for project Threads and 3D Chat. It is disabled while a message is sending and is not shown in no-project assistant chat or invocation transcripts. If the browser cannot record audio, microphone permission is denied, the local speech model is missing, or the configured provider fails, the button reports the failure and leaves the draft unchanged so you can retry or type normally.
 

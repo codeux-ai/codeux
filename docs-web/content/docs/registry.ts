@@ -109,7 +109,9 @@ export type DocsSlug =
   | 'operations-security-hardening'
   | 'operations-server-mode'
   | 'settings-google-drive-mount'
+  | 'user-dashboard-accessibility-quality-audit'
   | 'user-dashboard-custom-dashboards'
+  | 'user-dashboard-interaction-patterns'
   | 'architecture-card-ci-status-projection'
   | 'architecture-chat-connector-runtime-reliability'
   | 'architecture-chat-connectors-discord'
@@ -884,12 +886,26 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Google Drive Project Mount",
     description: "The Google Drive project mount makes an existing local Google Drive sync or mount directory available to Docker-backed provider runs. Code UX does not connect to the Google Drive API, manage Google credentials, or syn...",
   },
+  'user-dashboard-accessibility-quality-audit': {
+    id: 'user-dashboard-accessibility-quality-audit',
+    path: '/docs/user-dashboard-accessibility-quality-audit',
+    section: 'User Guide',
+    title: "Dashboard Accessibility Quality Audit",
+    description: "Use this checklist when reviewing dashboard interaction changes.",
+  },
   'user-dashboard-custom-dashboards': {
     id: 'user-dashboard-custom-dashboards',
     path: '/docs/user-dashboard-custom-dashboards',
     section: 'User Guide',
     title: "Custom Dashboards",
     description: "Custom dashboards are project-scoped dashboard apps generated and revised by agents, then validated in a detached Docker runtime before publication. Use them when the built-in dashboard pages do not match the operatio...",
+  },
+  'user-dashboard-interaction-patterns': {
+    id: 'user-dashboard-interaction-patterns',
+    path: '/docs/user-dashboard-interaction-patterns',
+    section: 'User Guide',
+    title: "Dashboard Interaction Patterns",
+    description: "The running dashboard uses shared contracts for confirmations, dirty drafts, asynchronous feedback, keyboard operation, focus, and reduced motion. Route pages keep their feature-specific behavior; these rules define t...",
   },
   'architecture-card-ci-status-projection': {
     id: 'architecture-card-ci-status-projection',
@@ -1154,7 +1170,9 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['operations-security-hardening'],
   docsRegistry['operations-server-mode'],
   docsRegistry['settings-google-drive-mount'],
+  docsRegistry['user-dashboard-accessibility-quality-audit'],
   docsRegistry['user-dashboard-custom-dashboards'],
+  docsRegistry['user-dashboard-interaction-patterns'],
   docsRegistry['architecture-card-ci-status-projection'],
   docsRegistry['architecture-chat-connector-runtime-reliability'],
   docsRegistry['architecture-chat-connectors-discord'],
