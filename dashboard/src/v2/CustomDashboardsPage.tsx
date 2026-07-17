@@ -7,8 +7,10 @@ import { Button } from "./components/ui/Button.js";
 import { EmptyState } from "./components/ui/EmptyState.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
+import { UnsavedChangesModal } from "./components/ui/UnsavedChangesModal.js";
 import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
+import { useUnsavedChangesGuard } from "./hooks/useUnsavedChangesGuard.js";
 import { useProjectData } from "./context/project-data.js";
 import {
   archiveCustomDashboard,
@@ -44,8 +46,11 @@ import {
 import { CustomDashboardList } from "./components/custom-dashboards/CustomDashboardList.js";
 import {
   CustomDashboardEditorPanel,
+  type CustomDashboardDraftErrors,
   type CustomDashboardDraftState,
+  type CustomDashboardEditorFocusRequest,
   type CustomDashboardEditorTab,
+  type CustomDashboardJsonDraftField,
 } from "./components/custom-dashboards/CustomDashboardEditorPanel.js";
 import { CustomDashboardValidationPanel } from "./components/custom-dashboards/CustomDashboardValidationPanel.js";
 import { CustomDashboardCredentialSlotsPanel } from "./components/custom-dashboards/CustomDashboardCredentialSlotsPanel.js";
@@ -71,6 +76,26 @@ import { customDashboardMessages } from "./i18n/messages/custom-dashboards.js";
 const terminalValidationStatuses = new Set(["passed", "failed", "cancelled"]);
 
 type CustomDashboardPageMode = "editor" | "viewer";
+type ValidationPollingState = "idle" | "active" | "stale" | "recovering" | "failed";
+
+interface PendingWorkspaceTransition {
+  key: string;
+  run: () => void | Promise<void>;
+}
+
+class DraftValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DraftValidationError";
+  }
+}
+
+const JSON_FIELD_TABS: Record<CustomDashboardJsonDraftField, CustomDashboardEditorTab> = {
+  manifestText: "manifest",
+  fileBundleText: "files",
+  sourceGraphText: "sources",
+  styleguideText: "styleguide",
+};
 
 function getInitialDashboardPageState(): { dashboardId: string | null; mode: CustomDashboardPageMode } {
   if (typeof window === "undefined") {
@@ -96,8 +121,9 @@ function dashboardToDraft(dashboard: CustomDashboardRecord): CustomDashboardDraf
 
 export const CustomDashboardsPage: FunctionComponent = () => {
   const { locale, translate } = useDashboardI18n();
-  const { selectedProject, loading: projectLoading } = useProjectData();
-  const projectId = selectedProject?.id ?? null;
+  const { selectedProject, loading: projectLoading, selectProject } = useProjectData();
+  const contextProjectId = selectedProject?.id ?? null;
+  const [projectId, setProjectId] = useState<string | null>(contextProjectId);
   const initialPageState = useMemo(() => getInitialDashboardPageState(), []);
   const [dashboards, setDashboards] = useState<CustomDashboardRecord[]>([]);
   const [selectedDashboardId, setSelectedDashboardId] = useState<string | null>(initialPageState.dashboardId);
@@ -115,6 +141,8 @@ export const CustomDashboardsPage: FunctionComponent = () => {
   const [credentialSlotErrors, setCredentialSlotErrors] = useState<Record<string, string>>({});
   const [credentialSlotAnnouncements, setCredentialSlotAnnouncements] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<CustomDashboardDraftState | null>(null);
+  const [draftErrors, setDraftErrors] = useState<CustomDashboardDraftErrors>({});
+  const [editorFocusRequest, setEditorFocusRequest] = useState<CustomDashboardEditorFocusRequest | null>(null);
   const [activeTab, setActiveTab] = useState<CustomDashboardEditorTab>("manifest");
   const [selectedFilePath, setSelectedFilePath] = useState("src/dashboard.tsx");
   const [validationSession, setValidationSession] = useState<CustomDashboardValidationSessionRecord | null>(null);
@@ -125,6 +153,10 @@ export const CustomDashboardsPage: FunctionComponent = () => {
   const [creatingRevision, setCreatingRevision] = useState(false);
   const [validating, setValidating] = useState(false);
   const [refreshingLogs, setRefreshingLogs] = useState(false);
+  const [pollingState, setPollingState] = useState<ValidationPollingState>("idle");
+  const [pollingError, setPollingError] = useState<string | null>(null);
+  const [validationAnnouncement, setValidationAnnouncement] = useState("");
+  const [retryingPoll, setRetryingPoll] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const {
@@ -135,8 +167,16 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     clearError,
   } = useActionFeedback();
   const archiveConfirm = useConfirmDialog();
+  const [pendingTransition, setPendingTransition] = useState<PendingWorkspaceTransition | null>(null);
+  const [discardingTransition, setDiscardingTransition] = useState(false);
   const bindingActionControllerRef = useRef<AbortController | null>(null);
   const credentialLoadControllerRef = useRef<AbortController | null>(null);
+  const dirtyRef = useRef(false);
+  const validationIdentityRef = useRef(0);
+  const validationStatusAnnouncementRef = useRef("");
+  const pollingAnnouncementRef = useRef<ValidationPollingState>("idle");
+  const retryPollRef = useRef<(() => Promise<void>) | null>(null);
+  const selectedRevisionIdRef = useRef<string | null>(selectedRevisionId);
 
   const selectedRevision = useMemo(
     () => revisions.find((revision) => revision.id === selectedRevisionId) ?? null,
@@ -144,6 +184,91 @@ export const CustomDashboardsPage: FunctionComponent = () => {
   );
   const dirty = useMemo(() => draft ? hasDraftChanged(selectedDashboard, draft) : false, [draft, selectedDashboard]);
   const hasCredentialSlots = Boolean(selectedDashboard?.manifest.credentialSlots?.length);
+  dirtyRef.current = dirty;
+  selectedRevisionIdRef.current = selectedRevisionId;
+  useUnsavedChangesGuard(dirty, { message: translate(customDashboardMessages, "unsavedNavigationWarning") });
+
+  const clearValidationPolling = useCallback((): void => {
+    validationIdentityRef.current += 1;
+    retryPollRef.current = null;
+    setValidationSession(null);
+    setPollingState("idle");
+    setPollingError(null);
+    setRetryingPoll(false);
+    setValidationAnnouncement("");
+    validationStatusAnnouncementRef.current = "";
+  }, []);
+
+  const resetValidationWorkspace = useCallback((): void => {
+    clearValidationPolling();
+    setLogs("");
+    setRefreshingLogs(false);
+  }, [clearValidationPolling]);
+
+  const announceValidationStatus = useCallback((session: CustomDashboardValidationSessionRecord): void => {
+    const announcementKey = `${session.id}:${session.status}`;
+    if (validationStatusAnnouncementRef.current === announcementKey) {
+      return;
+    }
+    validationStatusAnnouncementRef.current = announcementKey;
+    setValidationAnnouncement(translate(customDashboardMessages, "validationStatus", {
+      status: getRevisionValidationLabel(session.status, locale),
+    }));
+  }, [locale, translate]);
+
+  const getDraftFieldError = useCallback((field: CustomDashboardJsonDraftField, valueOverride?: string): string | null => {
+    if (!draft) {
+      return translate(customDashboardMessages, "noDraftSelected");
+    }
+    const fieldConfig: Record<CustomDashboardJsonDraftField, { value: string; label: string }> = {
+      manifestText: { value: draft.manifestText, label: translate(customDashboardMessages, "manifestFieldName") },
+      fileBundleText: { value: draft.fileBundleText, label: translate(customDashboardMessages, "fileBundleFieldName") },
+      sourceGraphText: { value: draft.sourceGraphText, label: translate(customDashboardMessages, "sourceGraphFieldName") },
+      styleguideText: { value: draft.styleguideText, label: translate(customDashboardMessages, "styleguideFieldName") },
+    };
+    const config = fieldConfig[field];
+    const result = parseJsonDraft<unknown>(valueOverride ?? config.value, config.label, locale);
+    return result.ok ? null : result.message;
+  }, [draft, locale, translate]);
+
+  const validateDraftField = useCallback((field: CustomDashboardJsonDraftField, valueOverride?: string): boolean => {
+    const error = getDraftFieldError(field, valueOverride);
+    setDraftErrors((current) => {
+      if (error) {
+        return { ...current, [field]: error };
+      }
+      const remaining = { ...current };
+      delete remaining[field];
+      return remaining;
+    });
+    return error === null;
+  }, [getDraftFieldError]);
+
+  const focusInvalidDraftField = useCallback((field: CustomDashboardJsonDraftField): void => {
+    setActiveTab(JSON_FIELD_TABS[field]);
+    setEditorFocusRequest((current) => ({ field, nonce: (current?.nonce ?? 0) + 1 }));
+  }, []);
+
+  const requestWorkspaceTransition = useCallback((transition: PendingWorkspaceTransition): void => {
+    if (dirtyRef.current) {
+      setPendingTransition(transition);
+      return;
+    }
+    void transition.run();
+  }, []);
+
+  const commitProjectTransition = useCallback((nextProjectId: string | null): void => {
+    setProjectId(nextProjectId);
+    setDashboards([]);
+    setSelectedDashboardId(null);
+    setSelectedDashboard(null);
+    setRevisions([]);
+    setSelectedRevisionId(null);
+    setDraft(null);
+    setDraftErrors({});
+    setEditorFocusRequest(null);
+    resetValidationWorkspace();
+  }, [resetValidationWorkspace]);
 
   const adoptCredentialReview = useCallback((review: CustomDashboardCredentialBindingReview): void => {
     setCredentialReview(review);
@@ -229,17 +354,32 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       setSelectedDashboard(detail.dashboard);
       setDashboards((current) => current.map((dashboard) => dashboard.id === detail.dashboard.id ? detail.dashboard : dashboard));
       setRevisions(detail.revisions);
-      const nextRevision = detail.revisions.find((revision) => revision.id === selectedRevisionId)
+      const nextRevision = detail.revisions.find((revision) => revision.id === selectedRevisionIdRef.current)
         ?? selectLatestRevision(detail.revisions);
       setSelectedRevisionId(nextRevision?.id ?? null);
-      setDraft(dashboardToDraft(detail.dashboard));
-      setSelectedFilePath(detail.dashboard.fileBundle.files[0]?.path ?? "src/dashboard.tsx");
+      if (!dirtyRef.current) {
+        setDraft(dashboardToDraft(detail.dashboard));
+        setDraftErrors({});
+        setEditorFocusRequest(null);
+        setSelectedFilePath(detail.dashboard.fileBundle.files[0]?.path ?? "src/dashboard.tsx");
+      }
     } catch (error) {
       if (!signal?.aborted) {
         setError(error instanceof Error ? error.message : translate(customDashboardMessages, "loadDetailsFailed"));
       }
     }
-  }, [selectedRevisionId, setError, translate]);
+  }, [setError, translate]);
+
+  useEffect(() => {
+    if (contextProjectId === projectId) {
+      return;
+    }
+    const transition: PendingWorkspaceTransition = {
+      key: `project:${contextProjectId ?? "none"}`,
+      run: () => commitProjectTransition(contextProjectId),
+    };
+    requestWorkspaceTransition(transition);
+  }, [commitProjectTransition, contextProjectId, projectId, requestWorkspaceTransition]);
 
   useEffect(() => {
     if (!projectId) {
@@ -330,6 +470,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       if (controller.signal.aborted) return;
       adoptCredentialReview(review);
       setCredentialSlotAnnouncements((current) => ({ ...current, [slotId]: announcement }));
+      validationIdentityRef.current += 1;
       setValidationSession(null);
       setLogs("");
       await loadDashboardDetail(mutationDashboardId, controller.signal);
@@ -395,20 +536,21 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       throw new Error(translate(customDashboardMessages, "noDraftSelected"));
     }
     const manifest = parseJsonDraft<CustomDashboardManifest>(draft.manifestText, translate(customDashboardMessages, "manifestFieldName"), locale);
-    if (!manifest.ok) {
-      throw new Error(manifest.message);
-    }
     const fileBundle = parseJsonDraft<CustomDashboardFileBundle>(draft.fileBundleText, translate(customDashboardMessages, "fileBundleFieldName"), locale);
-    if (!fileBundle.ok) {
-      throw new Error(fileBundle.message);
-    }
     const sourceNodeGraph = parseJsonDraft<CustomDashboardDataSourceNodeGraph>(draft.sourceGraphText, translate(customDashboardMessages, "sourceGraphFieldName"), locale);
-    if (!sourceNodeGraph.ok) {
-      throw new Error(sourceNodeGraph.message);
-    }
     const styleguide = parseJsonDraft<CustomDashboardJsonObject>(draft.styleguideText, translate(customDashboardMessages, "styleguideFieldName"), locale);
-    if (!styleguide.ok) {
-      throw new Error(styleguide.message);
+    const nextErrors: CustomDashboardDraftErrors = {
+      ...(!manifest.ok ? { manifestText: manifest.message } : {}),
+      ...(!fileBundle.ok ? { fileBundleText: fileBundle.message } : {}),
+      ...(!sourceNodeGraph.ok ? { sourceGraphText: sourceNodeGraph.message } : {}),
+      ...(!styleguide.ok ? { styleguideText: styleguide.message } : {}),
+    };
+    const firstInvalidField = (Object.keys(nextErrors) as CustomDashboardJsonDraftField[])[0];
+    setDraftErrors(nextErrors);
+    if (!manifest.ok || !fileBundle.ok || !sourceNodeGraph.ok || !styleguide.ok) {
+      const invalidField = firstInvalidField ?? "manifestText";
+      focusInvalidDraftField(invalidField);
+      throw new DraftValidationError(nextErrors[invalidField] ?? translate(customDashboardMessages, "invalidDraftJson"));
     }
     return {
       title: draft.title.trim() || manifest.value.title || "Untitled Dashboard",
@@ -418,7 +560,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       sourceNodeGraph: sourceNodeGraph.value,
       styleguide: styleguide.value,
     };
-  }, [draft, locale, translate]);
+  }, [draft, focusInvalidDraftField, locale, translate]);
 
   const saveDraft = useCallback(async (): Promise<CustomDashboardRecord> => {
     if (!selectedDashboard) {
@@ -429,6 +571,8 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     setSelectedDashboard(updated);
     setDashboards((current) => current.map((dashboard) => dashboard.id === updated.id ? updated : dashboard));
     setDraft(dashboardToDraft(updated));
+    setDraftErrors({});
+    setEditorFocusRequest(null);
     return updated;
   }, [buildDraftInput, selectedDashboard, translate]);
 
@@ -445,7 +589,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     }
   };
 
-  const handleCreateDashboard = async (): Promise<void> => {
+  const createDashboard = async (): Promise<void> => {
     if (!projectId) {
       return;
     }
@@ -455,12 +599,90 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       const created = await createCustomDashboard(projectId, createDefaultCustomDashboardDraft());
       setDashboards((current) => [created, ...current]);
       setSelectedDashboardId(created.id);
+      setPageMode("editor");
+      resetValidationWorkspace();
       setSuccess(translate(customDashboardMessages, "dashboardCreated"));
       await loadProjectDashboards(projectId);
     } catch (error) {
       setError(error instanceof Error ? error.message : translate(customDashboardMessages, "createFailed"));
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleCreateDashboard = (): void => {
+    requestWorkspaceTransition({
+      key: "dashboard:create",
+      run: createDashboard,
+    });
+  };
+
+  const handleSelectDashboard = (dashboardId: string): void => {
+    if (dashboardId === selectedDashboardId && pageMode === "editor") {
+      return;
+    }
+    requestWorkspaceTransition({
+      key: `dashboard:${dashboardId}`,
+      run: () => {
+        setSelectedDashboardId(dashboardId);
+        setPageMode("editor");
+        resetValidationWorkspace();
+      },
+    });
+  };
+
+  const handleOpenViewer = (): void => {
+    requestWorkspaceTransition({
+      key: "mode:viewer",
+      run: () => setPageMode("viewer"),
+    });
+  };
+
+  const handleKeepEditing = (): void => {
+    const restoringProject = pendingTransition?.key.startsWith("project:") ?? false;
+    setPendingTransition(null);
+    if (restoringProject && projectId && contextProjectId !== projectId) {
+      void selectProject(projectId).catch((error) => {
+        setError(error instanceof Error ? error.message : translate(customDashboardMessages, "projectRestoreFailed"));
+      });
+    }
+  };
+
+  const handleDiscardAndContinue = async (): Promise<void> => {
+    if (!pendingTransition) {
+      return;
+    }
+    const transition = pendingTransition;
+    setDiscardingTransition(true);
+    setDraft(selectedDashboard ? dashboardToDraft(selectedDashboard) : null);
+    setDraftErrors({});
+    setEditorFocusRequest(null);
+    setPendingTransition(null);
+    try {
+      await transition.run();
+    } finally {
+      setDiscardingTransition(false);
+    }
+  };
+
+  const handleSaveAndContinue = async (): Promise<void> => {
+    if (!pendingTransition) {
+      return;
+    }
+    const transition = pendingTransition;
+    setSaving(true);
+    clearFeedback();
+    try {
+      await saveDraft();
+      setPendingTransition(null);
+      await transition.run();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : translate(customDashboardMessages, "saveFailed"));
+      if (error instanceof DraftValidationError) {
+        setPendingTransition(null);
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -478,8 +700,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       const revision = await createCustomDashboardRevision(selectedDashboard.id, input);
       setRevisions((current) => [revision, ...current.filter((item) => item.id !== revision.id)]);
       setSelectedRevisionId(revision.id);
-      setValidationSession(null);
-      setLogs("");
+      resetValidationWorkspace();
       setSuccess(translate(customDashboardMessages, "revisionCreated", { number: revision.revisionNumber }));
       await refreshSelectedDashboard();
     } catch (error) {
@@ -489,17 +710,31 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     }
   };
 
-  const refreshLogs = useCallback(async (sessionId: string): Promise<void> => {
+  const refreshLogs = useCallback(async (
+    sessionId: string,
+    signal?: AbortSignal,
+    expectedIdentity?: number,
+  ): Promise<boolean> => {
     setRefreshingLogs(true);
     try {
-      const response = await fetchCustomDashboardValidationLogs(sessionId, 300);
+      const response = await fetchCustomDashboardValidationLogs(sessionId, 300, signal);
+      if (signal?.aborted || (expectedIdentity !== undefined && validationIdentityRef.current !== expectedIdentity)) {
+        return false;
+      }
       setLogs(response.logs);
+      return true;
     } catch (error) {
-      setError(error instanceof Error ? error.message : translate(customDashboardMessages, "logsLoadFailed"));
+      if (!signal?.aborted && (expectedIdentity === undefined || validationIdentityRef.current === expectedIdentity)) {
+        setPollingError(error instanceof Error ? error.message : translate(customDashboardMessages, "logsLoadFailed"));
+        setPollingState("stale");
+      }
+      return false;
     } finally {
-      setRefreshingLogs(false);
+      if (!signal?.aborted) {
+        setRefreshingLogs(false);
+      }
     }
-  }, [setError, translate]);
+  }, [translate]);
 
   const handleStartValidation = async (): Promise<void> => {
     if (!projectId || !selectedDashboard || !selectedRevision) {
@@ -507,14 +742,27 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     }
     setValidating(true);
     setLogs("");
+    setPollingError(null);
     clearFeedback();
+    const validationIdentity = ++validationIdentityRef.current;
+    const requestedDashboardId = selectedDashboard.id;
+    const requestedRevisionId = selectedRevision.id;
     try {
-      const session = await startCustomDashboardValidation(selectedDashboard.id, selectedRevision.id, projectId);
+      const session = await startCustomDashboardValidation(requestedDashboardId, requestedRevisionId, projectId);
+      if (
+        validationIdentityRef.current !== validationIdentity
+        || session.dashboardId !== requestedDashboardId
+        || session.revisionId !== requestedRevisionId
+      ) {
+        return;
+      }
+      announceValidationStatus(session);
+      await refreshLogs(session.id, undefined, validationIdentity);
+      if (validationIdentityRef.current !== validationIdentity) {
+        return;
+      }
       setValidationSession(session);
-      await refreshLogs(session.id);
-      setSuccess(translate(customDashboardMessages, "validationStatus", {
-        status: getRevisionValidationLabel(session.status, locale),
-      }));
+      setSuccess(translate(customDashboardMessages, "validationStarted"));
       if (terminalValidationStatuses.has(session.status)) {
         await refreshSelectedDashboard();
       }
@@ -527,37 +775,134 @@ export const CustomDashboardsPage: FunctionComponent = () => {
 
   useEffect(() => {
     if (!validationSession || terminalValidationStatuses.has(validationSession.status)) {
+      retryPollRef.current = null;
+      setPollingState("idle");
       return;
     }
-    let cancelled = false;
-    const interval = window.setInterval(() => {
-      void fetchCustomDashboardValidationSession(validationSession.id)
-        .then((session) => {
-          if (cancelled) {
-            return;
+    const sessionId = validationSession.id;
+    const dashboardId = selectedDashboardId;
+    const revisionId = validationSession.revisionId;
+    const identity = ++validationIdentityRef.current;
+    const controller = new AbortController();
+    let intervalId: number | null = null;
+    let inFlight = false;
+    let consecutiveFailures = 0;
+    let recovering = false;
+
+    const isCurrent = (): boolean => (
+      !controller.signal.aborted
+      && validationIdentityRef.current === identity
+    );
+
+    const updatePollingState = (state: ValidationPollingState, message?: string): void => {
+      if (!isCurrent()) {
+        return;
+      }
+      setPollingState(state);
+      if (message) {
+        setPollingError(message);
+      }
+      if (pollingAnnouncementRef.current !== state) {
+        pollingAnnouncementRef.current = state;
+        const messageKey = state === "stale"
+          ? "validationPollingStale"
+          : state === "recovering"
+            ? "validationPollingRecovering"
+            : state === "failed"
+              ? "validationPollingFailed"
+              : "validationPollingActive";
+        setValidationAnnouncement(translate(customDashboardMessages, messageKey));
+      }
+    };
+
+    const pollOnce = async (): Promise<void> => {
+      if (inFlight || !isCurrent()) {
+        return;
+      }
+      inFlight = true;
+      try {
+        const session = await fetchCustomDashboardValidationSession(sessionId, controller.signal);
+        if (
+          !isCurrent()
+          || session.id !== sessionId
+          || session.dashboardId !== dashboardId
+          || session.revisionId !== revisionId
+        ) {
+          return;
+        }
+        const logResponse = await fetchCustomDashboardValidationLogs(sessionId, 300, controller.signal);
+        if (!isCurrent()) {
+          return;
+        }
+        const hadFailures = consecutiveFailures > 0;
+        consecutiveFailures = 0;
+        setLogs(logResponse.logs);
+        setPollingError(null);
+        setValidationSession(session);
+        announceValidationStatus(session);
+        if (hadFailures) {
+          recovering = true;
+          updatePollingState("recovering");
+        } else if (recovering) {
+          recovering = false;
+          updatePollingState("active");
+        } else {
+          updatePollingState("active");
+        }
+        if (terminalValidationStatuses.has(session.status)) {
+          if (intervalId !== null) {
+            window.clearInterval(intervalId);
+            intervalId = null;
           }
-          setValidationSession(session);
-          void refreshLogs(session.id);
-          if (terminalValidationStatuses.has(session.status)) {
-            void refreshSelectedDashboard();
-          }
-        })
-        .catch((error) => {
-          if (!cancelled) {
-            setError(error instanceof Error ? error.message : translate(customDashboardMessages, "validationPollFailed"));
-          }
-        });
+          retryPollRef.current = null;
+          setPollingState("idle");
+          await refreshSelectedDashboard();
+        }
+      } catch (error) {
+        if (!isCurrent()) {
+          return;
+        }
+        consecutiveFailures += 1;
+        const message = error instanceof Error ? error.message : translate(customDashboardMessages, "validationPollFailed");
+        updatePollingState(consecutiveFailures >= 3 ? "failed" : "stale", message);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    pollingAnnouncementRef.current = "idle";
+    updatePollingState("active");
+    retryPollRef.current = async () => {
+      setRetryingPoll(true);
+      try {
+        await pollOnce();
+      } finally {
+        if (isCurrent()) {
+          setRetryingPoll(false);
+        }
+      }
+    };
+    intervalId = window.setInterval(() => {
+      void pollOnce();
     }, 2500);
     return () => {
-      cancelled = true;
-      window.clearInterval(interval);
+      controller.abort();
+      validationIdentityRef.current += 1;
+      retryPollRef.current = null;
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
     };
-  }, [refreshLogs, refreshSelectedDashboard, setError, translate, validationSession]);
+  }, [announceValidationStatus, refreshSelectedDashboard, selectedDashboardId, translate, validationSession?.id]);
 
   const handleRefreshLogs = async (): Promise<void> => {
     if (validationSession) {
-      await refreshLogs(validationSession.id);
+      await refreshLogs(validationSession.id, undefined, validationIdentityRef.current);
     }
+  };
+
+  const handleRetryValidationPoll = (): void => {
+    void retryPollRef.current?.();
   };
 
   const handlePublish = async (): Promise<void> => {
@@ -627,7 +972,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
             </Button>
             <Button
               icon={ExternalLink}
-              onClick={() => setPageMode("viewer")}
+              onClick={handleOpenViewer}
               disabled={!selectedDashboard}
               disabledReason={translate(customDashboardMessages, "openPublishedDisabled")}
             >
@@ -664,7 +1009,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
           icon={<LayoutDashboard className="h-8 w-8" aria-hidden="true" />}
           title={translate(customDashboardMessages, "emptyTitle")}
           description={translate(customDashboardMessages, "emptyDescription")}
-          primaryAction={<Button icon={LayoutDashboard} variant="signal" pending={creating} onClick={() => void handleCreateDashboard()}>{translate(customDashboardMessages, "createDashboard")}</Button>}
+          primaryAction={<Button icon={LayoutDashboard} variant="signal" pending={creating} onClick={handleCreateDashboard}>{translate(customDashboardMessages, "createDashboard")}</Button>}
         />
       ) : null}
 
@@ -683,13 +1028,8 @@ export const CustomDashboardsPage: FunctionComponent = () => {
           <CustomDashboardList
             dashboards={dashboards}
             selectedDashboardId={selectedDashboardId}
-            onSelect={(dashboardId) => {
-              setSelectedDashboardId(dashboardId);
-              setPageMode("editor");
-              setValidationSession(null);
-              setLogs("");
-            }}
-            onCreate={() => void handleCreateDashboard()}
+            onSelect={handleSelectDashboard}
+            onCreate={handleCreateDashboard}
             creating={creating}
           />
           {pageMode === "viewer" ? (
@@ -703,6 +1043,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
           ) : (
             <>
               <CustomDashboardEditorPanel
+                dashboardId={selectedDashboard.id}
                 draft={draft}
                 onDraftChange={setDraft}
                 activeTab={activeTab}
@@ -710,6 +1051,9 @@ export const CustomDashboardsPage: FunctionComponent = () => {
                 selectedFilePath={selectedFilePath}
                 onSelectedFilePathChange={setSelectedFilePath}
                 catalog={catalog}
+                errors={draftErrors}
+                focusRequest={editorFocusRequest}
+                onValidateField={validateDraftField}
                 credentialPanel={hasCredentialSlots ? (
                   <CustomDashboardCredentialSlotsPanel
                     projectId={projectId}
@@ -735,11 +1079,14 @@ export const CustomDashboardsPage: FunctionComponent = () => {
                 selectedRevisionId={selectedRevisionId}
                 onSelectedRevisionIdChange={(revisionId) => {
                   setSelectedRevisionId(revisionId);
-                  setValidationSession(null);
-                  setLogs("");
+                  resetValidationWorkspace();
                 }}
                 validationSession={validationSession}
                 logs={logs}
+                pollingState={pollingState}
+                pollingError={pollingError}
+                validationAnnouncement={validationAnnouncement}
+                retryingPoll={retryingPoll}
                 creatingRevision={creatingRevision}
                 validating={validating}
                 refreshingLogs={refreshingLogs}
@@ -748,6 +1095,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
                 onCreateRevision={() => void handleCreateRevision()}
                 onStartValidation={() => void handleStartValidation()}
                 onRefreshLogs={() => void handleRefreshLogs()}
+                onRetryPoll={handleRetryValidationPoll}
                 onPublish={() => void handlePublish()}
                 onArchive={() => void handleArchive()}
               />
@@ -769,6 +1117,15 @@ export const CustomDashboardsPage: FunctionComponent = () => {
         onConfirm={archiveConfirm.handleConfirm}
         onCancel={archiveConfirm.handleCancel}
       />
+      {pendingTransition ? (
+        <UnsavedChangesModal
+          onConfirm={() => void handleDiscardAndContinue()}
+          onCancel={handleKeepEditing}
+          onSave={() => void handleSaveAndContinue()}
+          saving={saving}
+          discarding={discardingTransition}
+        />
+      ) : null}
     </PageContainer>
   );
 };
