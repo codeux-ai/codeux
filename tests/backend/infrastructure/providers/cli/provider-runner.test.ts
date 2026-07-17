@@ -1107,6 +1107,26 @@ describe("ProviderRunner", () => {
     expect(result.nativeSessionId).toBeNull();
   });
 
+  it("continues Antigravity locally instead of passing a Code UX workspace id as a conversation id", async () => {
+    await runner.runProvider({
+      provider: "antigravity",
+      prompt: "continue the repair",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "",
+      sessionId: "logical-repair-session",
+      workspaceSessionId: "durable-repair-workspace",
+      continueSessionId: "durable-repair-workspace",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    expect(args).toContain("--continue");
+    expect(args).not.toContain("--conversation=durable-repair-workspace");
+  });
+
   it("preserves and reuses Docker-created Qwen workspaces so saved sessions survive short-lived containers", async () => {
     await runner.runProvider({
       provider: "qwen-code",

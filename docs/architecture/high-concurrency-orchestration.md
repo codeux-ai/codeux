@@ -215,6 +215,9 @@ handles split UTF-8/JSONL records, caps work per poll, and resets on source rota
 Claude transport also reads appended bytes.
 Qwen mutable JSON files and the Antigravity SQLite source use a coherent full read only after their
 cheap metadata changes; unchanged polls do not copy or parse them.
+Antigravity's explicit `--conversation` argument is reserved for ids parsed from that provider's
+own log. Generic logical/workspace continuation ids use `--continue` within the isolated paired
+runtime volume, preventing an orchestration id from being mistaken for a provider conversation.
 
 Provider stdout/stderr uses bounded append-efficient buffers rather than repeated whole-string
 concatenation. Structured Docker JSON is parsed for telemetry without duplicating it into the raw

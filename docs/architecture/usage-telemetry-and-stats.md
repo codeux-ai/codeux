@@ -200,6 +200,11 @@ There is no official schema for this internal protobuf, so the field mapping is 
 
 Because `agy --conversation=<id>` resumes the same conversation db across follow-up/retry invocations — accumulating `gen_metadata` rows across separate CLI runs just like Codex's rollout file or OpenCode's session store — a resumed run must not re-sum generations an earlier invocation already reported. There's no timestamp column to window by, so instead `ProviderRunner` peeks the db's current highest `idx` *before* a resumed run starts (a lightweight read-only query, self-contained to `provider-runner.ts`/`antigravity-log-parser.ts` — no cross-invocation baseline needs to be persisted or threaded through callers, unlike the OpenCode fix) and only sums rows past that cutoff afterward.
 
+Antigravity continuation distinguishes provider-native conversation ids from Code UX logical and
+workspace session ids. A known native id uses `--conversation=<id>`; when orchestration only has a
+logical continuation sentinel, Code UX uses Antigravity's `--continue` inside that workspace's
+paired runtime home. A logical Code UX id is never sent as an Antigravity conversation id.
+
 If the Antigravity database is missing, malformed, missing `gen_metadata`, or has no rows after the resume cutoff, `parseAntigravityDatabase` returns a structured result with `usage: null`, `rawUsageJson: null`, and `lastIdx: null` unless malformed rows were seen, in which case `lastIdx` records the highest inspected row. Transcript parsing separately returns `[]` for empty or malformed-only transcript files.
 
 ### OpenCode

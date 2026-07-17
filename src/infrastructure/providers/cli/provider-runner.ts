@@ -314,6 +314,7 @@ export class ProviderRunner implements IProviderRunner {
     customBaseUrl?: string;
     customModel?: string;
     sessionId: string;
+    workspaceSessionId?: string;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
     githubToken?: string;
@@ -364,11 +365,28 @@ export class ProviderRunner implements IProviderRunner {
     if (provider === "mockup-cli") {
       providerEnv.CODE_UX_MOCKUP_SESSION_ID = sessionId;
     }
-    let nativeSessionId = provider === "opencode"
-      ? isOpenCodeNativeSessionId(input.continueSessionId) ? input.continueSessionId! : null
-      : provider === "qwen-code"
-        ? null
-      : input.continueSessionId || (provider === "claude-code" ? randomUUID() : null);
+    const requestedContinuationId = input.continueSessionId?.trim() || null;
+    const logicalContinuationIds = new Set(
+      [input.sessionId, input.workspaceSessionId]
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    );
+    const explicitContinuationId = requestedContinuationId
+      && !logicalContinuationIds.has(requestedContinuationId)
+      ? requestedContinuationId
+      : null;
+    let nativeSessionId: string | null;
+    if (provider === "opencode") {
+      nativeSessionId = isOpenCodeNativeSessionId(requestedContinuationId)
+        ? requestedContinuationId
+        : null;
+    } else if (provider === "qwen-code") {
+      nativeSessionId = null;
+    } else if (provider === "antigravity") {
+      nativeSessionId = explicitContinuationId;
+    } else {
+      nativeSessionId = requestedContinuationId || (provider === "claude-code" ? randomUUID() : null);
+    }
 
     const applicableCustomServers = enabledCustomServersFor(input.customMcpServers, provider);
     const hasMcpConfig = !!input.mcpConnection || applicableCustomServers.length > 0;
@@ -1306,8 +1324,12 @@ export class ProviderRunner implements IProviderRunner {
         // to this log file, never to stdout/stderr. Placed ahead of the terminal -p flag.
         args.push("--log-file", antigravityLogPath);
       }
-      if (continueSession && nativeSessionId) {
-        args.push(`--conversation=${nativeSessionId}`);
+      if (continueSession) {
+        // `--conversation` accepts only an Antigravity-native conversation id.
+        // Generic orchestration paths can use a logical Code UX id as a
+        // continuation sentinel for providers with workspace-local "latest"
+        // semantics. Never send that sentinel as a native conversation id.
+        args.push(nativeSessionId ? `--conversation=${nativeSessionId}` : "--continue");
       }
       args.push("-p", prompt);
       return { command: "agy", args };

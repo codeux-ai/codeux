@@ -101,6 +101,8 @@ the dashboard, and interactive replies.
 - Incremental Codex telemetry follows the native thread id emitted by the current exec stream (or
   the exact requested resume id) and reads only that rollout from the paired runtime volume. A
   previous invocation's newer file cannot replace the persisted continuation identity.
+- Antigravity sends `--conversation` only for provider-native ids. Logical/workspace continuation
+  markers use `--continue` inside the isolated paired runtime volume instead.
 
 The published architecture page is available at
 [`/docs/architecture-high-concurrency-orchestration`](/docs/architecture-high-concurrency-orchestration).
