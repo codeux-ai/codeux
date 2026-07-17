@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, waitFor } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
@@ -72,6 +72,17 @@ const renderGermanPage = () => render(
     <KnowledgePage />
   </DashboardI18nProvider>,
 );
+
+const holdToConfirm = async (label: string): Promise<void> => {
+  const labelElement = screen.getByText(label);
+  const button = labelElement.closest("button");
+  if (!button) throw new Error(`No confirmation button found for ${label}`);
+  fireEvent.keyDown(button, { key: "Enter" });
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, 1_050));
+  });
+  fireEvent.keyUp(button, { key: "Enter" });
+};
 
 describe("Knowledge route German localization", () => {
   beforeEach(() => {
@@ -231,7 +242,56 @@ describe("Knowledge route German localization", () => {
     await user.click(await screen.findByRole("button", { name: `Einbettung für ${failedDoc.title} erneut versuchen` }));
 
     expect(knowledgeApi.reembedKnowledgeDocument).toHaveBeenCalledWith("project-current", failedDoc.id);
-    expect(await screen.findByText(`Einbettung für ${failedDoc.title} wurde neu gestartet.`)).toBeInTheDocument();
+    expect((await screen.findAllByText(`Einbettung für ${failedDoc.title} wurde neu gestartet.`)).length).toBeGreaterThan(0);
+  });
+
+  it("suppresses duplicate re-embedding and keeps a persistent row retry after failure", async () => {
+    const failedDoc = makeDocument({ status: "error", errorMessage: "Initial embedding failure" });
+    let rejectRequest: ((reason: Error) => void) | undefined;
+    knowledgeApi.fetchKnowledgeDocuments.mockResolvedValue([failedDoc]);
+    knowledgeApi.reembedKnowledgeDocument.mockImplementationOnce(() => new Promise<KnowledgeDocument>((_resolve, reject) => {
+      rejectRequest = reject;
+    }));
+    renderGermanPage();
+
+    const retryButton = await screen.findByRole("button", { name: `Einbettung für ${failedDoc.title} erneut versuchen` });
+    fireEvent.click(retryButton);
+    fireEvent.click(retryButton);
+
+    expect(knowledgeApi.reembedKnowledgeDocument).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(`Einbettung für ${failedDoc.title} wird neu gestartet…`)).toBeInTheDocument();
+
+    await act(async () => rejectRequest?.(new Error("Raw model diagnostic")));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Raw model diagnostic");
+
+    knowledgeApi.reembedKnowledgeDocument.mockResolvedValueOnce(makeDocument({ status: "pending" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Erneut einbetten" }));
+    expect(knowledgeApi.reembedKnowledgeDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores a row mutation result after the selected project changes", async () => {
+    const oldDocument = makeDocument({ id: "old-doc", title: "OLD.md", status: "error" });
+    const nextDocument = makeDocument({ id: "next-doc", projectId: "project-next", title: "NEXT.md" });
+    let resolveReembed: ((document: KnowledgeDocument) => void) | undefined;
+    knowledgeApi.fetchKnowledgeDocuments.mockResolvedValueOnce([oldDocument]);
+    knowledgeApi.reembedKnowledgeDocument.mockImplementationOnce(() => new Promise<KnowledgeDocument>((resolve) => {
+      resolveReembed = resolve;
+    }));
+    const view = renderGermanPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: `Einbettung für ${oldDocument.title} erneut versuchen` }));
+    knowledgeApi.fetchKnowledgeDocuments.mockResolvedValue([nextDocument]);
+    projectState.selectedProject = { id: "project-next", name: "Next Project" };
+    view.rerender(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <KnowledgePage />
+      </DashboardI18nProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: nextDocument.title })).toBeInTheDocument();
+    await act(async () => resolveReembed?.(makeDocument({ id: oldDocument.id, title: "STALE.md", status: "pending" })));
+    expect(screen.queryByRole("heading", { name: "STALE.md" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: nextDocument.title })).toBeInTheDocument();
   });
 
   it("prevents duplicate repository ingestion while a request is pending", async () => {
@@ -252,25 +312,117 @@ describe("Knowledge route German localization", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
-  it("supports Escape and preserves long filenames in controls and confirmations", async () => {
+  it("uses the localized confirm dialog, restores trigger focus on Escape, and never calls native confirm", async () => {
     const user = userEvent.setup();
     const longTitle = `${"very-long-authored-name-".repeat(8)}.md`;
     const doc = makeDocument({ title: longTitle });
     knowledgeApi.fetchKnowledgeDocuments.mockResolvedValue([doc]);
-    const confirmSpy = vi.fn(() => false);
+    const confirmSpy = vi.fn();
     Object.defineProperty(window, "confirm", { configurable: true, value: confirmSpy });
     renderGermanPage();
 
     const deleteButton = await screen.findByRole("button", { name: `${longTitle} löschen` });
     expect(screen.getByText(longTitle)).toHaveAttribute("title", longTitle);
     await user.click(deleteButton);
-    expect(confirmSpy).toHaveBeenCalledWith(`\"${longTitle}\" löschen? Dies kann nicht rückgängig gemacht werden.`);
+    expect(screen.getByRole("dialog", { name: `${longTitle} löschen?` })).toHaveTextContent("Diese Aktion ist endgültig und kann nicht rückgängig gemacht werden.");
+    expect(confirmSpy).not.toHaveBeenCalled();
     expect(knowledgeApi.deleteKnowledgeDocument).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: `${longTitle} löschen?` })).not.toBeInTheDocument());
+    await waitFor(() => expect(deleteButton).toHaveFocus());
 
     await user.click(screen.getByRole("button", { name: "Einfügen" }));
     expect(screen.getByRole("dialog", { name: "Notiz einfügen" })).toBeInTheDocument();
     await user.click(screen.getByRole("textbox", { name: "Titel der Notiz" }));
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("restores a failed optimistic deletion at its exact index without losing a concurrent upload", async () => {
+    const user = userEvent.setup();
+    const first = makeDocument({ id: "doc-first", title: "FIRST.md" });
+    const second = makeDocument({ id: "doc-second", title: "SECOND.md" });
+    const added = makeDocument({ id: "doc-added", title: "ADDED.md", sourceType: "upload" });
+    const uploadFile = new File(["new"], added.title, { type: "text/markdown" });
+    let rejectDelete: ((reason: Error) => void) | undefined;
+    let resolveUpload: ((result: KnowledgeUploadResult) => void) | undefined;
+    knowledgeApi.fetchKnowledgeDocuments.mockResolvedValue([first, second]);
+    knowledgeApi.deleteKnowledgeDocument.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => {
+      rejectDelete = reject;
+    }));
+    knowledgeApi.uploadKnowledgeFiles.mockImplementationOnce(() => new Promise<KnowledgeUploadResult>((resolve) => {
+      resolveUpload = resolve;
+    }));
+    renderGermanPage();
+
+    const library = await screen.findByRole("heading", { name: first.title });
+    const grid = library.closest("[aria-labelledby='knowledge-library-heading']");
+    if (!grid) throw new Error("Knowledge document grid not found");
+    fireEvent.drop(grid, { dataTransfer: { files: [uploadFile] } });
+    expect(knowledgeApi.uploadKnowledgeFiles).toHaveBeenCalledWith("project-current", [uploadFile]);
+
+    await user.click(await screen.findByRole("button", { name: `${first.title} löschen` }));
+    await holdToConfirm("Dokument löschen");
+    expect(knowledgeApi.deleteKnowledgeDocument).toHaveBeenCalledWith("project-current", first.id);
+    expect(screen.getByRole("dialog", { name: `${first.title} löschen?` }).querySelector("[aria-busy='true']")).toBeInTheDocument();
+    expect(await screen.findByText(`${first.title} wird gelöscht…`)).toBeInTheDocument();
+
+    await act(async () => resolveUpload?.({ documents: [added], errors: [] }));
+    expect(await screen.findByText("1 Dokument hinzugefügt.")).toBeInTheDocument();
+
+    await act(async () => rejectDelete?.(new Error("Raw delete diagnostic")));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Raw delete diagnostic");
+    const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-document-id]"));
+    expect(rows.map((row) => row.dataset.documentId)).toEqual([first.id, second.id, added.id]);
+    expect(screen.getByRole("button", { name: "Löschen erneut versuchen" })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: `${first.title} löschen` })).toHaveFocus());
+  });
+
+  it("focuses the next document after a successful irreversible deletion", async () => {
+    const user = userEvent.setup();
+    const first = makeDocument({ id: "doc-first", title: "FIRST.md" });
+    const second = makeDocument({ id: "doc-second", title: "SECOND.md" });
+    knowledgeApi.fetchKnowledgeDocuments.mockResolvedValue([first, second]);
+    renderGermanPage();
+
+    await user.click(await screen.findByRole("button", { name: `${first.title} löschen` }));
+    await holdToConfirm("Dokument löschen");
+
+    await waitFor(() => expect(screen.queryByRole("heading", { name: first.title })).not.toBeInTheDocument());
+    const nextHeading = screen.getByRole("heading", { name: second.title });
+    await waitFor(() => expect(nextHeading).toHaveFocus());
+    expect(knowledgeApi.deleteKnowledgeDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows selected-file progress and separates successful and failed upload results with retry", async () => {
+    const user = userEvent.setup();
+    const successfulFile = new File(["good"], "GOOD.md", { type: "text/markdown" });
+    const failedFile = new File(["bad"], "RAW_Ä.bin", { type: "application/octet-stream" });
+    let resolveUpload: ((result: KnowledgeUploadResult) => void) | undefined;
+    knowledgeApi.uploadKnowledgeFiles.mockImplementationOnce(() => new Promise<KnowledgeUploadResult>((resolve) => {
+      resolveUpload = resolve;
+    }));
+    renderGermanPage();
+
+    await user.click(await screen.findByRole("button", { name: "Hochladen" }));
+    await user.upload(screen.getByLabelText("Wissensdateien auswählen"), [successfulFile, failedFile]);
+    expect(screen.getByRole("progressbar", { name: `Upload-Fortschritt für ${successfulFile.name}` })).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: `Upload-Fortschritt für ${failedFile.name}` })).toBeInTheDocument();
+
+    await act(async () => resolveUpload?.({
+      documents: [makeDocument({ id: "uploaded-good", title: successfulFile.name, sourceType: "upload" })],
+      errors: [{ fileName: failedFile.name, error: "Unsupported MIME application/octet-stream" }],
+    }));
+
+    expect(await screen.findByText("Hochgeladen")).toBeInTheDocument();
+    expect(screen.getAllByText(successfulFile.name).length).toBeGreaterThan(0);
+    expect(screen.getByRole("alert")).toHaveTextContent(`${failedFile.name}Unsupported MIME application/octet-stream`);
+    const retryButton = screen.getByRole("button", { name: "1 fehlgeschlagene Datei erneut versuchen" });
+    knowledgeApi.uploadKnowledgeFiles.mockResolvedValueOnce({
+      documents: [makeDocument({ id: "uploaded-retry", title: failedFile.name, sourceType: "upload" })],
+      errors: [],
+    });
+    await user.click(retryButton);
+    expect(knowledgeApi.uploadKnowledgeFiles).toHaveBeenLastCalledWith("project-current", [failedFile]);
   });
 });

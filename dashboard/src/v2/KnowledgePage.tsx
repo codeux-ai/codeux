@@ -6,7 +6,10 @@ import {
 } from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
+import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { useProjectData } from "./context/project-data.js";
+import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
+import { restoreFocusSafely } from "./hooks/use-focus-trap.js";
 import { listEmbeddingModels } from "./lib/memory-api.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset, Source } from "./types.js";
@@ -31,8 +34,53 @@ import {
   formatKnowledgeProgress,
   getKnowledgeStatusMessageKey,
 } from "./lib/knowledge-presentation.js";
+import { useListReorder } from "./lib/motion/use-list-reorder.js";
+import { useInteractionTokens } from "./lib/motion/tokens.js";
 
 type AddMode = "upload" | "paste" | "repo" | "project" | null;
+
+type DocumentMutationAction = "delete" | "reembed";
+type DocumentMutationStatus = "pending" | "success" | "error";
+
+interface DocumentMutationFeedback {
+  action: DocumentMutationAction;
+  status: DocumentMutationStatus;
+  message: string;
+  diagnostic?: string;
+}
+
+interface DeletionTombstone {
+  document: KnowledgeDocument;
+  index: number;
+  restoreIndex: number;
+  nextDocumentId: string | null;
+  previousDocumentId: string | null;
+}
+
+interface UploadAttemptItem {
+  file: File;
+  status: "pending" | "success" | "error";
+  diagnostic?: string;
+}
+
+interface UploadAttempt {
+  projectId: string;
+  items: UploadAttemptItem[];
+}
+
+interface PendingDeleteConfirmation {
+  document: KnowledgeDocument;
+  projectId: string;
+  trigger: HTMLElement;
+}
+
+type DeleteOperationOutcome =
+  | { status: "success"; tombstone: DeletionTombstone }
+  | { status: "error"; documentId: string };
+
+type LibraryItem =
+  | { kind: "document"; document: KnowledgeDocument }
+  | { kind: "deleting"; tombstone: DeletionTombstone };
 
 const docIcon = (doc: KnowledgeDocument) => {
   const ref = (doc.sourceRef || doc.title || "").toLowerCase();
@@ -67,7 +115,7 @@ const StatusPill: FunctionComponent<{ doc: KnowledgeDocument }> = ({ doc }) => {
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/20 bg-amber-400/8 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-      <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.4} />
+      <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.4} />
       {translate(knowledgeMessages, getKnowledgeStatusMessageKey(doc.status))}
     </span>
   );
@@ -79,6 +127,8 @@ export const KnowledgePage: FunctionComponent = () => {
   translateRef.current = translate;
   const { selectedProject, projects } = useProjectData();
   const pid = selectedProject?.id || "";
+  const pidRef = useRef(pid);
+  pidRef.current = pid;
 
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
@@ -89,7 +139,29 @@ export const KnowledgePage: FunctionComponent = () => {
   const [addMode, setAddMode] = useState<AddMode>(null);
   const [dragging, setDragging] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  const [documentFeedback, setDocumentFeedback] = useState<Record<string, DocumentMutationFeedback>>({});
+  const [deletionTombstones, setDeletionTombstones] = useState<Record<string, DeletionTombstone>>({});
+  const [uploadAttempt, setUploadAttempt] = useState<UploadAttempt | null>(null);
   const ingestionInFlight = useRef(false);
+  const ingestionGenerationRef = useRef(0);
+  const loadGenerationRef = useRef(0);
+  const documentsRef = useRef(documents);
+  documentsRef.current = documents;
+  const deletionTombstonesRef = useRef(deletionTombstones);
+  deletionTombstonesRef.current = deletionTombstones;
+  const deleteOperationsRef = useRef(new Map<string, symbol>());
+  const reembedOperationsRef = useRef(new Map<string, symbol>());
+  const documentFocusRefs = useRef(new Map<string, HTMLElement>());
+  const documentDeleteButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingDeleteConfirmationRef = useRef<PendingDeleteConfirmation | null>(null);
+  const listHeadingRef = useRef<HTMLHeadingElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const deleteConfirm = useConfirmDialog();
+  const deleteConfirmOpenRef = useRef(deleteConfirm.isOpen);
+  deleteConfirmOpenRef.current = deleteConfirm.isOpen;
+  const deleteConfirmCancelRef = useRef(deleteConfirm.handleCancel);
+  deleteConfirmCancelRef.current = deleteConfirm.handleCancel;
+  const interactionTokens = useInteractionTokens();
 
   const agentNameById = useMemo(() => {
     const map = new Map<string, AgentPreset>();
@@ -100,8 +172,11 @@ export const KnowledgePage: FunctionComponent = () => {
   const loadData = useCallback(async () => {
     if (!pid) {
       setDocuments([]);
+      setModelActive(null);
       return;
     }
+    const requestPid = pid;
+    const generation = ++loadGenerationRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -110,17 +185,38 @@ export const KnowledgePage: FunctionComponent = () => {
         listEmbeddingModels().catch(() => []),
         fetchAgentPresets(pid).catch(() => [] as AgentPreset[]),
       ]);
-      setDocuments(docs);
+      if (pidRef.current !== requestPid || loadGenerationRef.current !== generation) return;
+      setDocuments(docs.filter((document) => !deleteOperationsRef.current.has(document.id)));
       setModelActive(models.some((m) => m.active));
       setAgentPresets(presets);
     } catch (err) {
+      if (pidRef.current !== requestPid || loadGenerationRef.current !== generation) return;
       setError(err instanceof Error ? err.message : translateRef.current(knowledgeMessages, "loadFailed"));
     } finally {
-      setLoading(false);
+      if (pidRef.current === requestPid && loadGenerationRef.current === generation) setLoading(false);
     }
   }, [pid]);
 
   useEffect(() => { void loadData(); }, [loadData]);
+
+  useEffect(() => {
+    ingestionGenerationRef.current += 1;
+    ingestionInFlight.current = false;
+    deleteOperationsRef.current.clear();
+    reembedOperationsRef.current.clear();
+    if (deleteConfirmOpenRef.current) deleteConfirmCancelRef.current();
+    pendingDeleteConfirmationRef.current = null;
+    setDocuments([]);
+    setAgentPresets([]);
+    setModelActive(null);
+    setError(null);
+    setBusy(false);
+    setAddMode(null);
+    setDocumentFeedback({});
+    setDeletionTombstones({});
+    setUploadAttempt(null);
+    setAnnouncement("");
+  }, [pid]);
 
   // Poll while any document is still being processed.
   const processing = documents.some((d) => d.status === "pending" || d.status === "embedding");
@@ -130,42 +226,107 @@ export const KnowledgePage: FunctionComponent = () => {
     if (!pid) return;
     const interval = setInterval(() => {
       if (!processingRef.current) return;
-      fetchKnowledgeDocuments(pid).then(setDocuments).catch(() => {});
+      const requestPid = pid;
+      fetchKnowledgeDocuments(requestPid).then((nextDocuments) => {
+        if (pidRef.current !== requestPid) return;
+        const deletingIds = deleteOperationsRef.current;
+        setDocuments(nextDocuments.filter((document) => !deletingIds.has(document.id)));
+      }).catch(() => {});
     }, 1500);
     return () => clearInterval(interval);
   }, [pid]);
 
   const runIngestion = useCallback(async (
-    operation: () => Promise<void>,
+    operation: (requestPid: string) => Promise<void>,
     fallbackMessage: string,
   ): Promise<void> => {
-    if (ingestionInFlight.current) return;
+    const requestPid = pidRef.current;
+    if (!requestPid || ingestionInFlight.current) return;
+    const generation = ++ingestionGenerationRef.current;
     ingestionInFlight.current = true;
     setBusy(true);
     setError(null);
     try {
-      await operation();
+      await operation(requestPid);
     } catch (err) {
+      if (pidRef.current !== requestPid || ingestionGenerationRef.current !== generation) return;
       setError(err instanceof Error ? err.message : fallbackMessage);
     } finally {
-      ingestionInFlight.current = false;
-      setBusy(false);
+      if (pidRef.current === requestPid && ingestionGenerationRef.current === generation) {
+        ingestionInFlight.current = false;
+        setBusy(false);
+      }
     }
   }, []);
 
   const handleUpload = useCallback(async (files: File[]) => {
-    if (!pid || files.length === 0) return;
-    await runIngestion(async () => {
-      const result = await uploadKnowledgeFiles(pid, files);
-      const diagnostics = result.errors.map((e) => `${e.fileName}: ${e.error}`).join(" · ");
-      await loadData();
-      if (diagnostics) setError(diagnostics);
-      setAnnouncement(translatePlural(knowledgeMessages, "uploadComplete", result.documents.length, {
-        formattedCount: formatNumber(result.documents.length),
+    const requestPid = pidRef.current;
+    if (!requestPid || files.length === 0 || ingestionInFlight.current) return;
+    const generation = ++ingestionGenerationRef.current;
+    ingestionInFlight.current = true;
+    setBusy(true);
+    setError(null);
+    setUploadAttempt({
+      projectId: requestPid,
+      items: files.map((file) => ({ file, status: "pending" })),
+    });
+
+    try {
+      const result = await uploadKnowledgeFiles(requestPid, files);
+      if (pidRef.current !== requestPid || ingestionGenerationRef.current !== generation) return;
+      const errorsByFileName = new Map(result.errors.map((item) => [item.fileName, item.error]));
+      const items: UploadAttemptItem[] = files.map((file) => {
+        const diagnostic = errorsByFileName.get(file.name);
+        return diagnostic
+          ? { file, status: "error", diagnostic }
+          : { file, status: "success" };
+      });
+      setUploadAttempt({ projectId: requestPid, items });
+      setDocuments((current) => {
+        const next = [...current];
+        const indexById = new Map(next.map((document, index) => [document.id, index]));
+        for (const document of result.documents) {
+          const existingIndex = indexById.get(document.id);
+          if (existingIndex === undefined) {
+            indexById.set(document.id, next.length);
+            next.push(document);
+          } else {
+            next[existingIndex] = document;
+          }
+        }
+        return next;
+      });
+
+      const failedCount = items.filter((item) => item.status === "error").length;
+      const succeededCount = items.length - failedCount;
+      if (failedCount > 0) {
+        setAnnouncement(translate(knowledgeMessages, "uploadPartialComplete", {
+          succeededCount: formatNumber(succeededCount),
+          failedCount: formatNumber(failedCount),
+        }));
+      } else {
+        setAnnouncement(translatePlural(knowledgeMessages, "uploadComplete", result.documents.length, {
+          formattedCount: formatNumber(result.documents.length),
+        }));
+        setAddMode(null);
+      }
+    } catch (err) {
+      if (pidRef.current !== requestPid || ingestionGenerationRef.current !== generation) return;
+      const diagnostic = err instanceof Error ? err.message : translate(knowledgeMessages, "uploadFailed");
+      setUploadAttempt({
+        projectId: requestPid,
+        items: files.map((file) => ({ file, status: "error", diagnostic })),
+      });
+      setAnnouncement(translatePlural(knowledgeMessages, "uploadBatchFailed", files.length, {
+        formattedCount: formatNumber(files.length),
       }));
-      setAddMode(null);
-    }, translate(knowledgeMessages, "uploadFailed"));
-  }, [formatNumber, loadData, pid, runIngestion, translate, translatePlural]);
+    } finally {
+      if (pidRef.current === requestPid && ingestionGenerationRef.current === generation) {
+        ingestionInFlight.current = false;
+        setBusy(false);
+      }
+    }
+  }, [formatNumber, translate, translatePlural]);
 
   const onDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -174,35 +335,198 @@ export const KnowledgePage: FunctionComponent = () => {
     if (files.length > 0) void handleUpload(files);
   }, [handleUpload]);
 
-  const removeDocument = useCallback(async (doc: KnowledgeDocument) => {
-    if (!pid) return;
-    if (!window.confirm(translate(knowledgeMessages, "deleteConfirmation", { title: doc.title }))) return;
-    setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
-    try {
-      await deleteKnowledgeDocument(pid, doc.id);
-      setAnnouncement(translate(knowledgeMessages, "documentDeleted", { title: doc.title }));
-    } catch (err) {
-      await loadData();
-      setError(err instanceof Error ? err.message : translate(knowledgeMessages, "deleteFailed"));
+  const executeDelete = useCallback(async (doc: KnowledgeDocument, requestPid: string): Promise<DeleteOperationOutcome | null> => {
+    const currentDocuments = documentsRef.current;
+    const restoreIndex = currentDocuments.findIndex((document) => document.id === doc.id);
+    if (restoreIndex < 0) return null;
+    const currentItems: LibraryItem[] = currentDocuments.map((document) => ({ kind: "document", document }));
+    const currentTombstones = Object.values(deletionTombstonesRef.current).sort((a, b) => a.index - b.index);
+    for (const currentTombstone of currentTombstones) {
+      currentItems.splice(Math.min(currentTombstone.index, currentItems.length), 0, { kind: "deleting", tombstone: currentTombstone });
     }
-  }, [loadData, pid, translate]);
+    const index = currentItems.findIndex((item) => item.kind === "document" && item.document.id === doc.id);
+    const operationToken = Symbol(doc.id);
+    deleteOperationsRef.current.set(doc.id, operationToken);
+    const tombstone: DeletionTombstone = {
+      document: doc,
+      index,
+      restoreIndex,
+      nextDocumentId: currentDocuments[restoreIndex + 1]?.id ?? null,
+      previousDocumentId: currentDocuments[restoreIndex - 1]?.id ?? null,
+    };
+    setDocumentFeedback((current) => ({
+      ...current,
+      [doc.id]: {
+        action: "delete",
+        status: "pending",
+        message: translate(knowledgeMessages, "deletingDocument", { title: doc.title }),
+      },
+    }));
+    setDeletionTombstones((current) => ({ ...current, [doc.id]: tombstone }));
+    setDocuments((current) => current.filter((document) => document.id !== doc.id));
+    try {
+      await deleteKnowledgeDocument(requestPid, doc.id);
+      if (pidRef.current !== requestPid || deleteOperationsRef.current.get(doc.id) !== operationToken) return null;
+      setDeletionTombstones((current) => {
+        const next = { ...current };
+        delete next[doc.id];
+        return next;
+      });
+      setDocumentFeedback((current) => {
+        const next = { ...current };
+        delete next[doc.id];
+        return next;
+      });
+      setAnnouncement(translate(knowledgeMessages, "documentDeleted", { title: doc.title }));
+      return { status: "success", tombstone };
+    } catch (err) {
+      if (pidRef.current !== requestPid || deleteOperationsRef.current.get(doc.id) !== operationToken) return null;
+      const diagnostic = err instanceof Error ? err.message : translate(knowledgeMessages, "deleteFailed");
+      setDocuments((current) => {
+        if (current.some((document) => document.id === doc.id)) return current;
+        const next = [...current];
+        next.splice(Math.min(tombstone.restoreIndex, next.length), 0, tombstone.document);
+        return next;
+      });
+      setDeletionTombstones((current) => {
+        const next = { ...current };
+        delete next[doc.id];
+        return next;
+      });
+      setDocumentFeedback((current) => ({
+        ...current,
+        [doc.id]: {
+          action: "delete",
+          status: "error",
+          message: translate(knowledgeMessages, "deleteFailedForDocument", { title: doc.title }),
+          diagnostic,
+        },
+      }));
+      setAnnouncement(translate(knowledgeMessages, "deleteRestored", { title: doc.title }));
+      return { status: "error", documentId: doc.id };
+    } finally {
+      if (deleteOperationsRef.current.get(doc.id) === operationToken) deleteOperationsRef.current.delete(doc.id);
+    }
+  }, [translate]);
+
+  const confirmPendingDelete = useCallback(async (): Promise<void> => {
+    const pending = pendingDeleteConfirmationRef.current;
+    if (!pending || pidRef.current !== pending.projectId) {
+      deleteConfirm.handleCancel();
+      pendingDeleteConfirmationRef.current = null;
+      return;
+    }
+
+    const outcome = await executeDelete(pending.document, pending.projectId);
+    if (pendingDeleteConfirmationRef.current !== pending) return;
+    pendingDeleteConfirmationRef.current = null;
+    if (!outcome || pidRef.current !== pending.projectId) {
+      deleteConfirm.handleCancel();
+      return;
+    }
+
+    deleteConfirm.handleConfirm();
+    const focusDelay = Number.parseFloat(interactionTokens.enterExit.duration) + 20;
+    window.setTimeout(() => {
+      if (pidRef.current !== pending.projectId) return;
+      if (outcome.status === "success") {
+        restoreFocusSafely(
+          outcome.tombstone.nextDocumentId ? documentFocusRefs.current.get(outcome.tombstone.nextDocumentId) : null,
+          outcome.tombstone.previousDocumentId ? documentFocusRefs.current.get(outcome.tombstone.previousDocumentId) : null,
+          listHeadingRef.current,
+        );
+      } else {
+        restoreFocusSafely(documentDeleteButtonRefs.current.get(outcome.documentId), listHeadingRef.current);
+      }
+    }, focusDelay);
+  }, [deleteConfirm, executeDelete, interactionTokens.enterExit.duration]);
+
+  const removeDocument = useCallback(async (doc: KnowledgeDocument, trigger: HTMLElement) => {
+    const confirmationPid = pidRef.current;
+    if (!confirmationPid || pendingDeleteConfirmationRef.current || deleteOperationsRef.current.has(doc.id) || reembedOperationsRef.current.has(doc.id)) return;
+    const pending: PendingDeleteConfirmation = { document: doc, projectId: confirmationPid, trigger };
+    pendingDeleteConfirmationRef.current = pending;
+    deleteConfirm.triggerRef.current = trigger;
+    const confirmed = await deleteConfirm.requestConfirm({
+      title: translate(knowledgeMessages, "deleteDialogTitle", { title: doc.title }),
+      body: translate(knowledgeMessages, "deleteDialogBody", { title: doc.title }),
+      confirmLabel: translate(knowledgeMessages, "confirmDelete"),
+      cancelLabel: translate(knowledgeMessages, "cancelDelete"),
+      destructive: true,
+    });
+    if (confirmed || pendingDeleteConfirmationRef.current !== pending) return;
+    pendingDeleteConfirmationRef.current = null;
+    if (pidRef.current !== confirmationPid) return;
+    const focusDelay = Number.parseFloat(interactionTokens.enterExit.duration) + 20;
+    window.setTimeout(() => {
+      if (pidRef.current === confirmationPid) restoreFocusSafely(pending.trigger, listHeadingRef.current);
+    }, focusDelay);
+  }, [deleteConfirm, interactionTokens.enterExit.duration, translate]);
 
   const reembed = useCallback(async (doc: KnowledgeDocument) => {
-    if (!pid) return;
+    const requestPid = pidRef.current;
+    if (!requestPid || deleteOperationsRef.current.has(doc.id) || reembedOperationsRef.current.has(doc.id)) return;
+    const operationToken = Symbol(doc.id);
+    reembedOperationsRef.current.set(doc.id, operationToken);
+    setDocumentFeedback((current) => ({
+      ...current,
+      [doc.id]: {
+        action: "reembed",
+        status: "pending",
+        message: translate(knowledgeMessages, "reembeddingDocument", { title: doc.title }),
+      },
+    }));
     try {
-      const updated = await reembedKnowledgeDocument(pid, doc.id);
+      const updated = await reembedKnowledgeDocument(requestPid, doc.id);
+      if (pidRef.current !== requestPid || reembedOperationsRef.current.get(doc.id) !== operationToken) return;
       setDocuments((prev) => prev.map((d) => (d.id === doc.id ? updated : d)));
+      setDocumentFeedback((current) => ({
+        ...current,
+        [doc.id]: {
+          action: "reembed",
+          status: "success",
+          message: translate(knowledgeMessages, "embeddingRetried", { title: doc.title }),
+        },
+      }));
       setAnnouncement(translate(knowledgeMessages, "embeddingRetried", { title: doc.title }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : translate(knowledgeMessages, "reembedFailed"));
+      if (pidRef.current !== requestPid || reembedOperationsRef.current.get(doc.id) !== operationToken) return;
+      setDocumentFeedback((current) => ({
+        ...current,
+        [doc.id]: {
+          action: "reembed",
+          status: "error",
+          message: translate(knowledgeMessages, "reembedFailedForDocument", { title: doc.title }),
+          diagnostic: err instanceof Error ? err.message : translate(knowledgeMessages, "reembedFailed"),
+        },
+      }));
+    } finally {
+      if (reembedOperationsRef.current.get(doc.id) === operationToken) reembedOperationsRef.current.delete(doc.id);
     }
-  }, [pid, translate]);
+  }, [translate]);
+
+  const libraryItems = useMemo<LibraryItem[]>(() => {
+    const items: LibraryItem[] = documents.map((document) => ({ kind: "document", document }));
+    const tombstones = Object.values(deletionTombstones).sort((a, b) => a.index - b.index);
+    for (const tombstone of tombstones) {
+      items.splice(Math.min(tombstone.index, items.length), 0, { kind: "deleting", tombstone });
+    }
+    return items;
+  }, [deletionTombstones, documents]);
+  useListReorder(listRef, libraryItems.map((item) => item.kind === "document" ? item.document.id : item.tombstone.document.id));
 
   const totalChunks = documents.reduce((sum, d) => sum + d.chunkCount, 0);
   const readyCount = documents.filter((d) => d.status === "ready").length;
 
   return (
     <PageContainer aria-label={translate(knowledgeMessages, "pageLabel")} padding="section" className="gap-8">
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        options={deleteConfirm.options}
+        onConfirm={confirmPendingDelete}
+        onCancel={deleteConfirm.handleCancel}
+        restoreFocus={false}
+      />
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
       {/* Header */}
       <PageHeader
@@ -211,7 +535,7 @@ export const KnowledgePage: FunctionComponent = () => {
         title={translate(knowledgeMessages, "title")}
         subtitle={
           <>
-            {translate(knowledgeMessages, "subtitleBeforeTool")} <code className="rounded bg-black/[0.05] px-1 py-0.5 font-mono text-[11px] dark:bg-white/[0.06]">search_knowledge</code>{translate(knowledgeMessages, "subtitleAfterTool")}
+            {translate(knowledgeMessages, "subtitleBeforeTool")} <code className="rounded bg-black/[0.05] px-1 py-0.5 font-mono text-[11px] dark:bg-white/[0.06]">{translate(knowledgeMessages, "searchToolName")}</code>{translate(knowledgeMessages, "subtitleAfterTool")}
             {documents.length > 0 && (
               <span className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
                 <span>{translatePlural(knowledgeMessages, "documentCount", documents.length, { formattedCount: formatNumber(documents.length) })}</span>
@@ -227,7 +551,10 @@ export const KnowledgePage: FunctionComponent = () => {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setAddMode("upload")}
+            onClick={() => {
+              setUploadAttempt(null);
+              setAddMode("upload");
+            }}
             disabled={!pid}
             className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-signal-500/15 transition-all hover:scale-[1.03] hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50 dark:text-void-900"
           >
@@ -269,7 +596,7 @@ export const KnowledgePage: FunctionComponent = () => {
             title={translate(knowledgeMessages, "refresh")}
             className="inline-flex items-center justify-center rounded-full border border-black/[0.08] bg-white/60 p-2.5 text-slate-500 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2.4} />
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.4} />
           </button>
         </div>
         }
@@ -295,22 +622,32 @@ export const KnowledgePage: FunctionComponent = () => {
         </div>
       )}
 
+      {uploadAttempt && addMode !== "upload" && (
+        <UploadFeedback
+          attempt={uploadAttempt}
+          busy={busy}
+          onDismiss={() => setUploadAttempt(null)}
+          onRetry={(files) => void handleUpload(files)}
+        />
+      )}
+
       {/* Search test box */}
       {readyCount > 0 && <KnowledgeSearchBox projectId={pid} agentPresets={agentPresets} />}
 
       {/* Library grid */}
+      <h2 id="knowledge-library-heading" ref={listHeadingRef} tabIndex={-1} className="sr-only">{translate(knowledgeMessages, "libraryHeading")}</h2>
       {!pid ? (
         <EmptyState icon={BookOpen} title={translate(knowledgeMessages, "selectProject")} body={translate(knowledgeMessages, "selectProjectBody")} />
       ) : loading && documents.length === 0 ? (
         <div role="status" aria-label={translate(knowledgeMessages, "loadingDocuments")} className="flex items-center justify-center py-24 text-slate-400">
-          <Loader2 className="h-6 w-6 animate-spin" />
+          <Loader2 className="h-6 w-6 animate-spin motion-reduce:animate-none" />
         </div>
-      ) : documents.length === 0 ? (
+      ) : libraryItems.length === 0 ? (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
-          className={`flex flex-col items-center gap-4 rounded-[1.8rem] border-2 border-dashed px-8 py-20 text-center transition-colors ${dragging ? "border-signal-500 bg-signal-500/[0.05]" : "border-black/[0.08] dark:border-white/[0.08]"}`}
+          className={`flex flex-col items-center gap-4 rounded-[1.8rem] border-2 border-dashed px-8 py-20 text-center transition-colors motion-reduce:transition-none ${dragging ? "border-signal-500 bg-signal-500/[0.05]" : "border-black/[0.08] dark:border-white/[0.08]"}`}
         >
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-500">
             <Sparkles className="h-7 w-7" strokeWidth={2} />
@@ -318,29 +655,73 @@ export const KnowledgePage: FunctionComponent = () => {
           <div className="flex flex-col gap-1">
             <p className="text-lg font-bold text-slate-700 dark:text-slate-200">{translate(knowledgeMessages, "buildKnowledgeBase")}</p>
             <p className="text-sm text-slate-400 dark:text-slate-500">{translate(knowledgeMessages, "emptyLibraryBody")}</p>
+            {dragging && <p role="status" className="font-bold text-signal-600 dark:text-signal-400">{translate(knowledgeMessages, "dropFilesHere")}</p>}
           </div>
         </div>
       ) : (
         <div
+          ref={listRef}
+          aria-labelledby="knowledge-library-heading"
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
-          className={`grid grid-cols-1 gap-4 rounded-[1.5rem] transition-colors sm:grid-cols-2 xl:grid-cols-3 ${dragging ? "ring-2 ring-signal-500/40" : ""}`}
+          className={`grid grid-cols-1 gap-4 rounded-[1.5rem] transition-colors motion-reduce:transition-none sm:grid-cols-2 xl:grid-cols-3 ${dragging ? "ring-2 ring-signal-500/40" : ""}`}
         >
-          {documents.map((doc) => {
+          {libraryItems.map((item) => {
+            if (item.kind === "deleting") {
+              const doc = item.tombstone.document;
+              return (
+                <div
+                  key={doc.id}
+                  data-flip-id={doc.id}
+                  data-motion-contract="asyncFeedback"
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    transitionDuration: interactionTokens.asyncFeedback.duration,
+                    transitionTimingFunction: interactionTokens.asyncFeedback.ease,
+                  }}
+                  className="flex min-h-40 flex-col justify-between gap-4 rounded-2xl border border-status-red/20 bg-status-red/[0.04] p-5 motion-reduce:transition-none dark:bg-status-red/[0.07]"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-700 dark:text-slate-200" title={doc.title}>{doc.title}</p>
+                    <p className="mt-1 truncate font-mono text-[10px] text-slate-400" title={doc.sourceRef || ""}>{doc.sourceRef || doc.sourceType}</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-status-red">
+                    <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+                    {translate(knowledgeMessages, "deletingDocument", { title: doc.title })}
+                  </div>
+                </div>
+              );
+            }
+            const doc = item.document;
             const { Icon, cls } = docIcon(doc);
             const subscribers = doc.subscriberAgentIds.map((id) => agentNameById.get(id)?.name).filter(Boolean) as string[];
+            const feedback = documentFeedback[doc.id];
+            const rowBusy = feedback?.status === "pending";
             return (
               <div
                 key={doc.id}
-                className="group relative flex flex-col gap-3 rounded-2xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_16px_rgba(0,0,0,0.03)] backdrop-blur-xl transition-all hover:shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/[0.06] dark:bg-void-800/50"
+                data-document-id={doc.id}
+                data-flip-id={doc.id}
+                className="group relative flex flex-col gap-3 rounded-2xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_16px_rgba(0,0,0,0.03)] backdrop-blur-xl transition-all motion-reduce:transition-none hover:shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/[0.06] dark:bg-void-800/50"
               >
                 <div className="flex items-start gap-3">
                   <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] dark:bg-white/[0.05] ${cls}`}>
                     <Icon className="h-5 w-5" strokeWidth={2.2} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold text-slate-800 dark:text-slate-100" title={doc.title}>{doc.title}</div>
+                    <h3
+                      ref={(element) => {
+                        if (element) documentFocusRefs.current.set(doc.id, element);
+                        else documentFocusRefs.current.delete(doc.id);
+                      }}
+                      tabIndex={-1}
+                      className="truncate text-sm font-bold text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-100"
+                      title={doc.title}
+                    >
+                      {doc.title}
+                    </h3>
                     <div className="mt-0.5 truncate font-mono text-[10px] text-slate-400 dark:text-slate-500" title={doc.sourceRef || ""}>
                       {doc.sourceRef || doc.sourceType}
                     </div>
@@ -364,17 +745,61 @@ export const KnowledgePage: FunctionComponent = () => {
                       })}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                    {doc.status === "error" && (
-                      <button type="button" onClick={() => reembed(doc)} aria-label={translate(knowledgeMessages, "retryEmbedding", { title: doc.title })} title={translate(knowledgeMessages, "retryEmbedding", { title: doc.title })} className="rounded-lg p-1.5 text-slate-400 hover:bg-black/[0.05] hover:text-signal-500 dark:hover:bg-white/[0.06]">
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity motion-reduce:transition-none group-hover:opacity-100 group-focus-within:opacity-100">
+                    {doc.status === "error" && feedback?.action !== "reembed" && (
+                      <button type="button" disabled={rowBusy} onClick={() => void reembed(doc)} aria-label={translate(knowledgeMessages, "retryEmbedding", { title: doc.title })} title={translate(knowledgeMessages, "retryEmbedding", { title: doc.title })} className="rounded-lg p-1.5 text-slate-400 hover:bg-black/[0.05] hover:text-signal-500 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.06]">
                         <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.2} />
                       </button>
                     )}
-                    <button type="button" onClick={() => removeDocument(doc)} aria-label={translate(knowledgeMessages, "deleteDocument", { title: doc.title })} title={translate(knowledgeMessages, "deleteDocument", { title: doc.title })} className="rounded-lg p-1.5 text-slate-400 hover:bg-status-red/10 hover:text-status-red">
+                    <button
+                      ref={(element) => {
+                        if (element) documentDeleteButtonRefs.current.set(doc.id, element);
+                        else documentDeleteButtonRefs.current.delete(doc.id);
+                      }}
+                      type="button"
+                      disabled={rowBusy}
+                      onClick={(event) => void removeDocument(doc, event.currentTarget)}
+                      aria-label={translate(knowledgeMessages, "deleteDocument", { title: doc.title })}
+                      title={translate(knowledgeMessages, "deleteDocument", { title: doc.title })}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-status-red/10 hover:text-status-red disabled:cursor-not-allowed disabled:opacity-40"
+                    >
                       <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />
                     </button>
                   </div>
                 </div>
+
+                {feedback && (
+                  <div
+                    data-motion-contract="asyncFeedback"
+                    role={feedback.status === "error" ? "alert" : "status"}
+                    style={{
+                      transitionDuration: interactionTokens.asyncFeedback.duration,
+                      transitionTimingFunction: interactionTokens.asyncFeedback.ease,
+                    }}
+                    className={`rounded-xl border px-3 py-2 text-[11px] font-semibold motion-reduce:transition-none ${feedback.status === "error"
+                      ? "border-status-red/20 bg-status-red/[0.06] text-status-red"
+                      : feedback.status === "success"
+                        ? "border-status-green/20 bg-status-green/[0.06] text-status-green"
+                        : "border-amber-400/20 bg-amber-400/[0.06] text-amber-700 dark:text-amber-300"}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      {feedback.status === "pending" ? <Loader2 aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" /> : feedback.status === "success" ? <Check aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" /> : <AlertTriangle aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+                      <span className="min-w-0 flex-1">
+                        <span className="block">{feedback.message}</span>
+                        {feedback.diagnostic && <span className="mt-0.5 block break-words font-mono font-normal">{feedback.diagnostic}</span>}
+                      </span>
+                      {feedback.status === "error" && (
+                        <button
+                          type="button"
+                          onClick={(event) => feedback.action === "delete" ? void removeDocument(doc, event.currentTarget) : void reembed(doc)}
+                          className="shrink-0 rounded-lg border border-current/20 px-2 py-1 font-bold hover:bg-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+                        >
+                          {translate(knowledgeMessages, feedback.action === "delete" ? "retryDelete" : "retryReembed")}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {subscribers.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5 border-t border-black/[0.05] pt-2.5 dark:border-white/[0.05]">
@@ -390,20 +815,31 @@ export const KnowledgePage: FunctionComponent = () => {
         </div>
       )}
 
-      {addMode === "upload" && <UploadModal busy={busy} onClose={() => setAddMode(null)} onFiles={handleUpload} />}
+      {addMode === "upload" && <UploadModal
+        busy={busy}
+        attempt={uploadAttempt}
+        onClose={() => setAddMode(null)}
+        onFiles={handleUpload}
+        onDismissAttempt={() => setUploadAttempt(null)}
+        onRetry={(files) => void handleUpload(files)}
+      />}
       {addMode === "paste" && <PasteModal busy={busy} onClose={() => setAddMode(null)} onSubmit={async (title, text) => {
-        await runIngestion(async () => {
-          await addPastedDocument(pid, { title, text });
+        await runIngestion(async (requestPid) => {
+          await addPastedDocument(requestPid, { title, text });
+          if (pidRef.current !== requestPid) return;
           await loadData();
+          if (pidRef.current !== requestPid) return;
           setAnnouncement(translate(knowledgeMessages, "pasteComplete", { title }));
           setAddMode(null);
         }, translate(knowledgeMessages, "pasteFailed"));
       }} />}
       {addMode === "repo" && <RepoPathModal busy={busy} onClose={() => setAddMode(null)} onSubmit={async (repoPath) => {
-        await runIngestion(async () => {
-          const result = await addRepoPathDocuments(pid, repoPath);
+        await runIngestion(async (requestPid) => {
+          const result = await addRepoPathDocuments(requestPid, repoPath);
+          if (pidRef.current !== requestPid) return;
           const diagnostics = result.errors.map((e) => `${e.fileName}: ${e.error}`).join(" · ");
           await loadData();
+          if (pidRef.current !== requestPid) return;
           if (diagnostics) setError(diagnostics);
           setAnnouncement(translatePlural(knowledgeMessages, "repoIngestComplete", result.documents.length, {
             formattedCount: formatNumber(result.documents.length),
@@ -418,10 +854,12 @@ export const KnowledgePage: FunctionComponent = () => {
         projects={projects}
         onClose={() => setAddMode(null)}
         onSubmit={async (sourceProjectId, documentIds) => {
-          await runIngestion(async () => {
-            const result = await importKnowledgeFromProject(pid, { sourceProjectId, documentIds });
+          await runIngestion(async (requestPid) => {
+            const result = await importKnowledgeFromProject(requestPid, { sourceProjectId, documentIds });
+            if (pidRef.current !== requestPid) return;
             const diagnostics = result.errors.map((e) => `${e.fileName}: ${e.error}`).join(" · ");
             await loadData();
+            if (pidRef.current !== requestPid) return;
             if (diagnostics) setError(diagnostics);
             setAnnouncement(translatePlural(knowledgeMessages, "projectImportComplete", result.documents.length, {
               formattedCount: formatNumber(result.documents.length),
@@ -443,21 +881,38 @@ const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: A
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const searchInFlight = useRef(false);
+  const searchGenerationRef = useRef(0);
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
+
+  useEffect(() => {
+    searchGenerationRef.current += 1;
+    searchInFlight.current = false;
+    setResults(null);
+    setSearchError(null);
+    setSearching(false);
+  }, [projectId]);
 
   const run = useCallback(async () => {
     if (!query.trim() || searchInFlight.current) return;
+    const requestProjectId = projectId;
+    const generation = ++searchGenerationRef.current;
     searchInFlight.current = true;
     setSearching(true);
     setSearchError(null);
     try {
-      const found = await searchKnowledge(projectId, { query, agentPresetId: agentId || undefined, limit: 6 });
+      const found = await searchKnowledge(requestProjectId, { query, agentPresetId: agentId || undefined, limit: 6 });
+      if (projectIdRef.current !== requestProjectId || searchGenerationRef.current !== generation) return;
       setResults(found);
     } catch (err) {
+      if (projectIdRef.current !== requestProjectId || searchGenerationRef.current !== generation) return;
       setSearchError(err instanceof Error ? err.message : translate(knowledgeMessages, "searchFailed"));
       setResults([]);
     } finally {
-      searchInFlight.current = false;
-      setSearching(false);
+      if (projectIdRef.current === requestProjectId && searchGenerationRef.current === generation) {
+        searchInFlight.current = false;
+        setSearching(false);
+      }
     }
   }, [projectId, query, agentId, translate]);
 
@@ -486,7 +941,7 @@ const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: A
           ]}
         />
         <button type="button" onClick={run} disabled={searching || !query.trim()} className="inline-flex items-center gap-2 rounded-xl bg-signal-500/90 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900">
-          {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" strokeWidth={2.5} />}
+          {searching ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Search className="h-4 w-4" strokeWidth={2.5} />}
           {translate(knowledgeMessages, "search")}
         </button>
       </div>
@@ -541,7 +996,104 @@ const ModalCloseButton: FunctionComponent<{ title: string; onClose: () => void }
   );
 };
 
-const UploadModal: FunctionComponent<{ busy: boolean; onClose: () => void; onFiles: (files: File[]) => void }> = ({ busy, onClose, onFiles }) => {
+const UploadFeedback: FunctionComponent<{
+  attempt: UploadAttempt;
+  busy: boolean;
+  onDismiss: () => void;
+  onRetry: (files: File[]) => void;
+}> = ({ attempt, busy, onDismiss, onRetry }) => {
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
+  const tokens = useInteractionTokens();
+  const pendingItems = attempt.items.filter((item) => item.status === "pending");
+  const successfulItems = attempt.items.filter((item) => item.status === "success");
+  const failedItems = attempt.items.filter((item) => item.status === "error");
+
+  return (
+    <section
+      aria-label={translate(knowledgeMessages, "uploadActivity")}
+      data-motion-contract="asyncFeedback"
+      style={{
+        transitionDuration: tokens.asyncFeedback.duration,
+        transitionTimingFunction: tokens.asyncFeedback.ease,
+      }}
+      className="rounded-2xl border border-black/[0.07] bg-white/65 p-4 shadow-sm motion-reduce:transition-none dark:border-white/[0.08] dark:bg-white/[0.03]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{translate(knowledgeMessages, "uploadActivity")}</h3>
+          <p className="mt-0.5 text-[11px] text-slate-400">
+            {translatePlural(knowledgeMessages, "uploadFileCount", attempt.items.length, { formattedCount: formatNumber(attempt.items.length) })}
+          </p>
+        </div>
+        {!busy && (
+          <button type="button" onClick={onDismiss} aria-label={translate(knowledgeMessages, "dismissUploadResults")} className="rounded-lg p-1.5 text-slate-400 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06]">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {pendingItems.length > 0 && (
+        <div role="status" aria-live="polite" className="mt-3 space-y-1.5">
+          {pendingItems.map((item, index) => (
+            <div key={`${item.file.name}-${index}`} className="flex items-center gap-2 rounded-xl bg-amber-400/[0.07] px-3 py-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+              <Loader2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
+              <span className="min-w-0 flex-1 truncate" title={item.file.name}>{translate(knowledgeMessages, "uploadFilePending", { fileName: item.file.name })}</span>
+              <span role="progressbar" aria-label={translate(knowledgeMessages, "uploadProgressForFile", { fileName: item.file.name })} className="h-1.5 w-16 overflow-hidden rounded-full bg-amber-400/20">
+                <span className="block h-full w-2/3 animate-pulse rounded-full bg-amber-500 motion-reduce:animate-none" />
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {successfulItems.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-status-green">{translate(knowledgeMessages, "uploadSucceededHeading")}</p>
+          <ul className="mt-1.5 space-y-1">
+            {successfulItems.map((item, index) => (
+              <li key={`${item.file.name}-${index}`} className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-status-green" />
+                <span className="truncate" title={item.file.name}>{item.file.name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {failedItems.length > 0 && (
+        <div role="alert" className="mt-3 rounded-xl border border-status-red/20 bg-status-red/[0.05] p-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-status-red">{translate(knowledgeMessages, "uploadFailedHeading")}</p>
+          <ul className="mt-1.5 space-y-2">
+            {failedItems.map((item, index) => (
+              <li key={`${item.file.name}-${index}`} className="text-[11px] text-status-red">
+                <span className="block font-bold">{item.file.name}</span>
+                {item.diagnostic && <span className="block break-words font-mono">{item.diagnostic}</span>}
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onRetry(failedItems.map((item) => item.file))}
+            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-status-red/25 bg-white/50 px-3 py-1.5 text-[11px] font-bold text-status-red hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"
+          >
+            {busy && <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />}
+            {translatePlural(knowledgeMessages, "retryFailedUploads", failedItems.length, { formattedCount: formatNumber(failedItems.length) })}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+};
+
+const UploadModal: FunctionComponent<{
+  busy: boolean;
+  attempt: UploadAttempt | null;
+  onClose: () => void;
+  onFiles: (files: File[]) => void;
+  onDismissAttempt: () => void;
+  onRetry: (files: File[]) => void;
+}> = ({ busy, attempt, onClose, onFiles, onDismissAttempt, onRetry }) => {
   const { translate } = useDashboardI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   return (
@@ -551,9 +1103,9 @@ const UploadModal: FunctionComponent<{ busy: boolean; onClose: () => void; onFil
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={busy}
-          className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-black/[0.1] py-12 transition-colors hover:border-signal-500/50 hover:bg-signal-500/[0.03] disabled:opacity-50 dark:border-white/[0.1]"
+          className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-black/[0.1] py-12 transition-colors motion-reduce:transition-none hover:border-signal-500/50 hover:bg-signal-500/[0.03] disabled:opacity-50 dark:border-white/[0.1]"
         >
-          {busy ? <Loader2 className="h-8 w-8 animate-spin text-signal-500" /> : <Upload className="h-8 w-8 text-signal-500" strokeWidth={1.8} />}
+          {busy ? <Loader2 className="h-8 w-8 animate-spin text-signal-500 motion-reduce:animate-none" /> : <Upload className="h-8 w-8 text-signal-500" strokeWidth={1.8} />}
           <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{translate(knowledgeMessages, busy ? "uploading" : "chooseFiles")}</span>
           <span className="text-[11px] text-slate-400">{translate(knowledgeMessages, "supportedFiles")}</span>
         </button>
@@ -561,6 +1113,7 @@ const UploadModal: FunctionComponent<{ busy: boolean; onClose: () => void; onFil
           ref={inputRef}
           type="file"
           multiple
+          disabled={busy}
           aria-label={translate(knowledgeMessages, "chooseFilesLabel")}
           className="hidden"
           onChange={(e) => {
@@ -568,6 +1121,7 @@ const UploadModal: FunctionComponent<{ busy: boolean; onClose: () => void; onFil
             if (files.length > 0) onFiles(files);
           }}
         />
+        {attempt && <UploadFeedback attempt={attempt} busy={busy} onDismiss={onDismissAttempt} onRetry={onRetry} />}
       </div>
     </ModalShell>
   );
@@ -602,7 +1156,7 @@ const PasteModal: FunctionComponent<{ busy: boolean; onClose: () => void; onSubm
           onClick={() => onSubmit(title.trim(), text)}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" strokeWidth={2.5} />}
+          {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Plus className="h-4 w-4" strokeWidth={2.5} />}
           {translate(knowledgeMessages, "addToLibrary")}
         </button>
       </div>
@@ -634,7 +1188,7 @@ const RepoPathModal: FunctionComponent<{ busy: boolean; onClose: () => void; onS
           onClick={() => onSubmit(repoPath.trim())}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderGit2 className="h-4 w-4" strokeWidth={2.4} />}
+          {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <FolderGit2 className="h-4 w-4" strokeWidth={2.4} />}
           {translate(knowledgeMessages, "ingest")}
         </button>
       </div>
@@ -707,7 +1261,7 @@ const ProjectKnowledgeModal: FunctionComponent<{
 
         <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-2xl border border-black/[0.06] bg-black/[0.02] p-2 dark:border-white/[0.06] dark:bg-white/[0.02]">
           {loadingDocs ? (
-            <div role="status" aria-label={translate(knowledgeMessages, "loadingProjectDocuments")} className="flex items-center justify-center py-10 text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /></div>
+            <div role="status" aria-label={translate(knowledgeMessages, "loadingProjectDocuments")} className="flex items-center justify-center py-10 text-slate-400"><Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" /></div>
           ) : loadError ? (
             <p role="alert" className="px-2 py-8 text-center text-sm text-status-red">{loadError}</p>
           ) : documents.length === 0 ? (
@@ -721,7 +1275,7 @@ const ProjectKnowledgeModal: FunctionComponent<{
                 onClick={() => toggle(doc.id)}
                 aria-pressed={checked}
                 aria-label={translate(knowledgeMessages, "selectDocument", { title: doc.title })}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${checked ? "bg-signal-500/[0.08]" : "hover:bg-white/60 dark:hover:bg-white/[0.04]"}`}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors motion-reduce:transition-none ${checked ? "bg-signal-500/[0.08]" : "hover:bg-white/60 dark:hover:bg-white/[0.04]"}`}
               >
                 <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${checked ? "bg-signal-500 text-white dark:text-void-900" : "bg-black/[0.05] text-slate-400 dark:bg-white/[0.06]"}`}>
                   {checked ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <FileText className="h-3.5 w-3.5" />}
@@ -751,7 +1305,7 @@ const ProjectKnowledgeModal: FunctionComponent<{
             aria-label={translate(knowledgeMessages, busy ? "importing" : "importSelected", { formattedCount: formatNumber(selectedIds.size) })}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" strokeWidth={2.4} />}
+            {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Copy className="h-4 w-4" strokeWidth={2.4} />}
             {translate(knowledgeMessages, "importSelected", { formattedCount: selectedIds.size ? formatNumber(selectedIds.size) : "" })}
           </button>
         </div>
