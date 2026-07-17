@@ -729,6 +729,11 @@ export function isTransientCodexTransportError(result: CommandResult): boolean {
   return text.includes("stream disconnected before completion") || text.includes("error sending request for url") || text.includes("channel closed");
 }
 
+export function isCodexRolloutNotFoundError(result: CommandResult): boolean {
+  const text = buildProviderDiagnosticText("codex", result).toLowerCase();
+  return text.includes("no rollout found for thread id");
+}
+
 export function isClaudeConversationNotFoundError(result: CommandResult): boolean {
   const text = `${result.stdout}\n${result.stderr}`.toLowerCase();
   return text.includes("no conversation found");

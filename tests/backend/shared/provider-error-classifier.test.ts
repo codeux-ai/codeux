@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   classifyProviderError,
   computeResetAfterFromClockTime,
+  isCodexRolloutNotFoundError,
   isClaudeConversationNotFoundError,
   isOpenCodeSessionNotFoundError,
   isTransientCodexTransportError,
@@ -720,6 +721,38 @@ describe("isTransientCodexTransportError", () => {
   it("returns false for unrelated errors", () => {
     const result = makeResult("Syntax error", "Missing semicolon");
     expect(isTransientCodexTransportError(result)).toBe(false);
+  });
+});
+
+describe("isCodexRolloutNotFoundError", () => {
+  it("returns true for a structured Codex thread resume failure", () => {
+    const result = makeResult(
+      JSON.stringify({
+        type: "error",
+        message: "thread/resume: thread/resume failed: no rollout found for thread id native-thread-1 (code -32600)",
+      }),
+      "",
+    );
+    expect(isCodexRolloutNotFoundError(result)).toBe(true);
+  });
+
+  it("returns true for a Codex rollout failure on stderr", () => {
+    const result = makeResult(
+      "",
+      "Codex failed: Error: thread/resume: thread/resume failed: no rollout found for thread id native-thread-2 (code -32600)",
+    );
+    expect(isCodexRolloutNotFoundError(result)).toBe(true);
+  });
+
+  it("ignores rollout text in ordinary structured tool output", () => {
+    const result = makeResult(
+      JSON.stringify({
+        type: "item.completed",
+        item: { type: "command_execution", aggregated_output: "no rollout found for thread id fixture-thread" },
+      }),
+      "Provider authentication failed",
+    );
+    expect(isCodexRolloutNotFoundError(result)).toBe(false);
   });
 });
 

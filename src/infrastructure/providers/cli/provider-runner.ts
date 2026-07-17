@@ -21,6 +21,7 @@ import { randomUUID } from "crypto";
 import { getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { runProviderExecutionLoop } from "./provider-execution-loop.js";
 import {
+  isCodexRolloutNotFoundError,
   isClaudeConversationNotFoundError,
   isOpenCodeSessionNotFoundError,
   isTransientCodexTransportError,
@@ -127,8 +128,10 @@ export interface ProviderRunInput {
    *  the native resume-id position. */
   continueSessionWithoutNativeId?: boolean;
   /** Whether a missing resumable provider conversation may be replaced by a
-   *  fresh conversation. Disable this when the caller promises strict
-   *  same-session continuity, such as restart recovery for sprint planning. */
+   *  fresh conversation. Claude Code and OpenCode default to enabled for
+   *  compatibility; Codex requires an explicit opt-in from a self-contained
+   *  caller. Disable this when the caller promises strict same-session
+   *  continuity, such as restart recovery for sprint planning. */
   allowFreshSessionFallback?: boolean;
   /** The previous invocation's raw opencode export snapshot (`{ tokens, cost }`)
    *  for this same session, when `continueSessionId` resumes it. `opencode
@@ -553,6 +556,24 @@ export class ProviderRunner implements IProviderRunner {
 
     try {
 
+      const buildFreshCodexSpec = () => {
+        nativeSessionId = null;
+        return this.buildCommandSpec(
+          provider,
+          runModel,
+          prompt,
+          workflowSettings.executionMode === "DOCKER" ? CONTAINER_WORKSPACE_ROOT : cwd,
+          input.codexOutputPath,
+          nativeSessionId,
+          false,
+          hasMcpConfig,
+          input.qwenAuthMode,
+          input.qwenProtocol,
+          codexProviderArgs,
+          antigravityLogPath,
+          input.thinkingMode,
+        );
+      };
       const buildFreshClaudeSpec = () => {
         nativeSessionId = randomUUID();
         return this.buildCommandSpec(
@@ -606,8 +627,10 @@ export class ProviderRunner implements IProviderRunner {
         },
         trackingOnActivity,
         isTransientCodexTransportError,
+        isCodexRolloutNotFoundError,
         isClaudeConversationNotFoundError,
         isOpenCodeSessionNotFoundError,
+        buildFreshCodexSpec,
         buildFreshClaudeSpec,
         buildFreshOpenCodeSpec,
         readAntigravityDiagnostics,

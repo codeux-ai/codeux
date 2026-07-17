@@ -11,8 +11,10 @@ describe("ProviderExecutionLoop", () => {
     runCmd: vi.fn().mockResolvedValue({ ok: true, stdout: "ok", stderr: "" }),
     trackingOnActivity: vi.fn(),
     isTransientCodexTransportError: vi.fn().mockReturnValue(false),
+    isCodexRolloutNotFoundError: vi.fn().mockReturnValue(false),
     isClaudeConversationNotFoundError: vi.fn().mockReturnValue(false),
     isOpenCodeSessionNotFoundError: vi.fn().mockReturnValue(false),
+    buildFreshCodexSpec: vi.fn().mockReturnValue({ command: "codex", args: ["exec", "--fresh"] }),
     buildFreshClaudeSpec: vi.fn().mockReturnValue({ command: "fresh", args: ["freshArg"] }),
     buildFreshOpenCodeSpec: vi.fn().mockReturnValue({ command: "opencode", args: ["run", "--format", "json", "--dir", "/workspace", "freshArg"] }),
     readAntigravityDiagnostics: vi.fn().mockResolvedValue(null),
@@ -53,6 +55,65 @@ describe("ProviderExecutionLoop", () => {
     expect(JSON.stringify(opts.trackingOnActivity.mock.calls)).not.toContain("arg1");
 
     vi.useRealTimers();
+  });
+
+  it("retries Codex with a fresh session when the rollout is not found", async () => {
+    const runCmd = vi.fn()
+      .mockResolvedValueOnce({ ok: false, stdout: "", stderr: "no rollout found for thread id native-thread" })
+      .mockResolvedValueOnce({ ok: true, stdout: "ok", stderr: "" });
+    const opts: ProviderExecutionLoopOptions = {
+      ...getDefaultOptions(),
+      provider: "codex",
+      continueSession: true,
+      allowFreshSessionFallback: true,
+      runCmd,
+      isCodexRolloutNotFoundError: vi.fn().mockReturnValue(true),
+    };
+
+    const result = await runProviderExecutionLoop(opts);
+
+    expect(result.ok).toBe(true);
+    expect(runCmd).toHaveBeenCalledTimes(2);
+    expect(runCmd).toHaveBeenNthCalledWith(2, "codex", ["exec", "--fresh"]);
+    expect(opts.trackingOnActivity).toHaveBeenCalledWith(
+      "Codex could not resume the previous conversation (rollout not found). Retrying once with a fresh session...",
+      "provider",
+    );
+  });
+
+  it("requires callers to opt Codex into fresh-session fallback", async () => {
+    const runCmd = vi.fn().mockResolvedValue({ ok: false, stdout: "", stderr: "no rollout found for thread id native-thread" });
+    const opts: ProviderExecutionLoopOptions = {
+      ...getDefaultOptions(),
+      provider: "codex",
+      continueSession: true,
+      runCmd,
+      isCodexRolloutNotFoundError: vi.fn().mockReturnValue(true),
+    };
+
+    const result = await runProviderExecutionLoop(opts);
+
+    expect(result.ok).toBe(false);
+    expect(runCmd).toHaveBeenCalledTimes(1);
+    expect(opts.buildFreshCodexSpec).not.toHaveBeenCalled();
+  });
+
+  it("does not replace a required Codex continuation with a fresh session", async () => {
+    const runCmd = vi.fn().mockResolvedValue({ ok: false, stdout: "", stderr: "no rollout found for thread id native-thread" });
+    const opts: ProviderExecutionLoopOptions = {
+      ...getDefaultOptions(),
+      provider: "codex",
+      continueSession: true,
+      allowFreshSessionFallback: false,
+      runCmd,
+      isCodexRolloutNotFoundError: vi.fn().mockReturnValue(true),
+    };
+
+    const result = await runProviderExecutionLoop(opts);
+
+    expect(result.ok).toBe(false);
+    expect(runCmd).toHaveBeenCalledTimes(1);
+    expect(opts.buildFreshCodexSpec).not.toHaveBeenCalled();
   });
 
   it("classifies command failures through provider activity without raw command payloads", async () => {

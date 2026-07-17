@@ -3041,6 +3041,7 @@ export class QualityAssuranceService {
         continueSessionWithoutNativeId: args.provider === "codex"
           && Boolean(previousInvocation)
           && !previousInvocation?.nativeSessionId,
+        allowFreshSessionFallback: true,
         // opencode's `export <sessionID>` is cumulative for the whole session, so
         // this follow-up (which resumes the same session) needs the prior
         // invocation's raw snapshot as a baseline to subtract out — otherwise it
