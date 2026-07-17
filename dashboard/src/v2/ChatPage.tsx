@@ -33,7 +33,7 @@ import { ProviderLogo } from "./components/ui/ProviderLogo.js";
 import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import { formatInvocationRetryAt } from "./lib/invocation-retry-time.js";
-import type { ChatMessageRecord, ExecutionInvocationRecord, Sprint, Task } from "./types.js";
+import type { ExecutionInvocationRecord, Sprint, Task } from "./types.js";
 import { cancelExecutionInvocation, resetInvocationUsageLimitTimer, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import {
@@ -46,8 +46,15 @@ import { resolveChatLiveEntities, type ChatLiveEntityWidget } from "./lib/chat-l
 import { STATUS_MESSAGE_MIN_INTERVAL_MS } from "./lib/agent-humor-messages.js";
 import { useSpeechPlayback } from "./hooks/use-speech-playback.js";
 import { useDashboardI18n } from "./i18n/context.js";
-import { chatMessages, translateChatMessage, translateChatPlural } from "./i18n/messages/chat.js";
+import { chatMessages, translateChatMessage } from "./i18n/messages/chat.js";
 import type { DashboardLocale } from "./i18n/locales.js";
+import {
+  CHAT_COMPOSER_HELP_ID,
+  CHAT_COMPOSER_STATUS_ID,
+  COMPOSER_STATUS_TONE_CLASS,
+  getLatestDashboardMessage,
+  useChatComposerControls,
+} from "./components/chat/chat-composer-controls.js";
 
 
 const EMPTY_LIVE_ENTITIES: readonly ChatLiveEntityWidget[] = [];
@@ -83,171 +90,10 @@ const hasUsageLimitTimer = (invocation: ExecutionInvocationRecord | null | undef
   );
 };
 
-const getTranscriptJoiner = (before: string, after: string): string => {
-  if (!before || !after) {
-    return "";
-  }
-  return /\s$/.test(before) || /^\s/.test(after) ? "" : " ";
-};
-
-type ComposerStatusTone = "disabled" | "ready" | "sending" | "queued" | "sent" | "failed";
-
-interface ComposerStatusViewModel {
-  tone: ComposerStatusTone;
-  visibleText: string;
-  liveText: string;
-  disabledReason: string | null;
-}
-
-const getLatestDashboardMessage = (messages: readonly ChatMessageRecord[]): ChatMessageRecord | null => {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.direction === "dashboard_to_connection") {
-      return message;
-    }
-  }
-  return null;
-};
-
-const buildComposerStatus = (input: {
-  activeConnectionName: string | null;
-  error: string | null;
-  latestDashboardMessage: ChatMessageRecord | null;
-  pendingDashboardMessages: number;
-  selectedProject: boolean;
-  sending: boolean;
-  speechError: string | null;
-  trimmedInput: string;
-  locale?: DashboardLocale;
-}): ComposerStatusViewModel => {
-  const locale = input.locale ?? "en";
-  const disabledReason = !input.selectedProject
-    ? translateChatMessage(locale, "selectProjectBeforeSending")
-    : input.sending
-      ? translateChatMessage(locale, "messageAlreadySending")
-      : !input.trimmedInput
-        ? translateChatMessage(locale, "writeMessageBeforeSending")
-        : null;
-
-  if (!input.selectedProject) {
-    const noProjectReason = translateChatMessage(locale, "selectProjectBeforeSending");
-    return {
-      tone: "disabled",
-      visibleText: noProjectReason,
-      liveText: noProjectReason,
-      disabledReason,
-    };
-  }
-
-  if (input.sending) {
-    return {
-      tone: "sending",
-      visibleText: translateChatMessage(locale, "sendingMessageToCodeUx"),
-      liveText: translateChatMessage(locale, "sendingMessage"),
-      disabledReason,
-    };
-  }
-
-  if (input.error) {
-    return {
-      tone: "failed",
-      visibleText: translateChatMessage(locale, "sendFailed", { error: input.error }),
-      liveText: translateChatMessage(locale, "failedWithError", { error: input.error }),
-      disabledReason,
-    };
-  }
-
-  if (input.speechError) {
-    return {
-      tone: "failed",
-      visibleText: translateChatMessage(locale, "voicePlaybackFailedWithTranscript", { error: input.speechError }),
-      liveText: translateChatMessage(locale, "voicePlaybackFailed", { error: input.speechError }),
-      disabledReason,
-    };
-  }
-
-  if (input.pendingDashboardMessages > 0) {
-    const queuedLabel = translateChatPlural(locale, "queuedForDelivery", input.pendingDashboardMessages, {
-      count: new Intl.NumberFormat(locale).format(input.pendingDashboardMessages),
-    });
-    return {
-      tone: "queued",
-      visibleText: translateChatMessage(locale, "workerWillClaimTurn", { queued: queuedLabel }),
-      liveText: queuedLabel,
-      disabledReason,
-    };
-  }
-
-  if (input.latestDashboardMessage?.deliveryStatus === "failed") {
-    return {
-      tone: "failed",
-      visibleText: translateChatMessage(locale, "latestMessageFailed"),
-      liveText: translateChatMessage(locale, "latestMessageFailedLive"),
-      disabledReason,
-    };
-  }
-
-  if (input.latestDashboardMessage?.deliveryStatus === "pending") {
-    return {
-      tone: "queued",
-      visibleText: translateChatMessage(locale, "latestMessageQueued"),
-      liveText: translateChatMessage(locale, "latestMessageQueuedLive"),
-      disabledReason,
-    };
-  }
-
-  if (input.latestDashboardMessage?.deliveryStatus === "delivered") {
-    return {
-      tone: "sent",
-      visibleText: translateChatMessage(locale, "messageSentWaiting"),
-      liveText: translateChatMessage(locale, "messageSent"),
-      disabledReason,
-    };
-  }
-
-  if (input.latestDashboardMessage?.deliveryStatus === "processed") {
-    return {
-      tone: "sent",
-      visibleText: translateChatMessage(locale, "latestMessageProcessed"),
-      liveText: translateChatMessage(locale, "latestMessageProcessedLive"),
-      disabledReason,
-    };
-  }
-
-  if (input.trimmedInput) {
-    const target = input.activeConnectionName
-      ? locale === "de" ? ` an ${input.activeConnectionName}` : ` to ${input.activeConnectionName}`
-      : "";
-    return {
-      tone: "ready",
-      visibleText: translateChatMessage(locale, "readyToSend", { target }),
-      liveText: translateChatMessage(locale, "composerReady"),
-      disabledReason,
-    };
-  }
-
-  return {
-    tone: "disabled",
-    visibleText: translateChatMessage(locale, "writeToEnableSend"),
-    liveText: translateChatMessage(locale, "composerDisabled"),
-    disabledReason,
-  };
-};
-
-const COMPOSER_STATUS_TONE_CLASS: Record<ComposerStatusTone, string> = {
-  disabled: "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400",
-  ready: "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300",
-  sending: "border-signal-500/25 bg-signal-500/[0.10] text-signal-700 dark:text-signal-300",
-  queued: "border-status-amber/25 bg-status-amber/[0.10] text-status-amber",
-  sent: "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300",
-  failed: "border-status-red/25 bg-status-red/[0.08] text-status-red",
-};
-
 export const ChatPage: FunctionComponent = () => {
   const { formatNumber, locale, translate } = useDashboardI18n();
   const messagesRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
-  const composerSelectionRef = useRef<{ start: number; end: number } | null>(null);
   const [workingTimerPhase, setWorkingTimerPhase] = useState<"starting" | "working" | null>(null);
   const [restartingInvocation, setRestartingInvocation] = useState<{ id: string; mode: InvocationRestartMode } | null>(null);
   const [cancellingInvocationId, setCancellingInvocationId] = useState<string | null>(null);
@@ -385,34 +231,28 @@ export const ChatPage: FunctionComponent = () => {
     () => mergeChatToolMessages(messages),
     [messages],
   );
-  const trimmedComposerInput = input.trim();
   const latestDashboardMessage = useMemo(() => getLatestDashboardMessage(messages), [messages]);
-  const composerStatus = useMemo(() => buildComposerStatus({
+  const composerContextKey = [
+    selectedProject?.id ?? "no-project",
+    selectedThread?.id ?? "new-thread",
+    activeConnection?.id ?? activeConnection?.displayName ?? "unassigned",
+  ].join(":");
+  const composerControls = useChatComposerControls({
     activeConnectionName: activeConnection?.displayName ?? null,
+    composerRef,
+    contextKey: composerContextKey,
     error,
+    input,
     latestDashboardMessage,
+    locale,
+    navigateHistory,
     pendingDashboardMessages,
     selectedProject: Boolean(selectedProject),
     sending,
+    setInput,
     speechError: transcriptSpeech.error,
-    trimmedInput: trimmedComposerInput,
-    locale,
-  }), [
-    activeConnection?.displayName,
-    error,
-    latestDashboardMessage,
-    pendingDashboardMessages,
-    selectedProject,
-    sending,
-    transcriptSpeech.error,
-    trimmedComposerInput,
-  ]);
-  const sendDisabled = Boolean(composerStatus.disabledReason);
-  const sendButtonLabel = sending
-    ? translate(chatMessages, "sendingMessageLabel")
-    : composerStatus.disabledReason
-      ? translate(chatMessages, "sendMessageUnavailable", { reason: composerStatus.disabledReason })
-      : translate(chatMessages, "sendMessage");
+    onSend: handleSend,
+  });
   const invocationLiveEntitiesByMessageId = useMemo(() => {
     const entitiesByMessageId = new Map<string, readonly ChatLiveEntityWidget[]>();
     if (liveEntitySprints.length === 0 && liveEntityTasks.length === 0) {
@@ -437,67 +277,8 @@ export const ChatPage: FunctionComponent = () => {
   ]);
 
   const handlePromptSuggestionSelect = useCallback((prompt: string) => {
-    void handleSend(prompt).finally(() => {
-      requestAnimationFrame(() => {
-        composerRef.current?.focus({ preventScroll: true });
-      });
-    });
-  }, [handleSend]);
-
-  const rememberComposerSelection = useCallback((element: HTMLTextAreaElement): void => {
-    composerSelectionRef.current = {
-      start: element.selectionStart,
-      end: element.selectionEnd,
-    };
-  }, []);
-
-  const handleSpeechTranscript = useCallback((transcript: string) => {
-    const trimmedTranscript = transcript.trim();
-    if (!trimmedTranscript) {
-      return;
-    }
-
-    const composer = composerRef.current;
-    const sourceValue = composer?.value ?? input;
-    const rememberedSelection = composerSelectionRef.current;
-    const canUseRememberedSelection = Boolean(
-      rememberedSelection
-        && rememberedSelection.start >= 0
-        && rememberedSelection.end >= rememberedSelection.start
-        && rememberedSelection.end <= sourceValue.length
-    );
-
-    const selectionStart = canUseRememberedSelection ? rememberedSelection!.start : sourceValue.length;
-    const selectionEnd = canUseRememberedSelection ? rememberedSelection!.end : sourceValue.length;
-    const before = sourceValue.slice(0, selectionStart);
-    const after = sourceValue.slice(selectionEnd);
-    const insert = `${getTranscriptJoiner(before, trimmedTranscript)}${trimmedTranscript}${getTranscriptJoiner(trimmedTranscript, after)}`;
-    const nextValue = `${before}${insert}${after}`;
-    const nextCaret = before.length + insert.length;
-
-    setInput(nextValue);
-    requestAnimationFrame(() => {
-      const nextComposer = composerRef.current;
-      if (!nextComposer) {
-        return;
-      }
-      nextComposer.focus();
-      nextComposer.style.height = "auto";
-      nextComposer.style.height = `${nextComposer.scrollHeight}px`;
-      nextComposer.setSelectionRange(nextCaret, nextCaret);
-      composerSelectionRef.current = { start: nextCaret, end: nextCaret };
-    });
-  }, [input, setInput]);
-
-  const submitComposerMessage = useCallback(async (): Promise<void> => {
-    if (sendDisabled) {
-      return;
-    }
-    await handleSend();
-    requestAnimationFrame(() => {
-      composerRef.current?.focus({ preventScroll: true });
-    });
-  }, [handleSend, sendDisabled]);
+    void composerControls.submitAction(prompt);
+  }, [composerControls.submitAction]);
 
   const handleRestartInvocation = useCallback(async (mode: InvocationRestartMode = "retry_full_prompt") => {
     if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId || resettingUsageLimitInvocationId) {
@@ -751,7 +532,7 @@ export const ChatPage: FunctionComponent = () => {
               error={error}
               input={input}
               setInput={setInput}
-              onSpeechTranscript={handleSpeechTranscript}
+              onSpeechTranscript={composerControls.insertSpeechTranscript}
               handleSend={handleSend}
               handleCreateAppQuickaction={handleCreateAppQuickaction}
               initialEligibilityLoaded={!projectInitializationStateLoading}
@@ -761,6 +542,7 @@ export const ChatPage: FunctionComponent = () => {
               activeConnection={activeConnection}
               agentPreset={stagePreset}
               onOpenThreads={() => setChatMode("threads")}
+              composerControls={composerControls}
             />
           </div>
         </>
@@ -848,7 +630,7 @@ export const ChatPage: FunctionComponent = () => {
                 <ChatCreateAppQuickActions
                   hasProject
                   showInitialCreateActions={showInitialCreateActions}
-                  onSelect={(kind) => void handleCreateAppQuickaction(kind)}
+                  onSelect={(kind) => void composerControls.submitAction(kind, () => handleCreateAppQuickaction(kind))}
                 />
               </div>
             )}
@@ -856,100 +638,79 @@ export const ChatPage: FunctionComponent = () => {
               <label htmlFor="message-composer" className="sr-only">{translate(chatMessages, "message")}</label>
               <textarea
                 id="message-composer"
-                aria-describedby="composer-help composer-status"
+                aria-describedby={composerControls.describedBy}
                 ref={composerRef}
                 value={input}
                 rows={1}
                 placeholder={translate(chatMessages, activeConnection ? "askAnything" : "writeProjectNote")}
                 className="max-h-[180px] min-h-[38px] w-full resize-none bg-transparent px-2 py-2 text-[15px] min-w-0 leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600"
                 onInput={(event) => {
-                  const element = event.currentTarget;
-                  element.style.height = "auto";
-                  element.style.height = `${element.scrollHeight}px`;
-                  rememberComposerSelection(element);
-                  setInput(element.value);
+                  composerControls.handleInput(event.currentTarget);
                 }}
-                onFocus={(event) => rememberComposerSelection(event.currentTarget)}
-                onClick={(event) => rememberComposerSelection(event.currentTarget)}
-                onSelect={(event) => rememberComposerSelection(event.currentTarget)}
-                onKeyUp={(event) => rememberComposerSelection(event.currentTarget)}
-                onKeyDown={(event) => {
-                  if (event.isComposing) {
-                    return;
-                  }
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void submitComposerMessage();
-                    return;
-                  }
-                  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-                    const element = event.currentTarget;
-                    // Single-line content has no ambiguous cursor movement, so history
-                    // recall always applies there. Multi-line (Shift+Enter) text only
-                    // recalls history when the caret is at the true start/end of the
-                    // whole value — otherwise Up/Down should move between lines as usual.
-                    const isSingleLine = !element.value.includes("\n");
-                    const atStart = element.selectionStart === 0 && element.selectionEnd === 0;
-                    const atEnd = element.selectionStart === element.value.length && element.selectionEnd === element.value.length;
-                    const direction = event.key === "ArrowUp" ? "up" : "down";
-                    const shouldRecall = direction === "up" ? (isSingleLine || atStart) : (isSingleLine || atEnd);
-                    if (shouldRecall && navigateHistory(direction)) {
-                      event.preventDefault();
-                      requestAnimationFrame(() => {
-                        if (!composerRef.current) return;
-                        composerRef.current.style.height = "auto";
-                        composerRef.current.style.height = `${composerRef.current.scrollHeight}px`;
-                        const pos = direction === "up" ? 0 : composerRef.current.value.length;
-                        composerRef.current.setSelectionRange(pos, pos);
-                        composerSelectionRef.current = { start: pos, end: pos };
-                      });
-                    }
-                  }
-                }}
+                onFocus={(event) => composerControls.rememberSelection(event.currentTarget)}
+                onClick={(event) => composerControls.rememberSelection(event.currentTarget)}
+                onSelect={(event) => composerControls.rememberSelection(event.currentTarget)}
+                onKeyUp={(event) => composerControls.rememberSelection(event.currentTarget)}
+                onKeyDown={composerControls.handleKeyDown}
               />
               <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="min-w-0 flex-1 space-y-2">
-                  <div id="composer-help" className="text-[10px] font-mono text-slate-400">
+                  <div id={CHAT_COMPOSER_HELP_ID} className="text-[10px] font-mono text-slate-400">
                     {activeConnection
                       ? translate(chatMessages, "connectionComposerHelp", { name: activeConnection.displayName, status: activeConnection.status })
                       : translate(chatMessages, "queuedComposerHelp")}
                   </div>
                   <div
-                    id="composer-status"
-                    role={composerStatus.tone === "failed" ? "alert" : "status"}
-                    aria-live={composerStatus.tone === "failed" ? "assertive" : "polite"}
+                    id={CHAT_COMPOSER_STATUS_ID}
+                    role={composerControls.statusRole}
+                    aria-live={composerControls.statusLive}
                     aria-atomic="true"
-                    className={`rounded-xl border px-3 py-2 text-xs font-semibold leading-relaxed ${COMPOSER_STATUS_TONE_CLASS[composerStatus.tone]}`}
+                    data-motion-contract="asyncFeedback"
+                    style={composerControls.asyncFeedbackStyle}
+                    className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-xs font-semibold leading-relaxed transition-[border-color,background-color,color] ${COMPOSER_STATUS_TONE_CLASS[composerControls.status.tone]}`}
                   >
-                    {composerStatus.visibleText}
+                    {composerControls.status.visibleText}
+                    {composerControls.retryAvailable && (
+                      <button
+                        type="button"
+                        aria-label={composerControls.retryButtonLabel}
+                        aria-busy={composerControls.pending ? "true" : "false"}
+                        disabled={composerControls.pending}
+                        onClick={() => void composerControls.retry()}
+                        data-motion-contract="controlFeedback"
+                        style={composerControls.controlFeedbackStyle}
+                        className="shrink-0 rounded-lg border border-current/25 px-2.5 py-1 font-bold transition-[transform,opacity] motion-safe:active:scale-95 disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {translate(chatMessages, "retry")}
+                      </button>
+                    )}
                   </div>
-                </div>
-                <div className="sr-only" aria-live={composerStatus.tone === "failed" ? "assertive" : "polite"} aria-atomic="true">
-                  {composerStatus.liveText}
                 </div>
                 <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                   <SpeechInputButton
-                    disabled={!selectedProject || sending}
+                    disabled={composerControls.speechDisabled}
                     projectId={selectedProject?.id ?? null}
-                    onTranscript={handleSpeechTranscript}
+                    onTranscript={composerControls.insertSpeechTranscript}
                     className="h-11 min-w-[7.5rem] sm:min-w-[8.75rem]"
                   />
                   <button
-                    aria-label={sendButtonLabel}
-                    aria-busy={sending ? "true" : "false"}
-                    aria-describedby="composer-help composer-status"
+                    aria-label={composerControls.sendButtonLabel}
+                    aria-busy={composerControls.pending ? "true" : "false"}
+                    aria-describedby={composerControls.describedBy}
                     type="button"
-                    onClick={() => void submitComposerMessage()}
-                    disabled={sendDisabled}
+                    onClick={() => void composerControls.submit()}
+                    disabled={composerControls.sendDisabled}
+                    data-motion-contract="controlFeedback"
+                    style={composerControls.controlFeedbackStyle}
                     className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] transition-all ${
-                      sendDisabled && !sending
+                      composerControls.sendDisabled && !composerControls.pending
                         ? "cursor-not-allowed bg-black/[0.06] text-slate-400 shadow-none dark:bg-white/[0.06]"
-                        : sending
+                        : composerControls.pending
                           ? "cursor-wait bg-signal-500/50 text-white dark:text-void-900 shadow-none motion-safe:scale-95"
                           : "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 motion-safe:hover:scale-105 motion-safe:active:scale-95"
                     }`}
                   >
-                    {sending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70 motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
+                    {composerControls.pending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70 motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
                   </button>
                 </div>
               </div>

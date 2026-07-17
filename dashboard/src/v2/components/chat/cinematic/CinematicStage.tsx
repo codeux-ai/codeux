@@ -35,6 +35,15 @@ import { useCinematicInvocationFeedback } from "../../../hooks/use-cinematic-inv
 import { CinematicInvocationProgressBubble } from "./CinematicInvocationProgressBubble.js";
 import { useDashboardI18n } from "../../../i18n/context.js";
 import { chatMessages, type ChatTextMessageKey } from "../../../i18n/messages/chat.js";
+import {
+  CHAT_COMPOSER_DESCRIBED_BY,
+  CHAT_COMPOSER_HELP_ID,
+  CHAT_COMPOSER_STATUS_ID,
+  COMPOSER_STATUS_TONE_CLASS,
+  buildComposerStatus,
+  getLatestDashboardMessage,
+  type ChatComposerControls,
+} from "../chat-composer-controls.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -78,6 +87,7 @@ export interface CinematicStageProps {
   activeConnection: { displayName: string; status: string } | null;
   agentPreset?: AgentPresetRecord;
   onOpenThreads: () => void;
+  composerControls?: ChatComposerControls;
 }
 
 const CREATE_APP_ACTION_ICONS: Record<DashboardCreateAppQuickactionKind, typeof Monitor> = {
@@ -357,6 +367,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   activeConnection,
   agentPreset,
   onOpenThreads,
+  composerControls,
 }) => {
   const { formatNumber, locale, translate } = useDashboardI18n();
   const floatRef = useRef<HTMLDivElement>(null);
@@ -373,6 +384,9 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const seenAgentMessageIdsRef = useRef<Set<string>>(new Set());
   const pendingAutoPlayMessageRef = useRef<ChatMessageRecord | null>(null);
   const expectingFreshAgentReplyRef = useRef(false);
+  const composerPending = composerControls?.pending ?? sending;
+  const composerError = composerControls?.error ?? error;
+  const composerInput = composerControls?.input ?? input;
 
   const agentName = agentPreset?.name || activeConnection?.displayName || translate(chatMessages, "projectManager");
   const avatarConfig = agentPreset?.avatarConfig || DEFAULT_AGENT_AVATAR_CONFIG;
@@ -382,7 +396,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   }, []);
   const activityState = resolveCinematicActivityDisplayState({
     agentId: agentPreset?.id,
-    error,
+    error: composerError,
     hasAwaitedReply,
     invocations,
     nowMs: activityNowMs,
@@ -465,6 +479,29 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     .filter((message) => message.direction === "dashboard_to_connection")
     .slice(-2); // at most two queued sends staged at once
   const earlierMessageCount = Math.max(0, visibleMessages.length - (latestAgentMessage ? 1 : 0) - pendingUserMessages.length);
+  const fallbackComposerStatus = buildComposerStatus({
+    activeConnectionName: activeConnection?.displayName ?? null,
+    error: composerError,
+    latestDashboardMessage: getLatestDashboardMessage(messages),
+    pendingDashboardMessages: messages.filter((message) => (
+      message.direction === "dashboard_to_connection"
+      && (message.deliveryStatus === "pending" || message.deliveryStatus === "delivered")
+    )).length,
+    selectedProject: Boolean(selectedProject),
+    sending: composerPending,
+    speechError: speechPlayback.error,
+    trimmedInput: composerInput.trim(),
+    locale,
+  });
+  const composerStatus = composerControls?.status ?? fallbackComposerStatus;
+  const composerStatusRole = composerControls?.statusRole ?? (composerStatus.tone === "failed" ? "alert" : "status");
+  const composerStatusLive = composerControls?.statusLive ?? (composerStatus.tone === "failed" ? "assertive" : "polite");
+  const composerSendDisabled = composerControls?.sendDisabled ?? Boolean(composerStatus.disabledReason);
+  const composerSendLabel = composerControls?.sendButtonLabel ?? translate(
+    chatMessages,
+    composerPending ? "sendingMessageLabel" : composerStatus.disabledReason ? "sendMessageUnavailable" : "sendMessage",
+    composerStatus.disabledReason ? { reason: composerStatus.disabledReason } : undefined,
+  );
 
   // Background execution remains observable, but never selects the Project
   // Manager's thinking expression, thought bubble, or work tool.
@@ -487,6 +524,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
 
   const sendStageMessage = async (overrideText?: string): Promise<void> => {
     expectingFreshAgentReplyRef.current = true;
+    if (composerControls) {
+      if (overrideText === undefined) await composerControls.submit();
+      else await composerControls.submitAction(overrideText);
+      return;
+    }
     await handleSend(overrideText);
   };
 
@@ -572,8 +614,8 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   }, [messages, runtimeBusy, selectedProject?.id, voiceAvailable, voiceEnabled]);
 
   useEffect(() => {
-    if (error) expectingFreshAgentReplyRef.current = false;
-  }, [error]);
+    if (composerError) expectingFreshAgentReplyRef.current = false;
+  }, [composerError]);
 
   const toggleVoice = (): void => {
     if (!voiceAvailable || !selectedProject?.id) return;
@@ -596,19 +638,19 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   });
 
   const mood: AgentMoodState = useAgentMood({
-    error,
-    sending,
+    error: composerError,
+    sending: composerPending,
     hasWorkingReply: runtimeBusy,
     workingPhase,
     messages: visibleMessages,
-    userEngaged: composerFocused || input.trim().length > 0,
+    userEngaged: composerFocused || composerInput.trim().length > 0,
     agentName,
     reducedMotion,
     ambientPaused: Boolean(activeResponseEffect),
   });
   // Runtime truth always wins. A validated reply effect may only replace the
   // otherwise idle/listening micro-expression for its bounded lifetime.
-  const responseEffect = !error && !sending && !runtimeBusy ? activeResponseEffect : null;
+  const responseEffect = !composerError && !composerPending && !runtimeBusy ? activeResponseEffect : null;
   const stageExpression = responseEffect?.emotion ?? mood.expression;
   const stageAnimation = reducedMotion
     ? undefined
@@ -633,7 +675,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const applySuggestion = (prompt: string): void => {
     void sendStageMessage(prompt).finally(() => {
       requestAnimationFrame(() => {
-        composerRef.current?.focus({ preventScroll: true });
+        (composerControls?.composerRef ?? composerRef).current?.focus({ preventScroll: true });
       });
     });
   };
@@ -681,7 +723,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
       <div className="pointer-events-none absolute inset-x-0 top-10 bottom-32 z-10 flex flex-col items-center justify-start md:justify-center">
         {/* Mobile uses a compact two-row scroller per category; desktop groups
             a lightly scattered action constellation left of the avatar. */}
-        {!runtimeBusy && !sending && !error && quickActions.length > 0 && (
+        {!runtimeBusy && !composerPending && !composerError && quickActions.length > 0 && (
           <div
             aria-label={translate(chatMessages, "projectQuickActions")}
             role="group"
@@ -715,13 +757,23 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                         data-quick-action-zone={action.zone}
                         onClick={() => {
                           if (action.actionType === "create_app") {
-                            void handleCreateAppQuickaction(action.appKind);
+                            if (composerControls) {
+                              void composerControls.submitAction(action.label, () => handleCreateAppQuickaction(action.appKind));
+                            } else {
+                              void handleCreateAppQuickaction(action.appKind);
+                            }
                             return;
                           }
                           void sendStageMessage(action.prompt);
                         }}
-                        style={{ animationDelay: action.animationDelay }}
-                        className={`${mood.ambientMotionEnabled ? "stage-quick-float" : ""} ${QUICK_ACTION_SCATTER_STYLES[action.id]} group inline-flex min-h-9 w-fit min-w-0 self-center items-center justify-start gap-2 rounded-xl border border-black/[0.06] bg-white/78 px-2 py-1.5 text-left text-[10px] font-semibold leading-3.5 text-slate-600 shadow-[0_3px_14px_rgba(15,23,42,0.07)] backdrop-blur-xl transition-[border-color,background-color,color,box-shadow] hover:border-black/[0.13] hover:bg-white/95 hover:text-slate-900 hover:shadow-[0_5px_18px_rgba(15,23,42,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-void-800/72 dark:text-slate-300 dark:shadow-[0_4px_18px_rgba(0,0,0,0.28)] dark:hover:border-white/[0.16] dark:hover:bg-void-700/92 dark:hover:text-white dark:focus-visible:ring-offset-void-900`}
+                        disabled={composerControls?.quickActionsDisabled ?? composerPending}
+                        aria-describedby={composerControls?.describedBy ?? CHAT_COMPOSER_DESCRIBED_BY}
+                        data-motion-contract="controlFeedback"
+                        style={{
+                          animationDelay: action.animationDelay,
+                          ...(composerControls?.controlFeedbackStyle ?? {}),
+                        }}
+                        className={`${mood.ambientMotionEnabled ? "stage-quick-float" : ""} ${QUICK_ACTION_SCATTER_STYLES[action.id]} group inline-flex min-h-9 w-fit min-w-0 self-center items-center justify-start gap-2 rounded-xl border border-black/[0.06] bg-white/78 px-2 py-1.5 text-left text-[10px] font-semibold leading-3.5 text-slate-600 shadow-[0_3px_14px_rgba(15,23,42,0.07)] backdrop-blur-xl transition-[border-color,background-color,color,box-shadow,opacity] hover:border-black/[0.13] hover:bg-white/95 hover:text-slate-900 hover:shadow-[0_5px_18px_rgba(15,23,42,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-55 dark:border-white/[0.08] dark:bg-void-800/72 dark:text-slate-300 dark:shadow-[0_4px_18px_rgba(0,0,0,0.28)] dark:hover:border-white/[0.16] dark:hover:bg-void-700/92 dark:hover:text-white dark:focus-visible:ring-offset-void-900`}
                       >
                         <span
                           aria-hidden="true"
@@ -739,7 +791,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
             ))}
           </div>
         )}
-        <div className={`relative flex w-full flex-col items-center px-6 ${runtimeBusy ? "md:-translate-x-[10%] xl:-translate-x-[12%] 2xl:-translate-x-[10%]" : ""} ${!runtimeBusy && !sending && !error && quickActions.length > 0 ? "pt-28 md:pt-0" : ""}`}>
+        <div className={`relative flex w-full flex-col items-center px-6 ${runtimeBusy ? "md:-translate-x-[10%] xl:-translate-x-[12%] 2xl:-translate-x-[10%]" : ""} ${!runtimeBusy && !composerPending && !composerError && quickActions.length > 0 ? "pt-28 md:pt-0" : ""}`}>
           <StageActivityStrip
             foregroundCue={activityState.foregroundCue}
             backgroundCue={activityState.backgroundCue}
@@ -785,9 +837,9 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
             >
               <SpeechInputButton
                 compact
-                disabled={!selectedProject || sending}
+                disabled={composerControls?.speechDisabled ?? (!selectedProject || composerPending)}
                 projectId={selectedProject?.id ?? null}
-                onTranscript={onSpeechTranscript}
+                onTranscript={composerControls?.insertSpeechTranscript ?? onSpeechTranscript}
                 className="border-transparent bg-transparent shadow-none hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
               />
               <span aria-hidden="true" className="h-6 w-px bg-black/[0.08] dark:bg-white/[0.1]" />
@@ -880,26 +932,40 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
         <div className="flex flex-1 justify-center">
         <div className="pointer-events-auto w-full max-w-2xl">
           <div className={`rounded-[2rem] border bg-white/85 p-3.5 shadow-[0_12px_48px_rgba(0,0,0,0.10)] backdrop-blur-xl transition-colors focus-within:border-signal-500/40 dark:bg-void-800/85 dark:shadow-[0_12px_48px_rgba(0,0,0,0.45)] ${
-            error ? "border-status-red/50" : "border-black/[0.08] dark:border-white/[0.1]"
+            composerError ? "border-status-red/50" : "border-black/[0.08] dark:border-white/[0.1]"
           }`}>
             <div className="flex items-end gap-2">
               <label htmlFor="stage-composer" className="sr-only">{translate(chatMessages, "messageProjectManager")}</label>
               <textarea
                 id="stage-composer"
-                ref={composerRef}
-                value={input}
+                ref={composerControls?.composerRef ?? composerRef}
+                value={composerInput}
+                aria-describedby={composerControls?.describedBy ?? CHAT_COMPOSER_DESCRIBED_BY}
                 rows={1}
                 placeholder={translate(chatMessages, "askAgentAnything", { name: agentName })}
                 className="max-h-[200px] min-h-[56px] w-full min-w-0 resize-none bg-transparent px-3.5 py-3.5 text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500"
-                onFocus={() => setComposerFocused(true)}
+                onFocus={(event) => {
+                  setComposerFocused(true);
+                  composerControls?.rememberSelection(event.currentTarget);
+                }}
                 onBlur={() => setComposerFocused(false)}
+                onClick={(event) => composerControls?.rememberSelection(event.currentTarget)}
+                onSelect={(event) => composerControls?.rememberSelection(event.currentTarget)}
+                onKeyUp={(event) => composerControls?.rememberSelection(event.currentTarget)}
                 onInput={(event) => {
-                  const element = event.currentTarget;
-                  element.style.height = "auto";
-                  element.style.height = `${element.scrollHeight}px`;
-                  setInput(element.value);
+                  if (composerControls) composerControls.handleInput(event.currentTarget);
+                  else {
+                    const element = event.currentTarget;
+                    element.style.height = "auto";
+                    element.style.height = `${element.scrollHeight}px`;
+                    setInput(element.value);
+                  }
                 }}
                 onKeyDown={(event) => {
+                  if (composerControls) {
+                    composerControls.handleKeyDown(event);
+                    return;
+                  }
                   if (event.isComposing) return;
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -927,28 +993,54 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                 }}
               />
               <button
-                aria-label={translate(chatMessages, sending ? "sendingMessageLabel" : "sendMessage")}
-                aria-busy={sending}
+                aria-label={composerSendLabel}
+                aria-busy={composerPending ? "true" : "false"}
+                aria-describedby={composerControls?.describedBy ?? CHAT_COMPOSER_DESCRIBED_BY}
                 type="button"
                 onClick={() => void sendStageMessage()}
-                disabled={!selectedProject || !input.trim() || sending}
+                disabled={composerSendDisabled}
+                data-motion-contract="controlFeedback"
+                style={composerControls?.controlFeedbackStyle}
                 className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[1.25rem] transition-all ${
-                  !selectedProject || (!input.trim() && !sending)
+                  composerSendDisabled && !composerPending
                     ? "cursor-not-allowed bg-black/[0.06] text-slate-400 dark:bg-white/[0.06]"
-                    : sending
-                      ? "scale-95 cursor-wait bg-signal-500/50 text-white dark:text-void-900"
-                      : "bg-signal-500 text-white shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:scale-105 hover:bg-signal-400 active:scale-95 dark:text-void-900"
+                    : composerPending
+                      ? "cursor-wait bg-signal-500/50 text-white motion-safe:scale-95 dark:text-void-900"
+                      : "bg-signal-500 text-white shadow-[0_0_24px_rgba(0,224,160,0.28)] motion-safe:hover:scale-105 hover:bg-signal-400 motion-safe:active:scale-95 dark:text-void-900"
                 }`}
               >
-                {sending ? <RefreshCw className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
+                {composerPending ? <RefreshCw className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
               </button>
             </div>
-            <div className="px-3 pb-1 text-[10px] font-mono text-slate-400 dark:text-slate-500">
-              {translate(chatMessages, "enterSendsNewline")}
-              <span className="sr-only" aria-live="polite">
-                {sending ? translate(chatMessages, "sendingMessageToCodeUx") : ""}
-                {error ? translate(chatMessages, "failedWithError", { error }) : ""}
-              </span>
+            <div id={CHAT_COMPOSER_HELP_ID} className="px-3 pt-1 text-[10px] font-mono text-slate-400 dark:text-slate-500">
+              {activeConnection
+                ? translate(chatMessages, "connectionComposerHelp", { name: activeConnection.displayName, status: activeConnection.status })
+                : translate(chatMessages, "queuedComposerHelp")}
+            </div>
+            <div
+              id={CHAT_COMPOSER_STATUS_ID}
+              role={composerStatusRole}
+              aria-live={composerStatusLive}
+              aria-atomic="true"
+              data-motion-contract="asyncFeedback"
+              style={composerControls?.asyncFeedbackStyle}
+              className={`mx-3 mt-2 flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[11px] font-semibold leading-relaxed transition-[border-color,background-color,color] ${COMPOSER_STATUS_TONE_CLASS[composerStatus.tone]}`}
+            >
+              {composerStatus.visibleText}
+              {composerControls?.retryAvailable && (
+                <button
+                  type="button"
+                  aria-label={composerControls.retryButtonLabel}
+                  aria-busy={composerPending ? "true" : "false"}
+                  disabled={composerPending}
+                  onClick={() => void composerControls.retry()}
+                  data-motion-contract="controlFeedback"
+                  style={composerControls.controlFeedbackStyle}
+                  className="shrink-0 rounded-lg border border-current/25 px-2.5 py-1 font-bold transition-[transform,opacity] motion-safe:active:scale-95 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {translate(chatMessages, "retry")}
+                </button>
+              )}
             </div>
           </div>
         </div>

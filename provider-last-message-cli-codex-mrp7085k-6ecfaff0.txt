@@ -1,0 +1,19 @@
+Implemented composer interaction parity between Threads and 3D Chat.
+
+- Added shared state, retry, focus/caret, speech, history, duplicate-send, accessibility, and motion handling in [chat-composer-controls.ts](/workspace/dashboard/src/v2/components/chat/chat-composer-controls.ts).
+- Wired both [ChatPage.tsx](/workspace/dashboard/src/v2/ChatPage.tsx) and [CinematicStage.tsx](/workspace/dashboard/src/v2/components/chat/cinematic/CinematicStage.tsx) to the shared controls.
+- Added context-safe failure recovery and retry invalidation across project, thread, and agent changes.
+- Extended English/German copy, focused tests, canonical/public documentation, and [.task-learnings.md](/workspace/.task-learnings.md).
+
+Verification passed:
+
+- Focused Vitest suite: 71 tests
+- `pnpm run typecheck:dashboard`
+- `pnpm run check:dashboard-i18n`
+- `pnpm run build`
+- `/health` and `/chat` headless smoke checks on port 4444
+- `git diff --check`
+
+Changes remain uncommitted as required.
+
+CODE_UX_TASK_OUTCOME: completed
