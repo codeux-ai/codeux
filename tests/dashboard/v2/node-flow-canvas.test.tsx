@@ -2,7 +2,9 @@
 /** @jsx h */
 import { h } from "preact";
 import { fireEvent, render } from "@testing-library/preact";
-import { describe, expect, it, vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup } from "@testing-library/preact";
 import { NodeFlowCanvas } from "../../../dashboard/src/v2/components/nodes/NodeFlowCanvas.js";
 import type { NodeFlowGraph } from "../../../dashboard/src/v2/types.js";
 import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
@@ -12,6 +14,8 @@ const graph: NodeFlowGraph = {
   nodes: [{ id: "input-1", type: "input", title: "Input", position: { x: 40, y: 40 } }],
   edges: [],
 };
+
+afterEach(cleanup);
 
 describe("NodeFlowCanvas", () => {
   it("keeps drag movement local and commits one graph update on pointer release", () => {
@@ -44,5 +48,30 @@ describe("NodeFlowCanvas", () => {
 
     expect(onMoveNode).toHaveBeenCalledTimes(1);
     expect(onMoveNode).toHaveBeenCalledWith("input-1", { x: 220, y: 200 });
+  });
+
+  it("coalesces repeated keyboard nudges into one committed update and announces the position", () => {
+    const onMoveNode = vi.fn();
+    const { getByRole } = render(
+      <DashboardI18nProvider storage={null}><NodeFlowCanvas
+        graph={graph}
+        selectedNodeId="input-1"
+        onSelectNode={() => undefined}
+        onMoveNode={onMoveNode}
+      /></DashboardI18nProvider>,
+    );
+    const node = getByRole("button", { name: "Select node Input" });
+
+    fireEvent.keyDown(node, { key: "ArrowRight" });
+    fireEvent.keyDown(node, { key: "ArrowRight", repeat: true });
+    fireEvent.keyDown(node, { key: "ArrowDown", shiftKey: true });
+
+    expect(onMoveNode).not.toHaveBeenCalled();
+    expect(getByRole("status")).toHaveTextContent("Input moved to x 56, y 72");
+
+    fireEvent.keyUp(node, { key: "ArrowDown", shiftKey: true });
+
+    expect(onMoveNode).toHaveBeenCalledTimes(1);
+    expect(onMoveNode).toHaveBeenCalledWith("input-1", { x: 56, y: 72 });
   });
 });
