@@ -272,15 +272,24 @@ describe("JulesApiClient coverage", () => {
     });
 
     it("fetchRecentActivitiesLite returns recent activities without per-activity hydration", async () => {
+        let now = 0;
         vi.mocked(mockInstance.get).mockReset();
         vi.mocked(mockInstance.get)
             .mockResolvedValueOnce({ data: { activities: [{ id: "a1", createTime: "2026-01-02T00:00:00Z", agentMessaged: { agentMessage: "second" } }], nextPageToken: "t" } })
             .mockResolvedValueOnce({ data: { activities: [{ id: "a0", createTime: "2026-01-01T00:00:00Z", agentMessaged: { agentMessage: "first" } }] } });
 
-        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0 });
+        const client = new JulesApiClient({
+            baseUrl: "http://url",
+            apiKey: "key",
+            minRequestIntervalMs: 0,
+            recentActivityCacheTtlMs: 10,
+            now: () => now,
+        });
+        expect((await client.fetchRecentActivitiesLite("sessions/x", 5)).map((a) => a.id)).toEqual(["a1"]);
+        now = 11;
         const res = await client.fetchRecentActivitiesLite("sessions/x", 5);
 
-        // Sorted ascending by createTime, and only the two list calls (no getActivity hydration).
+        // The second bounded refresh advances the cursor without hydration calls.
         expect(res.map((a) => a.id)).toEqual(["a0", "a1"]);
         expect(mockInstance.get).toHaveBeenCalledTimes(2);
     });
@@ -315,6 +324,26 @@ describe("JulesApiClient coverage", () => {
         expect(mockInstance.get).toHaveBeenCalledTimes(1);
         expect(firstResult).toBe(secondResult);
         expect(firstResult.map((session) => session.id)).toEqual(["active-1"]);
+    });
+
+    it("shares one in-flight session page between orchestration and capacity callers", async () => {
+        vi.mocked(mockInstance.get).mockReset();
+        let resolveGet: (value: unknown) => void = () => {};
+        vi.mocked(mockInstance.get).mockReturnValueOnce(new Promise((resolve) => { resolveGet = resolve; }));
+        const client = new JulesApiClient({
+            baseUrl: "http://url",
+            apiKey: "key",
+            minRequestIntervalMs: 0,
+            now: () => 0,
+        });
+
+        const capacity = client.getSessionsForCapacityCheck();
+        const orchestration = client.getCachedSessions();
+        resolveGet({ data: { sessions: [{ id: "shared-1", name: "sessions/shared-1", prompt: "", state: "IN_PROGRESS" }] } });
+        const [capacityResult, orchestrationResult] = await Promise.all([capacity, orchestration]);
+
+        expect(mockInstance.get).toHaveBeenCalledTimes(1);
+        expect(capacityResult).toBe(orchestrationResult);
     });
 
     it("getCachedSessions serves the cached snapshot within the TTL and re-fetches after expiry", async () => {
@@ -358,6 +387,34 @@ describe("JulesApiClient coverage", () => {
         expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["1"]);
         await client.sendSessionMessage("s", "hello");
         expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["2"]);
+        expect(mockInstance.get).toHaveBeenCalledTimes(2);
+    });
+
+    it("never reuses or repopulates provider caches across an API-key change", async () => {
+        vi.mocked(mockInstance.get).mockReset();
+        let resolveOld: (value: unknown) => void = () => {};
+        let resolveFresh: (value: unknown) => void = () => {};
+        vi.mocked(mockInstance.get)
+            .mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve; }))
+            .mockReturnValueOnce(new Promise((resolve) => { resolveFresh = resolve; }));
+
+        const client = new JulesApiClient({
+            baseUrl: "http://url",
+            apiKey: "old-key",
+            minRequestIntervalMs: 0,
+            sessionsCacheTtlMs: 1_000_000,
+            now: () => 0,
+        });
+        const oldRead = client.getCachedSessions();
+        client.setApiKey("new-key");
+        const freshRead = client.getCachedSessions();
+
+        resolveFresh({ data: { sessions: [{ id: "new-account-session" }] } });
+        expect((await freshRead).map((session) => session.id)).toEqual(["new-account-session"]);
+        resolveOld({ data: { sessions: [{ id: "old-account-session" }] } });
+        expect((await oldRead).map((session) => session.id)).toEqual(["old-account-session"]);
+
+        expect((await client.getCachedSessions()).map((session) => session.id)).toEqual(["new-account-session"]);
         expect(mockInstance.get).toHaveBeenCalledTimes(2);
     });
 
@@ -418,6 +475,19 @@ describe("JulesApiClient coverage", () => {
         const errorCb = (mockInstance.interceptors.response as any)._errorCb;
         const err = { response: { status: 404 }, config: { url: "/x" }, message: "Request failed with status code 404" };
         await expect(errorCb(err)).rejects.toBe(err);
+    });
+
+    it("does not retry mutating requests after transport failures", async () => {
+        mockInstance.mockReset();
+        new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0 });
+        const errorCb = (mockInstance.interceptors.response as any)._errorCb;
+        const err = Object.assign(new Error("connect ETIMEDOUT"), {
+          code: "ETIMEDOUT",
+          config: { url: "/sessions/s1:sendMessage", method: "post" },
+        });
+
+        await expect(errorCb(err)).rejects.toBe(err);
+        expect(mockInstance).not.toHaveBeenCalled();
     });
 
     it("handles 404 in listAllActivities by throwing JulesNotFoundError", async () => {

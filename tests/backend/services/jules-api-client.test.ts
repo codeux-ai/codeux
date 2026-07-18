@@ -124,12 +124,20 @@ describe("JulesApiClient", () => {
       expect(activities).toHaveLength(2);
     });
 
-    it("fetches the latest activities across pages and hydrates them via get", async () => {
+    it("advances through activity history one cached page at a time without hydration", async () => {
+      let now = 0;
+      client = new JulesApiClient({
+        baseUrl,
+        apiKey,
+        minRequestIntervalMs: 0,
+        recentActivityCacheTtlMs: 10,
+        now: () => now,
+      });
       vi.mocked(mockAxios().get)
         .mockResolvedValueOnce({
           data: {
             activities: [
-              { id: "a1", createTime: "2021-01-01T00:00:00.000Z", progressUpdated: {} },
+              { id: "a1", name: "activities/a1", createTime: "2021-01-01T00:00:00.000Z", progressUpdated: {} },
             ],
             nextPageToken: "next",
           },
@@ -137,34 +145,39 @@ describe("JulesApiClient", () => {
         .mockResolvedValueOnce({
           data: {
             activities: [
-              { id: "a2", createTime: "2021-01-02T00:00:00.000Z", agentMessaged: { agentMessage: "Latest message" } },
+              { id: "a2", name: "activities/a2", createTime: "2021-01-02T00:00:00.000Z", agentMessaged: { agentMessage: "Latest message" } },
             ],
-          },
-        })
-        .mockResolvedValueOnce({
-          data: {
-            id: "a2",
-            createTime: "2021-01-02T00:00:00.000Z",
-            agentMessaged: { agentMessage: "Latest message" },
           },
         });
 
-      const activities = await client.fetchRecentActivities("s1", 1);
-
-      expect(activities).toEqual([
+      expect(await client.fetchRecentActivities("s1", 1)).toEqual([
+        {
+          id: "a1",
+          name: "activities/a1",
+          createTime: "2021-01-01T00:00:00.000Z",
+          progressUpdated: {},
+        },
+      ]);
+      now = 11;
+      expect(await client.fetchRecentActivities("s1", 1)).toEqual([
         {
           id: "a2",
+          name: "activities/a2",
           createTime: "2021-01-02T00:00:00.000Z",
           agentMessaged: { agentMessage: "Latest message" },
         },
       ]);
       expect(mockAxios().get).toHaveBeenNthCalledWith(1, "/sessions/s1/activities", {
-        params: { pageSize: 1, pageToken: undefined },
+        params: { pageSize: 50, pageToken: undefined },
+        signal: undefined,
+        maxContentLength: 16 * 1024 * 1024,
       });
       expect(mockAxios().get).toHaveBeenNthCalledWith(2, "/sessions/s1/activities", {
-        params: { pageSize: 1, pageToken: "next" },
+        params: { pageSize: 50, pageToken: "next" },
+        signal: undefined,
+        maxContentLength: 16 * 1024 * 1024,
       });
-      expect(mockAxios().get).toHaveBeenNthCalledWith(3, "/sessions/s1/activities/a2");
+      expect(mockAxios().get).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -1239,6 +1239,43 @@ describe("ConnectionChatRepository", () => {
       expect(connectionRepository.getThread(thread.id).pendingMessageCount).toBe(0);
     });
 
+    it("preserves insertion order and finds replies when messages share a timestamp", async () => {
+      const { storage, projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Same Timestamp Ordering Project",
+        sourceType: "local",
+        sourceRef: "/tmp/same-timestamp-ordering",
+      });
+      const thread = connectionRepository.createThread(project.id, { title: "Same timestamp ordering" });
+
+      const dashboardMessage = connectionRepository.postDashboardMessage(project.id, {
+        threadId: thread.id,
+        bodyMarkdown: "First message",
+      });
+      const reply = connectionRepository.postSystemMessage(project.id, {
+        threadId: thread.id,
+        bodyMarkdown: "Second reply",
+      });
+
+      storage.getDatabase().prepare(`
+        UPDATE conversation_messages
+        SET id = CASE id
+          WHEN ? THEN 'zzzz-first-message'
+          WHEN ? THEN 'aaaa-second-reply'
+        END
+        WHERE id IN (?, ?)
+      `).run(dashboardMessage.id, reply.id, dashboardMessage.id, reply.id);
+
+      expect(connectionRepository.listMessages(thread.id).map((message) => message.bodyMarkdown)).toEqual([
+        "First message",
+        "Second reply",
+      ]);
+      expect(connectionRepository.getFirstReplyAfterMessage(thread.id, "zzzz-first-message")?.bodyMarkdown).toBe(
+        "Second reply",
+      );
+      expect(connectionRepository.getThread(thread.id).lastMessagePreview).toBe("Second reply");
+    });
+
     it("returns the first reply after a specific message id", async () => {
       const { projectRepository, connectionRepository } = await createRepositories();
       const project = projectRepository.createProject({

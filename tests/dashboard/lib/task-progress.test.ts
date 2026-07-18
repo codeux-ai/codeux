@@ -245,7 +245,7 @@ describe("task progress phase", () => {
         taskKey: "8",
         taskTitle: "Capped task",
         eventType: "provider_concurrency_wait",
-        createdAt: "2026-03-27T10:05:00.000Z",
+        createdAt: new Date().toISOString(),
         payload: {
           provider: "codex",
           currentCount: 2,

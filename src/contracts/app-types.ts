@@ -141,6 +141,13 @@ export interface Subtask {
   session_id?: string;
   session_name?: string;
   session_state?: string;
+  /**
+   * Durable identifier for the current provider action-required episode.
+   * It changes only when the remote session leaves and later re-enters an
+   * action-required state, so automated replies remain idempotent across
+   * watch cycles and runtime restarts.
+   */
+  action_required_epoch?: string;
   provider?: ProviderId;
   model?: string;
   agentPresetId?: string | null;

@@ -20,7 +20,6 @@ import type {
   Subtask,
   AutoMergeFeaturePrResult,
   DashboardStatusSnapshot,
-  ActivitySummary,
 } from "../contracts/app-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
@@ -63,8 +62,6 @@ export interface SprintOrchestratorDependencies {
   isActionRequiredState: (state?: string) => boolean;
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
-  fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<ActivitySummary[]>;
-  listAllActivities?: (sessionId: string) => Promise<ActivitySummary[]>;
   getSession?: (sessionId: string) => Promise<JulesSession>;
   listSessions: () => Promise<{ sessions?: JulesSession[] }>;
   projectManagementRepository: ProjectManagementRepository;

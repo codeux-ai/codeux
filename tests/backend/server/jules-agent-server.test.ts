@@ -444,7 +444,7 @@ describe("CodeUxServer", () => {
 
       const result = await (server as any).fetchRecentActivities("other-123", 10);
       expect(result).toEqual(["activity2"]);
-      expect(julesApiFetchRecentActivitiesSpy).toHaveBeenCalledWith("other-123", 10);
+      expect(julesApiFetchRecentActivitiesSpy).toHaveBeenCalledWith("other-123", 10, undefined);
 
       isJulesApiConfiguredSpy.mockRestore();
     });

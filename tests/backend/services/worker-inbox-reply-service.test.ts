@@ -952,6 +952,101 @@ describe("WorkerInboxReplyService", () => {
     });
   });
 
+  it("aborts and releases a clarification worker that exceeds the configured worker timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const runProviderForText = vi.fn().mockImplementation((input: { signal?: AbortSignal }) => (
+        new Promise((_, reject) => {
+          const rejectWithReason = (): void => {
+            reject(input.signal?.reason || new Error("aborted"));
+          };
+          if (input.signal?.aborted) {
+            rejectWithReason();
+          } else {
+            input.signal?.addEventListener("abort", rejectWithReason, { once: true });
+          }
+        })
+      ));
+      const updateExecutionInvocation = vi.fn();
+      const updateProviderInvocationUsage = vi.fn();
+      const service = new WorkerInboxReplyService({
+        projectManagementRepository: {
+          getProject: vi.fn().mockReturnValue({
+            id: "project-1",
+            name: "Test Project",
+            baseDir: "/repo",
+          }),
+        } as any,
+        connectionChatRepository: {
+          getThread: vi.fn(),
+          listMessages: vi.fn(),
+        } as any,
+        taskService: {
+          resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
+        } as any,
+        agentPresetSyncService: {
+          getProjectManagerAgent: vi.fn().mockResolvedValue({
+            id: "project-manager",
+            instructionMarkdown: "Answer directly.",
+          }),
+        } as any,
+        executionRepository: {
+          createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-timeout" }),
+          appendExecutionInvocationMessage: vi.fn(),
+          updateExecutionInvocation,
+          updateProviderInvocationUsage,
+        } as any,
+        getDashboardSettings: () => ({
+          ...settings,
+          workers: { timeoutSeconds: 30 },
+        }),
+        getGithubToken: () => undefined,
+        providerRunner: { runProviderForText } as any,
+        providerConcurrencyService: {
+          waitForSlotAndClaim: vi.fn().mockImplementation((provider, limit, input) => ({
+            ...input,
+            id: "usage-timeout",
+          })),
+        } as any,
+      });
+      const task = {
+        record_id: "task-1",
+        id: "T1",
+        title: "Answer clarification",
+        prompt: "Continue safely.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+        activities: [{ agentMessaged: { agentMessage: "Which option should I use?" } }],
+      } as any;
+
+      const reply = service.generateClarificationReply({
+        projectId: "project-1",
+        sprintGoal: "Complete the sprint",
+        subtasks: [task],
+        task,
+      });
+      const assertion = expect(reply).rejects.toThrow(
+        "Clarification reply generation timed out after 30s",
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      await assertion;
+
+      expect(runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }));
+      expect(updateExecutionInvocation).toHaveBeenCalledWith("exec-timeout", expect.objectContaining({
+        status: "failed",
+      }));
+      expect(updateProviderInvocationUsage).toHaveBeenCalledWith("usage-timeout", expect.objectContaining({
+        status: "failed",
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("injects the scoped reply gateway without custom MCP servers for clarification replies", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "Only the clarification answer." });
 

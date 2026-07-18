@@ -395,7 +395,7 @@ export class ProviderConcurrencyService {
    * local git/merge work does not keep throttling new provider work.
    */
   getGlobalRunningCounts(providers?: string[]): Record<string, number> {
-    const running = this.deps.executionRepository.listRunningProviderInvocationUsages(providers);
+    const running = this.listCapacityConsumingProviderInvocations(providers);
     const counts: Record<string, number> = {};
     for (const inv of running) {
       if (inv.provider) {
@@ -410,6 +410,25 @@ export class ProviderConcurrencyService {
       }
     }
     return counts;
+  }
+
+  /**
+   * Returns invocations that currently consume admission capacity. Jules
+   * sessions blocked on plan/feedback are durable but do not execute remotely,
+   * so their linked BLOCKED task runs must not reserve subscription slots.
+   */
+  listCapacityConsumingProviderInvocations(providers?: string[]): ProviderInvocationUsageRecord[] {
+    return this.deps.executionRepository.listRunningProviderInvocationUsages(providers)
+      .filter((invocation) => {
+        if (invocation.finishedAt != null) {
+          return false;
+        }
+        if (invocation.provider !== "jules" || !invocation.taskRunId) {
+          return true;
+        }
+        const taskRun = this.deps.executionRepository.getTaskRun(invocation.taskRunId);
+        return !taskRun || taskRun.state === "RUNNING";
+      });
   }
 
   private logProviderCapWait(provider: ProviderId, limit: number, currentCount: number, localLastLogMs: number): number {
@@ -853,7 +872,16 @@ export class ProviderConcurrencyService {
       if (taskRun) {
         const terminal = taskRun.state === "COMPLETED" || taskRun.state === "FAILED";
         if (!terminal) {
-          // The underlying Jules work is still active — keep holding the slot.
+          if (invocation.finishedAt != null || invocation.durationMs != null) {
+            this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+              status: "running",
+              finishedAt: null,
+              durationMs: null,
+            });
+            recovered = true;
+          }
+          // The underlying Jules work is still active. BLOCKED task runs remain
+          // durable but are excluded from capacity accounting.
           continue;
         }
       } else if (ageMs < STALE_JULES_PROVIDER_ORPHAN_MS) {

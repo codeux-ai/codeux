@@ -1,4 +1,4 @@
-import type { JulesActivity, JulesSession, Subtask } from "../contracts/app-types.js";
+import type { JulesSession, Subtask } from "../contracts/app-types.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
@@ -29,9 +29,6 @@ export interface SessionSyncDependencies {
   listSessions: () => Promise<{ sessions?: JulesSession[] }>;
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
-  fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
-  activityFetchTimeoutMs?: number;
-  listAllActivities?: (sessionId: string) => Promise<JulesActivity[]>;
   getSession?: (sessionId: string) => Promise<JulesSession>;
   isActionRequiredState: (state?: string) => boolean;
   projectManagementRepository?: ProjectManagementRepository;
@@ -46,14 +43,6 @@ export interface SessionSyncDependencies {
       sessionId: string,
       sessionPrompt?: string,
       gitMetrics?: { insertions?: number; deletions?: number; filesChanged?: number } | null
-    ) => Promise<void>;
-    syncLiveInvocation: (
-      projectId: string,
-      taskId: string,
-      sessionId: string,
-      sessionPrompt?: string,
-      gitMetrics?: { insertions?: number; deletions?: number; filesChanged?: number } | null,
-      sourceRevision?: string,
     ) => Promise<void>;
   };
 }

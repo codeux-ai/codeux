@@ -2,11 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import {
-  buildProviderActivityEventPayload,
-  runSessionSyncStep,
-} from "../../../src/sprint/steps/session-sync-step.js";
-import type { JulesActivity, Subtask } from "../../../src/contracts/app-types.js";
+import { runSessionSyncStep } from "../../../src/sprint/steps/session-sync-step.js";
+import type { Subtask } from "../../../src/contracts/app-types.js";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
@@ -19,30 +16,6 @@ afterEach(async () => {
 });
 
 describe("runSessionSyncStep", () => {
-  it("bounds oversized provider activity payloads before durable event persistence", () => {
-    const oversized = `${"head".repeat(10_000)}${"tail".repeat(10_000)}`;
-    const activity: JulesActivity = {
-      id: oversized,
-      name: oversized,
-      createTime: "2026-07-15T00:00:00.000Z",
-      description: oversized,
-      agentMessaged: { agentMessage: oversized },
-      progressUpdated: { title: "Progress", description: oversized },
-      planApproved: { planId: oversized },
-      sessionCompleted: { output: oversized },
-    };
-
-    const payload = buildProviderActivityEventPayload(activity, "session-1", "sessions/session-1", "codex");
-    expect((payload.activityId as string).length).toBeLessThanOrEqual(2 * 1024);
-    expect((payload.activityName as string).length).toBeLessThanOrEqual(2 * 1024);
-    expect((payload.description as string).length).toBeLessThanOrEqual(16 * 1024);
-    expect((payload.agentMessaged as { agentMessage: string }).agentMessage.length).toBeLessThanOrEqual(16 * 1024);
-    expect((payload.progressUpdated as { description: string }).description.length).toBeLessThanOrEqual(16 * 1024);
-    expect((payload.planApproved as { planId: string }).planId.length).toBeLessThanOrEqual(2 * 1024);
-    expect(payload.sessionCompleted).toEqual(expect.objectContaining({ truncated: true }));
-    expect(JSON.stringify(payload).length).toBeLessThan(80 * 1024);
-  });
-
   it("skips session polling for terminal local CLI tasks that already have merge evidence", async () => {
     const listSessions = vi.fn().mockResolvedValue({ sessions: [] });
     const subtasks: Subtask[] = [
@@ -878,7 +851,7 @@ describe("runSessionSyncStep", () => {
     expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
   });
 
-  it("deduplicates activity fetches when multiple tasks map to the same session", async () => {
+  it("keeps activity telemetry out of orchestration when multiple tasks map to one session", async () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task One", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
       { id: "task-1", title: "Task One (Duplicate)", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
@@ -910,10 +883,9 @@ describe("runSessionSyncStep", () => {
 
     const result = await runSessionSyncStep(subtasks, deps as any, false, { repoPath, sprintNumber });
 
-    expect(fetchRecentActivities).toHaveBeenCalledTimes(1);
-    expect(fetchRecentActivities).toHaveBeenCalledWith("sessions/session-1", 5);
-    expect(result.subtasks[0].activities).toBe(mockActivities);
-    expect(result.subtasks[1].activities).toBe(mockActivities);
+    expect(fetchRecentActivities).not.toHaveBeenCalled();
+    expect(result.subtasks[0].activities).toBeUndefined();
+    expect(result.subtasks[1].activities).toBeUndefined();
   });
 
   it("reuses session task-run metadata for repeated tasks in one sync cycle", async () => {
@@ -997,7 +969,7 @@ describe("runSessionSyncStep", () => {
     expect(getLatestTaskRunBySessionId).toHaveBeenCalledWith("shared-session");
     expect(resolveSessionName).toHaveBeenCalledTimes(1);
     expect(extractSessionId).toHaveBeenCalledTimes(1);
-    expect(fetchRecentActivities).toHaveBeenCalledTimes(1);
+    expect(fetchRecentActivities).not.toHaveBeenCalled();
     expect(result.subtasks.map((task) => task.session_id)).toEqual(["shared-session", "shared-session"]);
   });
 
@@ -1084,11 +1056,10 @@ describe("runSessionSyncStep", () => {
 
     expect(getLatestTaskRunBySessionId).toHaveBeenCalledTimes(1);
     expect(getLatestTaskRunBySessionId).toHaveBeenCalledWith("shared-alias");
-    expect(fetchRecentActivities).toHaveBeenCalledTimes(1);
-    expect(fetchRecentActivities).toHaveBeenCalledWith("sessions/shared-alias", 5);
+    expect(fetchRecentActivities).not.toHaveBeenCalled();
   });
 
-  it("isolates activity fetch failures so unrelated task sync continues", async () => {
+  it("does not invoke activity telemetry while synchronizing unrelated task state", async () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task One", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
       { id: "task-2", title: "Task Two", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
@@ -1138,24 +1109,21 @@ describe("runSessionSyncStep", () => {
       { repoPath: "/tmp/my-repo", sprintNumber: 2 },
     );
 
-    expect(fetchRecentActivities).toHaveBeenCalledTimes(2);
+    expect(fetchRecentActivities).not.toHaveBeenCalled();
     expect(result.subtasks[0]).toMatchObject({
       session_id: "session-1",
       status: "RUNNING",
-      activities: [],
     });
     expect(result.subtasks[1]).toMatchObject({
       session_id: "session-2",
       status: "RUNNING",
-      activities: healthyActivities,
     });
-    expect(logger.warn).toHaveBeenCalledWith(
-      "Could not fetch activities for session",
-      expect.objectContaining({ sessionName: "sessions/session-1" }),
-    );
+    expect(result.subtasks[0].activities).toBeUndefined();
+    expect(result.subtasks[1].activities).toBeUndefined();
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it("times out a slow activity fetch without blocking unrelated task sync", async () => {
+  it("does not let a non-settling activity source enter the scheduler path", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-09T10:00:00.000Z"));
 
@@ -1209,28 +1177,15 @@ describe("runSessionSyncStep", () => {
       { repoPath: "/tmp/my-repo", sprintNumber: 3 },
     );
 
-    await vi.advanceTimersByTimeAsync(29_999);
-    expect(logger.warn).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(1);
     const result = await resultPromise;
 
-    expect(result.subtasks[0]?.activities).toEqual([]);
-    expect(result.subtasks[1]?.activities).toBe(healthyActivities);
-    expect(logger.warn).toHaveBeenCalledWith(
-      "Could not fetch activities for session",
-      expect.objectContaining({
-        sessionName: "sessions/session-1",
-        pageSize: 5,
-        concurrency: 5,
-        timeoutMs: 30_000,
-        elapsedMs: 30_000,
-        errorMessage: "Timed out fetching activities for sessions/session-1 after 30000ms",
-      }),
-    );
+    expect(fetchRecentActivities).not.toHaveBeenCalled();
+    expect(result.subtasks[0]?.activities).toBeUndefined();
+    expect(result.subtasks[1]?.activities).toBeUndefined();
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it("fetches activities using bounded parallelism for multiple unique sessions", async () => {
+  it("performs no activity fan-out for a wide active-session set", async () => {
     const subtasks: Subtask[] = Array.from({ length: 6 }).map((_, i) => ({
       id: `task-${i}`,
       title: `Task ${i}`,
@@ -1272,8 +1227,8 @@ describe("runSessionSyncStep", () => {
 
     await runSessionSyncStep(subtasks, deps as any, false, { repoPath, sprintNumber });
 
-    expect(fetchRecentActivities).toHaveBeenCalledTimes(6);
-    expect(maxConcurrentFetches).toBeLessThanOrEqual(5);
+    expect(fetchRecentActivities).not.toHaveBeenCalled();
+    expect(maxConcurrentFetches).toBe(0);
   });
 
   it("fully clears stale runtime state before retrying a failed session", async () => {
@@ -1339,7 +1294,7 @@ describe("runSessionSyncStep", () => {
     expect(result.subtasks[0]?.activities).toEqual([]);
   });
 
-  it("syncs provider session state and activities into task runs", async () => {
+  it("syncs provider session state without blocking on activity telemetry", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-"));
     tempDirs.push(dir);
 
@@ -1458,19 +1413,8 @@ describe("runSessionSyncStep", () => {
     });
 
     const events = executionRepository.listTaskRunEvents(run.id);
-    expect(events.map((event) => event.eventType)).toEqual([
-      "session_state_synced",
-      "provider_activity",
-    ]);
-    expect(events[1]?.sourceEventKey).toBe("activity:activity-1");
-    expect(events[1]?.payload).toMatchObject({
-      activityId: "activity-1",
-      kind: "progress_updated",
-      preview: "Runtime synced",
-      progressUpdated: {
-        title: "Runtime synced",
-      },
-    });
+    expect(events.map((event) => event.eventType)).toEqual(["session_state_synced"]);
+    expect(deps.fetchRecentActivities).not.toHaveBeenCalled();
   });
 
   it("does not rewrite unchanged active task runs before the heartbeat interval", async () => {
@@ -1804,7 +1748,7 @@ describe("runSessionSyncStep", () => {
     expect(projectRepository.getTask(task.id)?.status).toBe("coding_completed");
   });
 
-  it("refreshes a recorded task session directly when the snapshot has a stale nonterminal copy", async () => {
+  it("trusts the shared snapshot instead of issuing one exact read per active task", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-28T20:00:00.000Z"));
 
@@ -1909,13 +1853,13 @@ describe("runSessionSyncStep", () => {
       { repoPath: "/tmp/codeuxweb", sprintNumber: 24 }
     );
 
-    expect(getSession).toHaveBeenCalledWith("stale-snapshot-session");
-    expect(result.subtasks[0]?.status).toBe("CODING_COMPLETED");
-    expect(executionRepository.getTaskRun(run.id)?.state).toBe("COMPLETED");
-    expect(projectRepository.getTask(task.id)?.status).toBe("coding_completed");
+    expect(getSession).not.toHaveBeenCalled();
+    expect(result.subtasks[0]?.status).toBe("RUNNING");
+    expect(executionRepository.getTaskRun(run.id)?.state).toBe("RUNNING");
+    expect(projectRepository.getTask(task.id)?.status).toBe("in_progress");
   });
 
-  it("keeps an awaiting-feedback Jules session running after the latest agent request has a user reply", async () => {
+  it("keeps an awaiting-feedback Jules session running from a durable reply checkpoint", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-reply-"));
     tempDirs.push(dir);
 
@@ -1965,6 +1909,24 @@ describe("runSessionSyncStep", () => {
       startedAt: "2026-06-28T16:00:00.000Z",
       finishedAt: "2026-06-28T16:10:00.000Z",
     });
+    const actionRequiredEpoch = "AWAITING_USER_FEEDBACK:2026-06-28T16:12:29.000Z";
+    executionRepository.appendTaskRunEvent(run.id, "session_state_synced", "provider", {
+      sessionState: "AWAITING_USER_FEEDBACK",
+      taskRunState: "BLOCKED",
+      actionRequiredEpoch,
+    }, {
+      createdAt: "2026-06-28T16:12:29.000Z",
+      sourceEventKey: "reply-session:action-required",
+    });
+    executionRepository.appendTaskRunEvent(run.id, "action_required_user_reply_pending", "system", {
+      sessionState: "AWAITING_USER_FEEDBACK",
+      actionRequiredEpoch,
+      interventionKey: "reply-session:episode-1",
+      interventionStoredAtMs: Date.parse("2026-06-28T19:30:53.000Z"),
+    }, {
+      createdAt: "2026-06-28T19:30:53.000Z",
+      sourceEventKey: "reply-session:user-reply",
+    });
 
     const subtasks: Subtask[] = [
       {
@@ -1990,6 +1952,7 @@ describe("runSessionSyncStep", () => {
               name: "sessions/reply-session",
               title: "Sprint 8: [run:my-repo/s8/t07] [T07] Wait for clarification reply",
               state: "AWAITING_USER_FEEDBACK",
+              updateTime: "2026-06-28T16:12:29.000Z",
               provider: "jules",
               prompt: "Resolve the scoped loop.",
             },
@@ -1997,31 +1960,7 @@ describe("runSessionSyncStep", () => {
         }),
         resolveSessionName: (session: { name?: string }) => session.name,
         extractSessionId: (session: { id?: string }) => session.id,
-        fetchRecentActivities: vi.fn().mockResolvedValue([
-          {
-            id: "agent-question",
-            name: "sessions/reply-session/activities/agent-question",
-            createTime: "2026-06-28T16:12:29.000Z",
-            originator: "agent",
-            kind: "agent_message",
-            preview: "Should I expand beyond the scoped files?",
-          },
-          {
-            id: "user-reply",
-            name: "sessions/reply-session/activities/user-reply",
-            createTime: "2026-06-28T19:30:53.000Z",
-            originator: "user",
-            kind: "user_message",
-            preview: "Stay strictly within the T07 scope.",
-          },
-          {
-            id: "provider-progress",
-            name: "sessions/reply-session/activities/provider-progress",
-            createTime: "2026-06-28T19:31:00.000Z",
-            originator: "agent",
-            kind: "activity",
-          },
-        ]),
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
         isActionRequiredState: (state?: string) => state === "AWAITING_USER_FEEDBACK",
         executionRepository,
         projectManagementRepository: projectRepository,
@@ -2859,7 +2798,7 @@ describe("runSessionSyncStep", () => {
     expect(result.subtasks[0]?.status).toBe("FAILED");
   });
 
-  it("does not fetch recent activities for fully synchronized terminal sessions", async () => {
+  it("does not fetch activity telemetry for terminal sessions", async () => {
     const subtasks: Subtask[] = [
       {
         id: "task-terminal",
@@ -2912,18 +2851,10 @@ describe("runSessionSyncStep", () => {
 
     expect(getLatestTaskRun).toHaveBeenCalledWith("task-terminal-record", "sprint-run-123");
     expect(fetchRecentActivities).not.toHaveBeenCalled();
-    expect(logger.debug).toHaveBeenCalledWith(
-      "Skipping activity fetch for fully synchronized terminal session",
-      expect.objectContaining({
-        taskId: "task-terminal-record",
-        sessionId: "terminal-session",
-        sessionName: "sessions/terminal-session",
-        sessionState: "COMPLETED",
-      }),
-    );
+    expect(logger.debug).not.toHaveBeenCalled();
   });
 
-  it("still fetches activities for locally terminal sessions that are remote-running again", async () => {
+  it("reactivates locally terminal sessions without activity telemetry", async () => {
     const subtasks: Subtask[] = [
       {
         id: "task-terminal",
@@ -2979,8 +2910,8 @@ describe("runSessionSyncStep", () => {
       { repoPath: "/tmp/my-repo", sprintNumber: 1 },
     );
 
-    expect(fetchRecentActivities).toHaveBeenCalledTimes(1);
-    expect(result.subtasks[0]?.activities).toBe(activities);
+    expect(fetchRecentActivities).not.toHaveBeenCalled();
+    expect(result.subtasks[0]?.activities).toBeUndefined();
     expect(result.subtasks[0]?.status).toBe("RUNNING");
   });
 

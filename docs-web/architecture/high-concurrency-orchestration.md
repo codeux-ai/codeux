@@ -90,6 +90,12 @@ the dashboard, and interactive replies.
   capacity `400`/`409`/exhausted `429` responses plus the generic capacity
   `400 FAILED_PRECONDITION` remain authoritative retryable deferrals that release the provisional
   claim and apply a 30-second learned-cap backoff.
+- Admission and all sprint monitors share that same in-flight page and compatible fresh cache
+  entries. Cached sessions contain only bounded orchestration fields; exact session reads are
+  coalesced and used only when a durable task falls outside the newest-first page.
+- The Jules client spaces all request starts, honors `Retry-After`, retries quota responses at most
+  once, and never transport-retries mutations. Orchestration reads session state only and never
+  waits for activity history.
 - Startup preserves persisted Jules sessions and repairs false local terminal projections from a
   fresh remote-active snapshot before ordinary reconciliation; completed/cancelled sprints, merged
   tasks, and human QA handoffs remain terminal. The snapshot repair is bounded to five seconds so a
@@ -98,6 +104,10 @@ the dashboard, and interactive replies.
 - Scheduler starts consume current purpose-aware provider capacity, including adaptive reply
   reservations. Task QA runs in waves of at most four so merges and newly unblocked coding progress
   between review waves instead of waiting behind a full-DAG QA backlog.
+- Provider-backed clarification generation runs as bounded background work instead of holding the
+  watch cycle open. A per-epoch reservation prevents duplicate reply workers, durable events
+  preserve the outcome, and the configured worker timeout aborts a wedged provider run and releases
+  its invocation slot.
 - Incremental Codex telemetry follows the native thread id emitted by the current exec stream (or
   the exact requested resume id) and reads only that rollout from the paired runtime volume. A
   previous invocation's newer file cannot replace the persisted continuation identity.
@@ -114,6 +124,9 @@ the dashboard, and interactive replies.
 - Jules full-history telemetry is serialized process-wide, joins duplicate in-flight session reads,
   tokenizes text in slices of at most 64 KiB, and releases raw activities before SQLite
   reconciliation. Wide hosted-session syncs therefore cannot multiply large patch payloads in heap.
+- Dashboard recent activity advances one bounded page per refresh, coalesces per-session callers,
+  aborts timed-out HTTP requests, rejects responses above 16 MiB, and caches only compact text/state
+  projections. Cumulative patches, base64 media, and shell artifacts are discarded before caching.
 - Jules usage pages are projected ten activities at a time. Every activity/tool event is counted,
   bash output is modeled explicitly, base64 media is discarded, and only the newest cumulative
   patch snapshot per source is retained. API responses and retained history have hard size bounds.

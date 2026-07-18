@@ -30,21 +30,31 @@ export const normalizeActivityFetchError = (error: unknown): ActivityFetchErrorM
   };
 };
 
-export const withActivityFetchTimeout = async <T>(
-  promise: Promise<T>,
+/**
+ * Runs an activity fetch under a total deadline and aborts the underlying
+ * transport when that deadline expires. Callers must use this factory form
+ * instead of passing an already-created promise; Promise.race on its own only
+ * abandons the result and leaves pagination/retry work running in the
+ * background.
+ */
+export const withAbortableActivityFetchTimeout = async <T>(
+  fetch: (signal: AbortSignal) => Promise<T>,
   options: ActivityFetchTimeoutOptions,
 ): Promise<T> => {
+  const controller = new AbortController();
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) {
-    return promise;
+    return fetch(controller.signal);
   }
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      promise,
+      fetch(controller.signal),
       new Promise<T>((_, reject) => {
         timeout = setTimeout(() => {
-          reject(options.createTimeoutError());
+          const error = options.createTimeoutError();
+          controller.abort(error);
+          reject(error);
         }, options.timeoutMs);
       }),
     ]);

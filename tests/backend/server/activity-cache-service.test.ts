@@ -70,7 +70,7 @@ describe('ActivityCacheService', () => {
       const result = await service.getLiveActivitiesForActiveTasks();
 
       expect(mockDeps.getSubtasks).toHaveBeenCalledTimes(1);
-      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-1', PAGE_SIZE);
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-1', PAGE_SIZE, expect.any(AbortSignal));
       expect(result).toEqual({ 'session-1': [mockActivity] });
     });
 
@@ -163,7 +163,7 @@ describe('ActivityCacheService', () => {
 
       // Should only fetch session-2
       expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
-      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-2', PAGE_SIZE);
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-2', PAGE_SIZE, expect.any(AbortSignal));
 
       // Should combine both cached and new data
       expect(result).toEqual({
@@ -182,8 +182,8 @@ describe('ActivityCacheService', () => {
       mockDeps.fetchRecentActivities.mockResolvedValue([oversizedActivity]);
 
       const first = await service.getLiveActivitiesForActiveTasks();
-      expect(first['session-1'][0].description).toHaveLength(64 * 1024);
-      expect(first['session-1'][0].description).toContain('[activity preview truncated]');
+      expect(first['session-1'][0].description).toHaveLength(8 * 1024);
+      expect(first['session-1'][0].description).toContain('[truncated for live-view memory safety]');
       expect(first['session-1'][0].description?.endsWith('TAIL')).toBe(true);
 
       const secondTask = { ...mockTask, id: 'task-2' };
@@ -198,7 +198,7 @@ describe('ActivityCacheService', () => {
       mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity]);
       await service.getLiveActivitiesForActiveTasks();
 
-      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-1', PAGE_SIZE);
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-1', PAGE_SIZE, expect.any(AbortSignal));
     });
 
     it('should return empty object if no active tasks', async () => {
@@ -258,7 +258,7 @@ describe('ActivityCacheService', () => {
       expect(mockDeps.isSessionTerminal).toHaveBeenCalledWith('session-terminal');
       expect(mockDeps.isSessionTerminal).toHaveBeenCalledWith('session-active');
       expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
-      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-active', PAGE_SIZE);
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-active', PAGE_SIZE, expect.any(AbortSignal));
       expect(result).toEqual({ 'session-active': [mockActivity] });
     });
 

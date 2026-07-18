@@ -932,7 +932,7 @@ export class ConnectionChatRepository {
         AND cm.direction = 'dashboard_to_connection'
         AND cm.delivery_status = 'pending'
         AND (ct.connection_id IS NULL OR ct.connection_id = ?)
-      ORDER BY cm.created_at ASC, cm.id ASC
+      ORDER BY cm.created_at ASC, cm.rowid ASC
       LIMIT ?
     `).all(...scopedProjectIds, connection.id, limit) as unknown as InboxRow[];
 

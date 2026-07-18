@@ -157,7 +157,7 @@ const buildClarificationDedupKey = (task: Subtask): string => {
   const latestPrompt = normalizeAutomationMessage(latestRequest.message);
   const fallback = normalizeAutomationMessage(task.prompt || task.title || "clarification");
   const requestIdentity = normalizeAutomationMessage(latestRequest.identity);
-  return `${latestPrompt || fallback}|activity:${requestIdentity || "none"}`.slice(0, 1000);
+  return `${latestPrompt || fallback}|activity:${requestIdentity || "none"}|epoch:${task.action_required_epoch || "none"}`.slice(0, 1000);
 };
 
 const buildPausedDedupKey = (task: Subtask): string => {
@@ -165,7 +165,7 @@ const buildPausedDedupKey = (task: Subtask): string => {
   const latestPrompt = normalizeAutomationMessage(latestRequest.message);
   const fallback = normalizeAutomationMessage(task.prompt || task.title || "resume");
   const requestIdentity = normalizeAutomationMessage(latestRequest.identity);
-  return `${latestPrompt || fallback}|activity:${requestIdentity || "none"}`.slice(0, 1000);
+  return `${latestPrompt || fallback}|activity:${requestIdentity || "none"}|epoch:${task.action_required_epoch || "none"}`.slice(0, 1000);
 };
 
 const buildInterventionEventSuffix = (kind: string, sessionId: string, dedupKey: string): string => {
@@ -173,11 +173,19 @@ const buildInterventionEventSuffix = (kind: string, sessionId: string, dedupKey:
   return `${kind}:${sessionId}:${digest}:${dedupKey.slice(0, 160)}`;
 };
 
-const getInterventionStateKey = (sessionId: string, state: "clarification" | "paused"): string => `${state}:${sessionId}`;
+const getInterventionStateKey = (
+  sessionId: string,
+  state: "plan" | "clarification" | "paused",
+): string => `${state}:${sessionId}`;
+
+const buildPlanApprovalDedupKey = (task: Subtask): string => (
+  `plan-approval|epoch:${task.action_required_epoch || task.session_state || "unversioned"}`
+);
 
 interface StoredInterventionKey {
   key: string;
   storedAtMs: number | null;
+  phase: "in_flight" | "sent";
 }
 
 const parseStoredInterventionKey = (value: string | undefined): StoredInterventionKey | null => {
@@ -185,22 +193,27 @@ const parseStoredInterventionKey = (value: string | undefined): StoredInterventi
     return null;
   }
   try {
-    const parsed = JSON.parse(value) as { key?: unknown; storedAtMs?: unknown };
+    const parsed = JSON.parse(value) as { key?: unknown; storedAtMs?: unknown; phase?: unknown };
     if (typeof parsed.key === "string") {
       return {
         key: parsed.key,
         storedAtMs: typeof parsed.storedAtMs === "number" && Number.isFinite(parsed.storedAtMs)
           ? parsed.storedAtMs
           : null,
+        phase: parsed.phase === "in_flight" ? "in_flight" : "sent",
       };
     }
   } catch {
     // Older in-memory callers stored the raw key string.
   }
-  return { key: value, storedAtMs: null };
+  return { key: value, storedAtMs: null, phase: "sent" };
 };
 
-const serializeStoredInterventionKey = (key: string, storedAtMs: number): string => JSON.stringify({ key, storedAtMs });
+const serializeStoredInterventionKey = (
+  key: string,
+  storedAtMs: number,
+  phase: StoredInterventionKey["phase"] = "sent",
+): string => JSON.stringify({ key, storedAtMs, phase });
 
 const resolveClarificationCooldownMs = (settings: AutomationInterventionsSettings): number => {
   const seconds = Number(settings.clarificationCooldownSeconds);
@@ -269,6 +282,7 @@ export interface ApplyActionRequiredAutomationArgs {
     payload: Record<string, unknown>;
   }) => void;
   lastAutomatedInterventionKeys?: Map<string, string>;
+  loadPersistedInterventionKey?: (task: Subtask, stateKey: string) => string | undefined;
   now?: () => number;
 }
 
@@ -290,7 +304,12 @@ export const applyActionRequiredAutomation = async (
     task.intervention_owner = undefined;
     task.intervention_hint = undefined;
 
-    if (task.status !== "BLOCKED" || !args.isActionRequiredState(task.session_state)) {
+    if (!args.isActionRequiredState(task.session_state)) {
+      continue;
+    }
+    const isPendingClarificationReply = task.status === "RUNNING"
+      && task.session_state === "AWAITING_USER_FEEDBACK";
+    if (task.status !== "BLOCKED" && !isPendingClarificationReply) {
       continue;
     }
 
@@ -344,12 +363,45 @@ export const applyActionRequiredAutomation = async (
 
     try {
       if (task.session_state === "AWAITING_PLAN_APPROVAL") {
+        const approvalKey = buildPlanApprovalDedupKey(task);
+        const approvalStateKey = getInterventionStateKey(sessionId, "plan");
+        if (!args.lastAutomatedInterventionKeys?.has(approvalStateKey)) {
+          const persisted = args.loadPersistedInterventionKey?.(task, approvalStateKey);
+          if (persisted) {
+            args.lastAutomatedInterventionKeys?.set(approvalStateKey, persisted);
+          }
+        }
+        const storedApproval = parseStoredInterventionKey(
+          args.lastAutomatedInterventionKeys?.get(approvalStateKey),
+        );
+        if (storedApproval?.key === approvalKey) {
+          task.status = "RUNNING";
+          task.intervention_owner = "AGENT";
+          task.intervention_hint = "Current plan was already approved; waiting for Jules to begin execution.";
+          emitTaskEvent(task, "action_required_auto_approval_skipped_duplicate", {
+            sessionId,
+            sessionState: task.session_state || null,
+            actionRequiredEpoch: task.action_required_epoch || null,
+            interventionKey: approvalKey,
+            interventionStoredAtMs: storedApproval.storedAtMs,
+          }, buildInterventionEventSuffix("duplicate-plan-approval", sessionId, approvalKey));
+          continue;
+        }
+
         await args.approveSessionPlan(sessionId);
+        const nowMs = args.now?.() ?? Date.now();
+        args.lastAutomatedInterventionKeys?.set(
+          approvalStateKey,
+          serializeStoredInterventionKey(approvalKey, nowMs),
+        );
         task.status = "RUNNING";
         emitTaskEvent(task, "action_required_auto_approved", {
           sessionId,
           sessionState: task.session_state,
-        }, `auto-approved:${sessionId}`);
+          actionRequiredEpoch: task.action_required_epoch || null,
+          interventionKey: approvalKey,
+          interventionStoredAtMs: nowMs,
+        }, buildInterventionEventSuffix("auto-approved", sessionId, approvalKey));
         reportText += `🤖 **Auto-Approved Plan:** Task \`${task.id}\` session \`${sessionId}\` moved back to in-progress.\n`;
         continue;
       }
@@ -358,13 +410,26 @@ export const applyActionRequiredAutomation = async (
         const clarificationKey = buildClarificationDedupKey(task);
         const clarificationStateKey = getInterventionStateKey(sessionId, "clarification");
         const nowMs = args.now?.() ?? Date.now();
+        if (!args.lastAutomatedInterventionKeys?.has(clarificationStateKey)) {
+          const persisted = args.loadPersistedInterventionKey?.(task, clarificationStateKey);
+          if (persisted) {
+            args.lastAutomatedInterventionKeys?.set(clarificationStateKey, persisted);
+          }
+        }
         if (hasUserReplyAfterLatestAgentRequest(task)) {
+          args.lastAutomatedInterventionKeys?.set(
+            clarificationStateKey,
+            serializeStoredInterventionKey(clarificationKey, nowMs),
+          );
           task.status = "RUNNING";
           task.intervention_owner = "AGENT";
           task.intervention_hint = "Clarification reply has been sent; waiting for Jules to process the latest response.";
           emitTaskEvent(task, "action_required_user_reply_pending", {
             sessionId,
             sessionState: task.session_state || null,
+            actionRequiredEpoch: task.action_required_epoch || null,
+            interventionKey: clarificationKey,
+            interventionStoredAtMs: nowMs,
             clarificationKeyPreview: clarificationKey.slice(0, 200),
           }, buildInterventionEventSuffix("reply-pending", sessionId, clarificationKey));
           continue;
@@ -372,6 +437,21 @@ export const applyActionRequiredAutomation = async (
 
         const storedClarification = parseStoredInterventionKey(args.lastAutomatedInterventionKeys?.get(clarificationStateKey));
         if (storedClarification?.key === clarificationKey) {
+          if (storedClarification.phase === "in_flight") {
+            task.status = "RUNNING";
+            task.intervention_owner = "AGENT";
+            task.intervention_hint = "A clarification worker is still preparing the reply in the background.";
+            emitTaskEvent(task, "action_required_auto_reply_skipped_duplicate", {
+              sessionId,
+              sessionState: task.session_state || null,
+              actionRequiredEpoch: task.action_required_epoch || null,
+              interventionKey: clarificationKey,
+              interventionStoredAtMs: storedClarification.storedAtMs,
+              phase: storedClarification.phase,
+              clarificationKeyPreview: clarificationKey.slice(0, 200),
+            }, buildInterventionEventSuffix("in-flight-clarification", sessionId, clarificationKey));
+            continue;
+          }
           const elapsedMs = storedClarification.storedAtMs === null ? 0 : nowMs - storedClarification.storedAtMs;
           if (elapsedMs >= resolveClarificationCooldownMs(args.settings)) {
             task.status = "BLOCKED";
@@ -380,6 +460,9 @@ export const applyActionRequiredAutomation = async (
             emitTaskEvent(task, "action_required_auto_reply_unresolved", {
               sessionId,
               sessionState: task.session_state || null,
+              actionRequiredEpoch: task.action_required_epoch || null,
+              interventionKey: clarificationKey,
+              interventionStoredAtMs: storedClarification.storedAtMs,
               elapsedMs,
               clarificationKeyPreview: clarificationKey.slice(0, 200),
             }, buildInterventionEventSuffix("unresolved-clarification", sessionId, clarificationKey));
@@ -393,6 +476,9 @@ export const applyActionRequiredAutomation = async (
           emitTaskEvent(task, "action_required_auto_reply_skipped_duplicate", {
             sessionId,
             sessionState: task.session_state || null,
+            actionRequiredEpoch: task.action_required_epoch || null,
+            interventionKey: clarificationKey,
+            interventionStoredAtMs: storedClarification.storedAtMs,
             elapsedMs,
             hasUserReply: false,
             clarificationKeyPreview: clarificationKey.slice(0, 200),
@@ -400,25 +486,85 @@ export const applyActionRequiredAutomation = async (
           continue;
         }
 
-        args.lastAutomatedInterventionKeys?.set(clarificationStateKey, serializeStoredInterventionKey(clarificationKey, nowMs));
-
-        let reply: string;
         if (args.settings.autoAnswerClarificationMode === "WORKER" && args.generateWorkerClarificationReply) {
-          reply = await args.generateWorkerClarificationReply({
-            projectId: args.projectId,
-            sprintGoal: args.sprintGoal,
-            subtasks,
-            task,
-          });
-        } else {
-          reply = buildClarificationAutoReply(task, args.settings.clarificationAnswerTemplate);
+          args.lastAutomatedInterventionKeys?.set(
+            clarificationStateKey,
+            serializeStoredInterventionKey(clarificationKey, nowMs, "in_flight"),
+          );
+          task.status = "RUNNING";
+          task.intervention_owner = "AGENT";
+          task.intervention_hint = "A clarification worker is preparing the reply in the background.";
+          emitTaskEvent(task, "action_required_auto_reply_started", {
+            sessionId,
+            sessionState: task.session_state || null,
+            actionRequiredEpoch: task.action_required_epoch || null,
+            interventionKey: clarificationKey,
+            interventionStoredAtMs: nowMs,
+          }, buildInterventionEventSuffix("worker-reply-started", sessionId, clarificationKey));
+
+          // Provider-backed clarification generation can legitimately take
+          // minutes. It must not hold the orchestration cycle open: status
+          // sync, DAG admission, CI, and every other sprint continue while the
+          // worker runs. Durable completion/failure events let later cycles
+          // observe the outcome, while the in-memory reservation prevents a
+          // duplicate worker within this process.
+          void (async () => {
+            try {
+              const reply = await args.generateWorkerClarificationReply!({
+                projectId: args.projectId,
+                sprintGoal: args.sprintGoal,
+                subtasks,
+                task,
+              });
+              await args.sendSessionMessage(sessionId, reply);
+              const sentAtMs = args.now?.() ?? Date.now();
+              args.lastAutomatedInterventionKeys?.set(
+                clarificationStateKey,
+                serializeStoredInterventionKey(clarificationKey, sentAtMs),
+              );
+              emitTaskEvent(task, "action_required_auto_replied", {
+                sessionId,
+                sessionState: task.session_state || null,
+                actionRequiredEpoch: task.action_required_epoch || null,
+                interventionKey: clarificationKey,
+                interventionStoredAtMs: sentAtMs,
+                replyPreview: reply.slice(0, 200),
+              }, buildInterventionEventSuffix("auto-replied", sessionId, clarificationKey));
+            } catch (error) {
+              const storedClarification = parseStoredInterventionKey(
+                args.lastAutomatedInterventionKeys?.get(clarificationStateKey),
+              );
+              if (storedClarification?.key === clarificationKey) {
+                args.lastAutomatedInterventionKeys?.delete(clarificationStateKey);
+              }
+              emitTaskEvent(task, "action_required_auto_failed", {
+                owner: "AGENT",
+                reason: `Auto-intervention failed: ${describeAutomationError(error)}`,
+                sessionId,
+                sessionState: task.session_state || null,
+                actionRequiredEpoch: task.action_required_epoch || null,
+                interventionKey: clarificationKey,
+                interventionStoredAtMs: nowMs,
+              }, buildInterventionEventSuffix("worker-reply-failed", sessionId, clarificationKey));
+            }
+          })();
+          reportText += `🤖 **Clarification Worker Started:** Task \`${task.id}\` is preparing a response without blocking orchestration.\n`;
+          continue;
         }
 
+        args.lastAutomatedInterventionKeys?.set(
+          clarificationStateKey,
+          serializeStoredInterventionKey(clarificationKey, nowMs),
+        );
+        const reply = buildClarificationAutoReply(task, args.settings.clarificationAnswerTemplate);
         await args.sendSessionMessage(sessionId, reply);
         task.status = "RUNNING";
         emitTaskEvent(task, "action_required_auto_replied", {
           sessionId,
           sessionState: task.session_state,
+          actionRequiredEpoch: task.action_required_epoch || null,
+          interventionKey: clarificationKey,
+          interventionStoredAtMs: nowMs,
           replyPreview: reply.slice(0, 200),
         }, buildInterventionEventSuffix("auto-replied", sessionId, clarificationKey));
         reportText += `🤖 **Auto-Answered Clarification:** Task \`${task.id}\` session \`${sessionId}\` received an automated response and stays in progress.\n`;
@@ -427,14 +573,24 @@ export const applyActionRequiredAutomation = async (
 
       if (task.session_state === "PAUSED") {
         const pausedKey = buildPausedDedupKey(task);
-        const storedPausedKey = args.lastAutomatedInterventionKeys?.get(getInterventionStateKey(sessionId, "paused"));
-        if (storedPausedKey === pausedKey) {
+        const pausedStateKey = getInterventionStateKey(sessionId, "paused");
+        if (!args.lastAutomatedInterventionKeys?.has(pausedStateKey)) {
+          const persisted = args.loadPersistedInterventionKey?.(task, pausedStateKey);
+          if (persisted) {
+            args.lastAutomatedInterventionKeys?.set(pausedStateKey, persisted);
+          }
+        }
+        const storedPausedKey = parseStoredInterventionKey(args.lastAutomatedInterventionKeys?.get(pausedStateKey));
+        if (storedPausedKey?.key === pausedKey) {
           task.status = "RUNNING";
           task.intervention_owner = "AGENT";
           task.intervention_hint = "Resume instruction already sent for the current paused state; waiting for Jules to continue.";
           emitTaskEvent(task, "action_required_auto_resume_skipped_duplicate", {
             sessionId,
             sessionState: task.session_state || null,
+            actionRequiredEpoch: task.action_required_epoch || null,
+            interventionKey: pausedKey,
+            interventionStoredAtMs: storedPausedKey.storedAtMs,
             pausedKeyPreview: pausedKey.slice(0, 200),
           }, buildInterventionEventSuffix("duplicate-paused", sessionId, pausedKey));
           continue;
@@ -444,11 +600,15 @@ export const applyActionRequiredAutomation = async (
           sessionId,
           "Continue execution using the current plan and repository conventions. Resume work and report progress."
         );
-        args.lastAutomatedInterventionKeys?.set(getInterventionStateKey(sessionId, "paused"), pausedKey);
+        const nowMs = args.now?.() ?? Date.now();
+        args.lastAutomatedInterventionKeys?.set(pausedStateKey, serializeStoredInterventionKey(pausedKey, nowMs));
         task.status = "RUNNING";
         emitTaskEvent(task, "action_required_auto_resumed", {
           sessionId,
           sessionState: task.session_state,
+          actionRequiredEpoch: task.action_required_epoch || null,
+          interventionKey: pausedKey,
+          interventionStoredAtMs: nowMs,
         }, buildInterventionEventSuffix("auto-resumed", sessionId, pausedKey));
         reportText += `🤖 **Auto-Resumed Session:** Task \`${task.id}\` session \`${sessionId}\` was nudged to continue.\n`;
         continue;

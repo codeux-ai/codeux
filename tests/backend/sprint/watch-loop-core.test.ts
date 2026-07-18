@@ -114,6 +114,66 @@ describe("WatchLoopRunner", () => {
     // merge conflict). Reset it to the default no-op success so it never leaks across tests.
     vi.mocked(runCommandStrict).mockReset();
     vi.mocked(runCommandStrict).mockResolvedValue({ stdout: "", stderr: "" } as any);
+    vi.useRealTimers();
+  });
+
+  it("records a stalled cycle and reports recovery when the cycle eventually completes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-18T00:00:00.000Z"));
+    const deps = buildDeps();
+    let resolveCycle: (value: unknown) => void = () => {};
+    const cycleRunner = {
+      run: vi.fn().mockReturnValue(new Promise((resolve) => {
+        resolveCycle = resolve;
+      })),
+    };
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
+    const transition = (runner as any).handleCycleTransition({
+      args: { sprint_number: 1, action: "orchestrate" },
+      scopedExecutionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      githubMode: "REMOTE",
+      retryFailed: false,
+      loopSteps: { watchLoopIntervalSeconds: 10 },
+      ciIntelligence: {},
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {},
+      sprintRunId: "run-1",
+    });
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "watch_cycle_stalled",
+      "system",
+      expect.objectContaining({ stallThresholdMs: 30_000 }),
+      expect.any(Object),
+    );
+    resolveCycle({
+      subtasks: [],
+      reportText: "",
+      statusTable: "",
+      instructions: "",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+    await transition;
+
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      "Sprint watch cycle completed",
+      expect.objectContaining({ recoveredFromStall: true }),
+    );
   });
 
   it.skip("continues past checkpoint boundaries until a terminal condition is reached", async () => {

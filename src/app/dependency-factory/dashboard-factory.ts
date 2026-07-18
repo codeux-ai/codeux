@@ -332,7 +332,7 @@ export function createDashboardDependencies(
     {
       getSubtasks: () => projectRuntimeRepository.getSelectedProjectLiveStatus().subtasks,
       resolveSessionNameFromTask: (task) => context.resolveSessionNameFromTask(task),
-      fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
+      fetchRecentActivities: (sessionName, pageSize, signal) => context.fetchRecentActivities(sessionName, pageSize, signal),
       resolveGitStatusRepoPath: () => context.resolveGitStatusRepoPath(),
       fetchGitStatusForRepo: (repoPath, cacheTtlMs) => context.fetchGitStatusForRepo(repoPath, cacheTtlMs),
       invalidateGitStatusCache: (repoPath) => context.invalidateGitStatusCache?.(repoPath),
@@ -341,7 +341,8 @@ export function createDashboardDependencies(
     },
     10_000, // LIVE_ACTIVITY_CACHE_MS
     10_000, // GIT_STATUS_CACHE_MS
-    20      // DASHBOARD_ACTIVITY_PAGE_SIZE
+    20,     // DASHBOARD_ACTIVITY_PAGE_SIZE
+    2       // ACTIVITY_FETCH_CONCURRENCY
   );
 
   const taskRerunService = new TaskRerunService({

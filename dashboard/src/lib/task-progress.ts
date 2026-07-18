@@ -8,9 +8,12 @@ export interface ActiveConcurrencyWait {
   limit: number;
 }
 
+const ACTIVE_CONCURRENCY_WAIT_MAX_AGE_MS = 60_000;
+
 export function findActiveConcurrencyWait(
   events: ExecutionRuntimeEventSummary[] | undefined,
   dispatchStatus?: string | null,
+  nowMs: number = Date.now(),
 ): ActiveConcurrencyWait | null {
   if (!events || events.length === 0) {
     return null;
@@ -28,6 +31,14 @@ export function findActiveConcurrencyWait(
     }
   }
   if (!latest) {
+    return null;
+  }
+  const createdAtMs = Date.parse(latest.createdAt);
+  if (
+    !Number.isFinite(createdAtMs)
+    || nowMs < createdAtMs
+    || nowMs - createdAtMs > ACTIVE_CONCURRENCY_WAIT_MAX_AGE_MS
+  ) {
     return null;
   }
   const payload = latest.payload || {};

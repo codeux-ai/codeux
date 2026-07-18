@@ -28,7 +28,7 @@ export function listConversationMessagesQuery(
     FROM conversation_messages
     WHERE thread_id = ?
       ${includeHidden ? "" : `AND ${visibleConversationMessageFilter("conversation_messages")}`}
-    ORDER BY created_at ASC, id ASC
+    ORDER BY created_at ASC, rowid ASC
     LIMIT ?
     OFFSET ?
   `).all(threadId, limit, offset) as unknown as MessageRow[];
@@ -62,9 +62,12 @@ export function getFirstReplyAfterMessageQuery(
     FROM conversation_messages cm
     INNER JOIN conversation_messages origin ON origin.id = ? AND origin.thread_id = ?
     WHERE cm.thread_id = ?
-      AND cm.created_at > origin.created_at
+      AND (
+        cm.created_at > origin.created_at
+        OR (cm.created_at = origin.created_at AND cm.rowid > origin.rowid)
+      )
       ${includeHidden ? "" : `AND ${visibleConversationMessageFilter("cm")}`}
-    ORDER BY cm.created_at ASC, cm.id ASC
+    ORDER BY cm.created_at ASC, cm.rowid ASC
     LIMIT 1
   `).get(messageId, threadId, threadId) as MessageRow | undefined;
 

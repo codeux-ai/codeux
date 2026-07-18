@@ -822,7 +822,11 @@ describe("ProviderConcurrencyService", () => {
 
         await service.tryClaimSlot("jules", 1, { provider: "jules" } as any);
 
-        expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalled();
+        expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith("active-1", {
+          status: "running",
+          finishedAt: null,
+          durationMs: null,
+        });
       } finally {
         vi.useRealTimers();
       }

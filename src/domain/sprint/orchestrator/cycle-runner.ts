@@ -119,6 +119,49 @@ export class CycleRunner {
     this.stateCoordinator = new CycleStateCoordinator(this.deps);
   }
 
+  private loadPersistedInterventionKey(
+    task: Subtask,
+    stateKey: string,
+    sprintRunId?: string,
+  ): string | undefined {
+    if (!task.record_id || !sprintRunId) {
+      return undefined;
+    }
+    const taskRun = this.deps.executionRepository.getLatestTaskRun(task.record_id, sprintRunId);
+    if (!taskRun) {
+      return undefined;
+    }
+    const planApproval = stateKey.startsWith("plan:");
+    const clarification = stateKey.startsWith("clarification:");
+    const eventType = planApproval
+      ? "action_required_auto_approved"
+      : clarification
+        ? "action_required_auto_replied"
+        : "action_required_auto_resumed";
+    const events = this.deps.executionRepository.listTaskRunEvents(taskRun.id, 100, {
+      eventTypes: [eventType, ...(clarification ? ["action_required_user_reply_pending"] : [])],
+      skipValidation: true,
+    }).slice().sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    const persisted = events.filter((event) => {
+      const payload = event.payload || {};
+      if (typeof payload.interventionKey !== "string" || payload.interventionKey.length === 0) {
+        return false;
+      }
+      return payload.actionRequiredEpoch === (task.action_required_epoch || null);
+    }).at(-1);
+    if (!persisted) {
+      return undefined;
+    }
+    const payload = persisted.payload || {};
+    const storedAtMs = typeof payload.interventionStoredAtMs === "number"
+      ? payload.interventionStoredAtMs
+      : Date.parse(persisted.createdAt);
+    return JSON.stringify({
+      key: payload.interventionKey,
+      storedAtMs: Number.isFinite(storedAtMs) ? storedAtMs : Date.now(),
+    });
+  }
+
   async run(args: CycleRunnerArgs): Promise<SprintCycleResult & {
     awaitingMerge: Subtask[];
     manualMergeTasks: Subtask[];
@@ -211,14 +254,12 @@ export class CycleRunner {
           listSessions: this.deps.listSessions,
           resolveSessionName: this.deps.resolveSessionName,
           extractSessionId: this.deps.extractSessionId,
-          fetchRecentActivities: this.deps.fetchRecentActivities,
           isActionRequiredState: this.deps.isActionRequiredState,
           projectManagementRepository: this.deps.projectManagementRepository,
           executionRepository: this.deps.executionRepository,
           sprintRunLifecycleService: this.deps.sprintRunLifecycleService,
           sprintRunId: args.sprintRunId,
           logger: this.deps.logger.child({ component: "session-sync-step", projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id, sprintRunId: args.sprintRunId }),
-          listAllActivities: this.deps.listAllActivities,
           getSession: this.deps.getSession,
           julesUsage: this.deps.julesUsage,
         },
@@ -310,6 +351,8 @@ export class CycleRunner {
         sendSessionMessage: this.deps.sendSessionMessage,
         generateWorkerClarificationReply: this.deps.generateWorkerClarificationReply,
         lastAutomatedInterventionKeys: this.lastAutomatedInterventionKeys,
+        loadPersistedInterventionKey: (task, stateKey) =>
+          this.loadPersistedInterventionKey(task, stateKey, args.sprintRunId),
         onTaskEvent: ({ task, eventType, payload, sourceEventKey }) => {
           appendTaskEvent(task, eventType, payload, sourceEventKey);
         },

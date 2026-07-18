@@ -1,15 +1,12 @@
-import type { JulesActivity, JulesSession, Subtask } from "../../contracts/app-types.js";
+import type { JulesSession, Subtask } from "../../contracts/app-types.js";
 import type { TaskRunRecord } from "../../contracts/execution-types.js";
 import type { SessionSyncDependencies } from "../sprint-types.js";
 import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task-run-key.js";
-import { planSessionActivityFetches } from "../../domain/sprint/session-sync/activity-fetch-plan.js";
 import type { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { applyPendingTaskRuntimeReset } from "../../domain/sprint/task-reset-state.js";
 import { isCompletedTaskSettled } from "../../domain/sprint/task-merge-state.js";
 import { failStaleProviderInvocation } from "../../domain/runtime/provider-invocation-recovery.js";
-import { fetchActivitiesBounded } from "../../domain/sprint/session-sync/bounded-activity-fetch.js";
 import { isNotFoundError } from "../../integrations/jules-api-client.js";
-import { hasUserReplyAfterLatestAgentRequest } from "../action-required-automation.js";
 import {
   extractProviderErrorCategory,
   isQuotaCooldownActive,
@@ -42,9 +39,6 @@ const TERMINAL_DISPATCH_STATUSES = new Set([
 ]);
 
 const DISPATCH_HEARTBEAT_INTERVAL_MS = 60_000;
-const MAX_PROVIDER_ACTIVITY_EVENT_TEXT_CHARS = 16 * 1024;
-const MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS = 2 * 1024;
-const MAX_PROVIDER_ACTIVITY_PLAN_STEPS = 64;
 const WORKER_CLARIFICATION_EVENT_TYPES = [
   "worker_clarification_requested",
   "worker_clarification_continued",
@@ -56,11 +50,74 @@ type WorkerClarificationSyncStatus = "none" | "pending" | "answered" | "settled"
 interface WorkerClarificationSyncProjection {
   clarificationId: string | null;
   status: WorkerClarificationSyncStatus;
+  providerReplyPending?: boolean;
+  actionRequiredEpoch?: string | null;
 }
 
 const NO_WORKER_CLARIFICATION: WorkerClarificationSyncProjection = {
   clarificationId: null,
   status: "none",
+};
+
+const PROVIDER_ACTION_EVENT_TYPES = [
+  "session_state_synced",
+  "action_required_auto_approved",
+  "action_required_auto_replied",
+  "action_required_auto_resumed",
+  "action_required_user_reply_pending",
+  "action_required_auto_reply_unresolved",
+] as const;
+
+interface ProviderActionSyncProjection {
+  epoch: string | null;
+  replyPending: boolean;
+  needsCheckpoint: boolean;
+}
+
+const resolveProviderActionProjection = (
+  deps: SessionSyncDependencies,
+  taskRun: TaskRunRecord,
+  session: JulesSession,
+): ProviderActionSyncProjection => {
+  if (!deps.isActionRequiredState(session.state) || !deps.executionRepository) {
+    return { epoch: null, replyPending: false, needsCheckpoint: false };
+  }
+  if (typeof deps.executionRepository.listTaskRunEvents !== "function") {
+    return {
+      epoch: `${session.state || "ACTION_REQUIRED"}:${session.updateTime || "unversioned"}`,
+      replyPending: false,
+      needsCheckpoint: false,
+    };
+  }
+  const events = deps.executionRepository.listTaskRunEvents(taskRun.id, 500, {
+    eventTypes: [...PROVIDER_ACTION_EVENT_TYPES],
+    skipValidation: true,
+  });
+  const latestStateEvent = events.find((event) => event.eventType === "session_state_synced");
+  const latestState = latestStateEvent?.payload || {};
+  const sameActionEpisode = latestState.sessionState === session.state
+    && typeof latestState.actionRequiredEpoch === "string"
+    && latestState.actionRequiredEpoch.trim().length > 0;
+  const epoch = sameActionEpisode
+    ? String(latestState.actionRequiredEpoch)
+    : `${session.state || "ACTION_REQUIRED"}:${session.updateTime || new Date().toISOString()}`;
+
+  const matchingEvents = events.filter((event) => event.payload?.actionRequiredEpoch === epoch);
+  const latestResolution = matchingEvents.find((event) => (
+    event.eventType === "action_required_auto_approved"
+    || event.eventType === "action_required_auto_replied"
+    || event.eventType === "action_required_auto_resumed"
+    || event.eventType === "action_required_user_reply_pending"
+    || event.eventType === "action_required_auto_reply_unresolved"
+  ));
+  return {
+    epoch,
+    replyPending: latestResolution?.eventType === "action_required_auto_approved"
+      || latestResolution?.eventType === "action_required_auto_replied"
+      || latestResolution?.eventType === "action_required_auto_resumed"
+      || latestResolution?.eventType === "action_required_user_reply_pending",
+    needsCheckpoint: !sameActionEpisode,
+  };
 };
 
 const resolveWorkerClarificationProjection = (
@@ -229,124 +286,6 @@ const extractGitMetrics = (session: JulesSession): Record<string, unknown> | nul
     prUrl: typeof pr.url === "string" ? pr.url : undefined,
   };
 };
-
-const hasSubmittedReplyForActionRequiredState = (
-  task: Subtask,
-  sessionState: string | undefined,
-  activities: JulesActivity[] | undefined,
-): boolean => {
-  if (sessionState !== "AWAITING_USER_FEEDBACK") {
-    return false;
-  }
-  return hasUserReplyAfterLatestAgentRequest({
-    ...task,
-    activities: activities ?? task.activities,
-  });
-};
-
-const boundProviderActivityText = (
-  value: string | undefined,
-  maxChars: number = MAX_PROVIDER_ACTIVITY_EVENT_TEXT_CHARS,
-): string | undefined => {
-  if (typeof value !== "string" || value.length <= maxChars) {
-    return value;
-  }
-  const marker = "\n… [provider activity truncated] …\n";
-  const retainedChars = maxChars - marker.length;
-  const headChars = Math.ceil(retainedChars / 2);
-  const tailChars = retainedChars - headChars;
-  return `${value.slice(0, headChars)}${marker}${value.slice(-tailChars)}`;
-};
-
-const boundProviderActivityValue = (value: unknown): unknown => {
-  if (value === null || value === undefined || typeof value !== "object") {
-    return value;
-  }
-  try {
-    const serialized = JSON.stringify(value);
-    return serialized.length <= MAX_PROVIDER_ACTIVITY_EVENT_TEXT_CHARS
-      ? value
-      : { truncated: true, originalChars: serialized.length };
-  } catch {
-    return { truncated: true, reason: "unserializable" };
-  }
-};
-
-const getActivityPreview = (activity: JulesActivity): string => {
-  if (typeof activity.agentMessaged?.agentMessage === "string" && activity.agentMessaged.agentMessage.trim()) {
-    return activity.agentMessaged.agentMessage.trim();
-  }
-  if (typeof activity.userMessaged?.userMessage === "string" && activity.userMessaged.userMessage.trim()) {
-    return activity.userMessaged.userMessage.trim();
-  }
-  if (typeof activity.progressUpdated?.title === "string" && activity.progressUpdated.title.trim()) {
-    return activity.progressUpdated.title.trim();
-  }
-  if (typeof activity.progressUpdated?.description === "string" && activity.progressUpdated.description.trim()) {
-    return activity.progressUpdated.description.trim();
-  }
-  if (typeof activity.description === "string" && activity.description.trim()) {
-    return activity.description.trim();
-  }
-  return "Activity updated";
-};
-
-const getActivityKind = (activity: JulesActivity): string => {
-  if (activity.sessionCompleted) return "session_completed";
-  if (activity.sessionFailed) return "session_failed";
-  if (activity.planApproved) return "plan_approved";
-  if (activity.planGenerated) return "plan_generated";
-  if (activity.progressUpdated) return "progress_updated";
-  if (activity.agentMessaged) return "agent_message";
-  if (activity.userMessaged) return "user_message";
-  return "activity";
-};
-
-export const buildProviderActivityEventPayload = (
-  activity: JulesActivity,
-  sessionId: string | null,
-  sessionName: string | null,
-  provider: string | null,
-): Record<string, unknown> => ({
-  activityId: boundProviderActivityText(activity.id, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS),
-  activityName: boundProviderActivityText(activity.name, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS),
-  sessionId: boundProviderActivityText(sessionId ?? undefined, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS) ?? null,
-  sessionName: boundProviderActivityText(sessionName ?? undefined, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS) ?? null,
-  provider: boundProviderActivityText(provider ?? undefined, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS) ?? null,
-  kind: getActivityKind(activity),
-  preview: boundProviderActivityText(getActivityPreview(activity)),
-  description: boundProviderActivityText(activity.description) ?? null,
-  agentMessaged: activity.agentMessaged
-    ? { agentMessage: boundProviderActivityText(activity.agentMessaged.agentMessage) }
-    : null,
-  userMessaged: activity.userMessaged
-    ? { userMessage: boundProviderActivityText(activity.userMessaged.userMessage) }
-    : null,
-  progressUpdated: activity.progressUpdated
-    ? {
-        title: boundProviderActivityText(activity.progressUpdated.title),
-        description: boundProviderActivityText(activity.progressUpdated.description),
-      }
-    : null,
-  planGenerated: activity.planGenerated
-    ? {
-        plan: activity.planGenerated.plan
-          ? {
-              steps: activity.planGenerated.plan.steps
-                ?.slice(0, MAX_PROVIDER_ACTIVITY_PLAN_STEPS)
-                .map((step) => ({ title: boundProviderActivityText(step.title, 1_024) })),
-            }
-          : undefined,
-      }
-    : null,
-  planApproved: activity.planApproved
-    ? { planId: boundProviderActivityText(activity.planApproved.planId, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS) }
-    : null,
-  sessionFailed: activity.sessionFailed
-    ? { reason: boundProviderActivityText(activity.sessionFailed.reason) }
-    : null,
-  sessionCompleted: boundProviderActivityValue(activity.sessionCompleted) ?? null,
-});
 
 const normalizeSessionRef = (sessionRef: string | null | undefined): string | null => {
   if (typeof sessionRef !== "string") {
@@ -651,7 +590,6 @@ const syncExecutionRunState = async (
   sessionMetadataLookup: SessionMetadataLookup,
   task: Subtask,
   session: JulesSession,
-  activities: JulesActivity[] | undefined,
 ): Promise<WorkerClarificationSyncProjection> => {
   if (!deps.executionRepository || !deps.sprintRunId || !task.record_id) {
     return NO_WORKER_CLARIFICATION;
@@ -716,8 +654,15 @@ const syncExecutionRunState = async (
   const wasDispatchTerminal = !currentDispatch
     || currentDispatch.finishedAt !== null
     || TERMINAL_DISPATCH_STATUSES.has(currentDispatch.status);
-  const actionRequiredReplyPending = hasSubmittedReplyForActionRequiredState(task, session.state, activities)
+  const providerActionProjection = resolveProviderActionProjection(deps, taskRun, session);
+  task.action_required_epoch = providerActionProjection.epoch || undefined;
+  const actionRequiredReplyPending = providerActionProjection.replyPending
     || clarificationProjection.status === "answered";
+  const combinedProjection: WorkerClarificationSyncProjection = {
+    ...clarificationProjection,
+    providerReplyPending: providerActionProjection.replyPending,
+    actionRequiredEpoch: providerActionProjection.epoch,
+  };
   const nextRunState = clarificationProjection.status === "pending"
     ? "BLOCKED"
     : mapSessionStateToTaskRunState(session.state, deps.isActionRequiredState, actionRequiredReplyPending);
@@ -762,7 +707,7 @@ const syncExecutionRunState = async (
         });
       }
     }
-    return clarificationProjection;
+    return combinedProjection;
   }
 
   const sessionMetadata = sessionMetadataLookup.getForSession(session);
@@ -858,56 +803,30 @@ const syncExecutionRunState = async (
     prUrl || "",
     clarificationProjection.clarificationId || "",
     clarificationProjection.status,
+    providerActionProjection.epoch || "",
   ].join(":");
-  deps.executionRepository.appendTaskRunEvent(taskRun.id, "session_state_synced", "provider", {
-    sessionState: session.state || null,
-    taskRunState: nextRunState,
-    actionRequiredReplyPending,
-    workerClarificationId: clarificationProjection.clarificationId,
-    workerClarificationStatus: clarificationProjection.status,
-    provider,
-    sessionId,
-    sessionName,
-    workerBranch,
-    prUrl,
-  }, {
-    sourceEventKey: sessionSyncKey,
-  });
-
-  for (const activity of activities || []) {
-    if (!activity || typeof activity !== "object" || typeof activity.id !== "string") {
-      continue;
-    }
-
-    deps.executionRepository.appendTaskRunEvent(taskRun.id, "provider_activity", activity.originator || "provider", {
-      ...buildProviderActivityEventPayload(activity, sessionId, sessionName, provider),
+  if (taskRunChanged || providerActionProjection.needsCheckpoint) {
+    deps.executionRepository.appendTaskRunEvent(taskRun.id, "session_state_synced", "provider", {
+      sessionState: session.state || null,
+      taskRunState: nextRunState,
+      actionRequiredReplyPending,
+      actionRequiredEpoch: providerActionProjection.epoch,
+      workerClarificationId: clarificationProjection.clarificationId,
+      workerClarificationStatus: clarificationProjection.status,
+      provider,
+      sessionId,
+      sessionName,
+      workerBranch,
+      prUrl,
     }, {
-      createdAt: typeof activity.createTime === "string" && activity.createTime.trim().length > 0 ? activity.createTime : undefined,
-      sourceEventKey: `activity:${activity.id}`,
+      sourceEventKey: sessionSyncKey,
     });
   }
 
   const isTerminal = nextRunState === "COMPLETED" || nextRunState === "FAILED";
   const transitionedToTerminal = !wasTerminal && isTerminal;
 
-  // Live invocation sync: while a Jules session is still active, refresh its
-  // conversation transcript and running usage estimate so the dashboard shows
-  // messages and token counts in real time (matching the CLI providers). The
-  // service throttles per session, so calling this every sync tick is cheap.
-  if (provider === "jules" && !isTerminal && deps.julesUsage?.syncLiveInvocation && task.project_id && task.record_id && sessionId) {
-    deps.julesUsage.syncLiveInvocation(
-      task.project_id,
-      task.record_id,
-      sessionId,
-      session.prompt,
-      extractGitMetrics(session) as { insertions?: number; deletions?: number; filesChanged?: number } | null,
-      session.updateTime,
-    ).catch((err) => {
-      deps.logger.warn("Failed non-blocking live Jules invocation sync", { error: err });
-    });
-  }
-
-  if (transitionedToTerminal && deps.getSession && deps.listAllActivities) {
+  if (transitionedToTerminal) {
     try {
       const gitMetrics = extractGitMetrics(session);
       if (gitMetrics && (gitMetrics.filesChanged !== undefined || gitMetrics.insertions !== undefined || gitMetrics.deletions !== undefined)) {
@@ -944,7 +863,7 @@ const syncExecutionRunState = async (
       deps.logger.warn("Failed to extract git metrics and token usage from full session", { error: e });
     }
   }
-  return clarificationProjection;
+  return combinedProjection;
 };
 
 export const runSessionSyncStep = async (
@@ -990,8 +909,11 @@ export const runSessionSyncStep = async (
       }
       const snapshotMatch = sessionMap.get(expectedRunKey);
       const snapshotSessionId = snapshotMatch ? sessionMetadataLookup.getForSession(snapshotMatch).sessionId : null;
-      const snapshotIsTerminal = snapshotMatch?.state === "COMPLETED" || snapshotMatch?.state === "FAILED";
-      if (snapshotSessionId === sessionId && snapshotIsTerminal) {
+      // The shared snapshot is already TTL-cached and coalesced across every
+      // sprint. Do not issue one exact-session request per active task per
+      // cycle; exact reads are only a fallback for durable sessions outside
+      // the newest-first account snapshot.
+      if (snapshotSessionId === sessionId) {
         continue;
       }
       if (!isJulesRecordedSession(deps, sessionMetadataLookup, task, sessionId)) {
@@ -1016,41 +938,6 @@ export const runSessionSyncStep = async (
       }
     }
   }
-
-  const isLocallyTerminal = (sessionName: string, task: Subtask) => {
-    if (deps.executionRepository) {
-      if (typeof deps.executionRepository.isSessionTerminal === "function") {
-        if (sessionMetadataLookup.getForSessionRef(sessionName).isLocallyTerminal) {
-          return true;
-        }
-      } else if (task.record_id && deps.sprintRunId) {
-        const taskRun = deps.executionRepository.getLatestTaskRun(task.record_id, deps.sprintRunId);
-        if (taskRun && (taskRun.state === "COMPLETED" || taskRun.state === "FAILED")) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-
-  const sessionNameArray = planSessionActivityFetches(
-    subtasks,
-    sessionMap,
-    context,
-    sessionMetadataLookup,
-    deps.logger,
-    (task, session) => isForeignSessionMatch(sessionMetadataLookup, task, session),
-    isLocallyTerminal
-  );
-
-  const activitiesMap = await fetchActivitiesBounded(
-    sessionNameArray,
-    5, // concurrency
-    5, // pageSize
-    deps.fetchRecentActivities,
-    deps.logger,
-    deps.activityFetchTimeoutMs,
-  );
 
   for (const task of subtasks) {
     const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);
@@ -1107,16 +994,11 @@ export const runSessionSyncStep = async (
       }
     }
 
-    if (sessionName && activitiesMap.has(sessionName)) {
-      task.activities = activitiesMap.get(sessionName);
-    }
-
     const clarificationProjection = await syncExecutionRunState(
       deps,
       sessionMetadataLookup,
       task,
       match,
-      sessionName ? activitiesMap.get(sessionName) : undefined,
     );
 
     if (clarificationProjection.status === "cancelled_run") {
@@ -1140,11 +1022,8 @@ export const runSessionSyncStep = async (
     // rerun or continued. A merged task is never reactivated. This lets a live
     // re-run surface as RUNNING instead of staying stuck on "completed", while
     // genuinely-done (merged) tasks are left untouched.
-    const actionRequiredReplyPending = hasSubmittedReplyForActionRequiredState(
-      task,
-      match.state,
-      sessionName ? activitiesMap.get(sessionName) : undefined,
-    ) || clarificationProjection.status === "answered";
+    const actionRequiredReplyPending = clarificationProjection.providerReplyPending === true
+      || clarificationProjection.status === "answered";
     const liveRunState = mapSessionStateToTaskRunState(match.state, deps.isActionRequiredState, actionRequiredReplyPending);
     const reactivated = !task.is_merged && (liveRunState === "RUNNING" || liveRunState === "BLOCKED");
     if (task.status === "COMPLETED" && !reactivated && isCompletedTaskSettled(task, { githubMode: context.githubMode })) {

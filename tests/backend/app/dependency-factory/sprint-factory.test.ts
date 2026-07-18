@@ -193,8 +193,8 @@ describe("Sprint Factory", () => {
     sprintArgs.extractSessionId("session2");
     expect(mockContext.extractSessionId).toHaveBeenCalledWith("session2");
 
-    sprintArgs.fetchRecentActivities("session1", 10);
-    expect(mockContext.fetchRecentActivities).toHaveBeenCalledWith("session1", 10);
+    expect(sprintArgs.fetchRecentActivities).toBeUndefined();
+    expect(mockContext.fetchRecentActivities).not.toHaveBeenCalled();
 
     sprintArgs.listSessions();
     expect(mockContext.listSessionsForSync).toHaveBeenCalled();
