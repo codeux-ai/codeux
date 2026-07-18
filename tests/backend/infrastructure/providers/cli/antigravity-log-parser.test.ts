@@ -168,6 +168,40 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     });
   });
 
+  it("keeps Antigravity permission and file telemetry out of assistant turns", () => {
+    const turns = parseAntigravityTranscript([
+      JSON.stringify({
+        type: "PLANNER_RESPONSE",
+        source: "MODEL",
+        content: "I will inspect the relevant files.",
+      }),
+      JSON.stringify({
+        type: "GENERIC",
+        source: "MODEL",
+        content: "Created At: 2026-07-18T02:35:54Z\nYour current permission grants are:\ncommand(*): allowed",
+      }),
+      JSON.stringify({
+        type: "VIEW_FILE",
+        source: "MODEL",
+        content: "Created At: 2026-07-18T02:35:59Z\nFile Path: file:///workspace/CLAUDE.md",
+      }),
+      JSON.stringify({
+        type: "PLANNER_RESPONSE",
+        source: "MODEL",
+        content: "The requested fix is complete.",
+      }),
+    ].join("\n"));
+
+    expect(turns.filter((turn) => turn.kind === "assistant").map((turn) => turn.text)).toEqual([
+      "I will inspect the relevant files.",
+      "The requested fix is complete.",
+    ]);
+    expect(turns.filter((turn) => turn.kind === "tool_result")).toEqual([
+      expect.objectContaining({ toolName: "generic", text: expect.stringContaining("permission grants") }),
+      expect.objectContaining({ toolName: "view_file", text: expect.stringContaining("File Path") }),
+    ]);
+  });
+
   it("parses RUN_COMMAND, TOOL_RESPONSE, and SYSTEM source turns", () => {
     const jsonl = [
       JSON.stringify({

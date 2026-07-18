@@ -96,6 +96,7 @@ export function parseOpenPrs(stdout: string): { data: GitPullRequestStatus[]; wa
       state: toStr(item.state) ?? "UNKNOWN",
       isDraft: item.isDraft === true,
       headRefName: toStr(item.headRefName),
+      headSha: toStr(item.headRefOid) ?? toStr(item.headSha),
       baseRefName: toStr(item.baseRefName),
       mergeStateStatus: toStr(item.mergeStateStatus),
       reviewDecision: toStr(item.reviewDecision),

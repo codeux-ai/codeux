@@ -107,6 +107,28 @@ describe("WorkerInboxReplyService", () => {
     vi.mocked(syncRemoteBranchIfAvailable).mockResolvedValue(true);
   });
 
+  it("bounds provider replies before persisting or returning them", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: `start-${"x".repeat(20_000)}-end` });
+    const { service, appendMessage } = createDirectReplyService({
+      repoPath: "/repo",
+      scopedSettings: settings,
+      executionId: "exec-bounded",
+    });
+
+    const result = await service.generateReply({
+      projectId: "project-1",
+      threadId: "thread-1",
+      bodyMarkdown: "Summarize status.",
+    });
+
+    expect(result.bodyMarkdown.length).toBeLessThanOrEqual(16_000);
+    expect(result.bodyMarkdown).toContain("characters truncated");
+    expect(appendMessage).toHaveBeenLastCalledWith("exec-bounded", expect.objectContaining({
+      role: "assistant",
+      contentMarkdown: result.bodyMarkdown,
+    }));
+  });
+
   it("generates a markdown reply with worker agent context", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "Current status: one task is running." });
 

@@ -210,7 +210,7 @@ export class GithubHostCli implements GitHostCli {
   prListOpen(hostToken?: string) {
     return this.run([
       "pr", "list", "--state", "open", "--limit", "50", "--json",
-      "number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup"
+      "number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup"
     ], hostToken);
   }
 
@@ -379,6 +379,7 @@ export class GithubApiHostCli implements GitHostCli {
           state: typeof pr.state === "string" ? pr.state.toUpperCase() : "OPEN",
           isDraft: pr.draft === true,
           headRefName: typeof head?.ref === "string" ? head.ref : null,
+          headSha: typeof head?.sha === "string" ? head.sha : null,
           baseRefName: typeof base?.ref === "string" ? base.ref : null,
           mergeStateStatus: githubMergeableState(typeof pr.mergeable_state === "string" ? pr.mergeable_state : null),
           reviewDecision: null,
@@ -401,7 +402,7 @@ export class GithubApiHostCli implements GitHostCli {
    */
   private async fetchPullRequestsGraphql(token: string): Promise<{ open: unknown[]; merged: unknown[] } | null> {
     const query = `query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo){`
-      + `open:pullRequests(states:OPEN,first:50,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url isDraft headRefName baseRefName mergeStateStatus reviewDecision updatedAt comments{totalCount} `
+      + `open:pullRequests(states:OPEN,first:50,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url isDraft headRefName headRefOid baseRefName mergeStateStatus reviewDecision updatedAt comments{totalCount} `
       + `commits(last:1){nodes{commit{statusCheckRollup{state contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion startedAt completedAt checkSuite{workflowRun{workflow{name}}}} ... on StatusContext{context state}}}}}}}`
       + `}}`
       + `merged:pullRequests(states:MERGED,first:100,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url headRefName baseRefName mergedAt mergedBy{login}}}`
@@ -428,6 +429,7 @@ export class GithubApiHostCli implements GitHostCli {
             state: "OPEN",
             isDraft: pr.isDraft === true,
             headRefName: typeof pr.headRefName === "string" ? pr.headRefName : null,
+            headSha: typeof pr.headRefOid === "string" ? pr.headRefOid : null,
             baseRefName: typeof pr.baseRefName === "string" ? pr.baseRefName : null,
             mergeStateStatus: githubMergeableState(typeof pr.mergeStateStatus === "string" ? pr.mergeStateStatus : null),
             reviewDecision: typeof pr.reviewDecision === "string" ? pr.reviewDecision : null,

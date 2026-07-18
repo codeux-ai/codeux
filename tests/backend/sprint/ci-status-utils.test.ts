@@ -116,6 +116,20 @@ describe("ci-status-utils", () => {
     expect(deriveChecksFromCiRuns(status, "unknown-branch")).toEqual([]);
   });
 
+  it("ignores stale branch runs after the PR head commit changes", () => {
+    const status = {
+      ciRuns: [
+        { id: 1, name: "CI", workflowName: "CI", status: "completed", conclusion: "failure", event: "pull_request", headBranch: "task/x", headSha: "old-sha", url: "old", updatedAt: "2026-07-18T00:00:00Z" },
+        { id: 2, name: "CI", workflowName: "CI", status: "queued", conclusion: null, event: "pull_request", headBranch: "task/x", headSha: "new-sha", url: "new", updatedAt: "2026-07-18T00:01:00Z" },
+      ],
+    } as GitTrackingStatus;
+
+    expect(deriveChecksFromCiRuns(status, "task/x", "new-sha")).toEqual([
+      { name: "CI", status: "queued", conclusion: null },
+    ]);
+    expect(selectFailedCiRuns(status, "task/x", "new-sha")).toEqual([]);
+  });
+
   it("summarizes failed jobs and runs", () => {
     const failedRuns = [
       {

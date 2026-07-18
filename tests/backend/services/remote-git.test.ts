@@ -14,7 +14,7 @@ describe("GitStatusService - Remote Git", () => {
         "git status --porcelain": { ok: true, stdout: "" },
         "gh --version": { ok: true, stdout: "gh version" },
         "gh auth status": { ok: true, stdout: "ok" },
-        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": {
+        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": {
           ok: true,
           stdout: JSON.stringify([{ number: 11, headRefName: "task/one", baseRefName: "feature/sprint1-implementation", comments: { totalCount: 2 }, statusCheckRollup: [] }]),
         },

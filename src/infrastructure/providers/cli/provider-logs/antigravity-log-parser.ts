@@ -11,6 +11,11 @@ const ANTIGRAVITY_MAX_JSONL_RECORD_CHARS = 2 * 1024 * 1024;
 const ANTIGRAVITY_MAX_DEDUPE_ENTRIES = 4_096;
 const ANTIGRAVITY_MAX_METADATA_ROW_BYTES = 64 * 1024 * 1024;
 const ANTIGRAVITY_MAX_NESTED_ENTRY_DEPTH = 32;
+const ANTIGRAVITY_ASSISTANT_ENTRY_TYPES = new Set([
+  "PLANNER_RESPONSE",
+  "ASSISTANT_RESPONSE",
+  "AGENT_RESPONSE",
+]);
 
 export interface AntigravityUsageTotals {
   inputTokens: number;
@@ -353,11 +358,15 @@ function buildToolCallTurn(value: unknown, timestampMs: number | null): ParsedCo
   return turn;
 }
 
-function buildToolResultTurn(value: unknown, timestampMs: number | null): ParsedConversationTurn | null {
+function buildToolResultTurn(
+  value: unknown,
+  timestampMs: number | null,
+  fallbackToolName?: string,
+): ParsedConversationTurn | null {
   const response = extractFunctionResponse(value);
   const record = response ?? asRecord(value);
   if (!record) return null;
-  const toolName = extractToolName(record);
+  const toolName = extractToolName(record) ?? fallbackToolName;
   const output = record.response ?? record.result ?? record.output ?? record.content ?? record.text ?? record.error;
   const text = extractVisibleTranscriptText(output) || stringify(output);
   const turn: ParsedConversationTurn = {
@@ -547,26 +556,32 @@ function appendAntigravityEntryTurns(
     return;
   }
 
-  if (
-    entryType === "RUN_COMMAND"
+  const explicitToolResult = entryType === "RUN_COMMAND"
     || entryType === "TOOL_RESPONSE"
     || entryType === "TOOL_RESULT"
-    || entryType === "FUNCTION_RESPONSE"
-  ) {
-    const toolResult = buildToolResultTurn(entry, timestampMs);
+    || entryType === "FUNCTION_RESPONSE";
+  const nonAssistantModelEvent = Boolean(entryType)
+    && (actor === "ASSISTANT" || actor === "MODEL" || actor === "AGENT" || actor === "PLANNER")
+    && !ANTIGRAVITY_ASSISTANT_ENTRY_TYPES.has(entryType);
+  if (explicitToolResult || nonAssistantModelEvent) {
+    const toolResult = buildToolResultTurn(
+      entry,
+      timestampMs,
+      entryType ? entryType.toLowerCase() : undefined,
+    );
     if (toolResult) {
       appendBoundedProviderTurns(conversation, [toolResult]);
     }
     return;
   }
 
-  const isAssistant = entryType === "PLANNER_RESPONSE"
-    || entryType === "ASSISTANT_RESPONSE"
-    || entryType === "AGENT_RESPONSE"
-    || actor === "ASSISTANT"
-    || actor === "MODEL"
-    || actor === "AGENT"
-    || actor === "PLANNER";
+  const isAssistant = ANTIGRAVITY_ASSISTANT_ENTRY_TYPES.has(entryType)
+    || (!entryType && (
+      actor === "ASSISTANT"
+      || actor === "MODEL"
+      || actor === "AGENT"
+      || actor === "PLANNER"
+    ));
 
   if (isAssistant) {
     const reasoningText = extractVisibleTranscriptText(entry.reasoning ?? entry.planner_reasoning ?? entry.summary ?? entry.thinking)

@@ -14,7 +14,7 @@ describe("GitHostCli", () => {
       await cli.prListOpen("gh-token");
       expect(runner).toHaveBeenCalledWith("gh", [
         "pr", "list", "--state", "open", "--limit", "50", "--json",
-        "number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup"
+        "number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup"
       ], { cwd: repoPath, hostToken: "gh-token" });
     });
   });
@@ -229,6 +229,7 @@ describe("GithubApiHostCli", () => {
       await cli.prListOpen("tok");
       const body = String((fetchMock.mock.calls[0][1] as any).body);
       expect(body).toContain("statusCheckRollup");
+      expect(body).toContain("headRefOid");
       expect(body).toContain("CheckRun");
       expect(body).toContain("StatusContext");
     });
