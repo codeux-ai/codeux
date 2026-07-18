@@ -1482,11 +1482,6 @@ export class QualityAssuranceService {
             },
           });
         }
-      } catch (error) {
-        for (const trackedSessionId of new Set([logicalSessionId, workspaceSessionId])) {
-          this.deps.sessionTracking.updateSession?.(trackedSessionId, { state: "FAILED" });
-        }
-        throw parseQaError(error);
       } finally {
         if (settings.memory?.enabled && settings.memory.autoCaptureSprint && this.deps.memoryService && result) {
           const memoryCaptureWorkspace = shouldCleanupSnapshot ? snapshotWorkspace : args.repoPath;
@@ -1511,9 +1506,44 @@ export class QualityAssuranceService {
       }
 
       return result.parsed;
+      } catch (error) {
+        for (const trackedSessionId of new Set([logicalSessionId, workspaceSessionId])) {
+          this.deps.sessionTracking.updateSession?.(trackedSessionId, { state: "FAILED" });
+        }
+        this.failPreDispatchQaExecutionInvocation(reviewExecutionInvocationId, error);
+        throw parseQaError(error);
       } finally {
         releaseSnapshotHelperReservation?.();
       }
+    });
+  }
+
+  private failPreDispatchQaExecutionInvocation(
+    invocationId: string | undefined,
+    error: unknown,
+  ): void {
+    if (!invocationId) {
+      return;
+    }
+    const repository = this.deps.executionRepository as Partial<ExecutionRepository>;
+    if (
+      typeof repository.getExecutionInvocation !== "function"
+      || typeof repository.updateExecutionInvocation !== "function"
+    ) {
+      return;
+    }
+    const invocation = repository.getExecutionInvocation(invocationId);
+    if (
+      !invocation
+      || (invocation.status !== "running" && invocation.status !== "paused")
+      || invocation.providerInvocationId
+    ) {
+      return;
+    }
+    repository.updateExecutionInvocation(invocationId, {
+      status: isQaReviewCancellationError(error) ? "cancelled" : "failed",
+      finishedAt: new Date().toISOString(),
+      errorMessage: parseQaError(error).message,
     });
   }
 

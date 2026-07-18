@@ -1859,7 +1859,7 @@ describe("runSessionSyncStep", () => {
     expect(projectRepository.getTask(task.id)?.status).toBe("in_progress");
   });
 
-  it("keeps an awaiting-feedback Jules session running from a durable reply checkpoint", async () => {
+  it("reuses a durable reply only for the same awaiting-feedback provider revision", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-reply-"));
     tempDirs.push(dir);
 
@@ -1942,34 +1942,37 @@ describe("runSessionSyncStep", () => {
       },
     ];
 
+    const listSessions = vi.fn().mockResolvedValue({
+      sessions: [
+        {
+          id: "reply-session",
+          name: "sessions/reply-session",
+          title: "Sprint 8: [run:my-repo/s8/t07] [T07] Wait for clarification reply",
+          state: "AWAITING_USER_FEEDBACK",
+          updateTime: "2026-06-28T16:12:29.000Z",
+          provider: "jules",
+          prompt: "Resolve the scoped loop.",
+        },
+      ],
+    });
+    const deps = {
+      listSessions,
+      resolveSessionName: (session: { name?: string }) => session.name,
+      extractSessionId: (session: { id?: string }) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: (state?: string) => state === "AWAITING_USER_FEEDBACK",
+      executionRepository,
+      projectManagementRepository: projectRepository,
+      sprintRunId: sprintRun.id,
+      logger: { warn: vi.fn() },
+      julesUsage: {
+        syncLiveInvocation: vi.fn().mockResolvedValue(undefined),
+      },
+    };
+
     const result = await runSessionSyncStep(
       subtasks,
-      {
-        listSessions: vi.fn().mockResolvedValue({
-          sessions: [
-            {
-              id: "reply-session",
-              name: "sessions/reply-session",
-              title: "Sprint 8: [run:my-repo/s8/t07] [T07] Wait for clarification reply",
-              state: "AWAITING_USER_FEEDBACK",
-              updateTime: "2026-06-28T16:12:29.000Z",
-              provider: "jules",
-              prompt: "Resolve the scoped loop.",
-            },
-          ],
-        }),
-        resolveSessionName: (session: { name?: string }) => session.name,
-        extractSessionId: (session: { id?: string }) => session.id,
-        fetchRecentActivities: vi.fn().mockResolvedValue([]),
-        isActionRequiredState: (state?: string) => state === "AWAITING_USER_FEEDBACK",
-        executionRepository,
-        projectManagementRepository: projectRepository,
-        sprintRunId: sprintRun.id,
-        logger: { warn: vi.fn() },
-        julesUsage: {
-          syncLiveInvocation: vi.fn().mockResolvedValue(undefined),
-        },
-      },
+      deps,
       false,
       { repoPath: "/tmp/my-repo", sprintNumber: 8 }
     );
@@ -1995,6 +1998,42 @@ describe("runSessionSyncStep", () => {
       sessionState: "AWAITING_USER_FEEDBACK",
       taskRunState: "RUNNING",
       actionRequiredReplyPending: true,
+    });
+
+    listSessions.mockResolvedValue({
+          sessions: [
+            {
+              id: "reply-session",
+              name: "sessions/reply-session",
+              title: "Sprint 8: [run:my-repo/s8/t07] [T07] Wait for clarification reply",
+              state: "AWAITING_USER_FEEDBACK",
+              updateTime: "2026-06-28T19:45:00.000Z",
+              provider: "jules",
+              prompt: "Resolve the scoped loop.",
+            },
+          ],
+    });
+    const revisedResult = await runSessionSyncStep(
+      result.subtasks,
+      deps,
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 8 }
+    );
+
+    const revisedEvents = executionRepository.listTaskRunEvents(run.id);
+    expect(revisedResult.subtasks[0]?.status).toBe("BLOCKED");
+    expect(executionRepository.getTaskRun(run.id)).toMatchObject({
+      state: "BLOCKED",
+    });
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "blocked",
+      errorMessage: "Provider session requires attention: AWAITING_USER_FEEDBACK",
+    });
+    expect(revisedEvents[0]?.payload).toMatchObject({
+      sessionState: "AWAITING_USER_FEEDBACK",
+      taskRunState: "BLOCKED",
+      actionRequiredReplyPending: false,
+      actionRequiredEpoch: "AWAITING_USER_FEEDBACK:2026-06-28T19:45:00.000Z",
     });
   });
 

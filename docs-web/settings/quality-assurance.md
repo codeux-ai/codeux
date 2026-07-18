@@ -49,6 +49,8 @@ During orchestration, QA reconciliation and initial merge-gate evaluation load t
 
 Task QA runs in waves of at most four reviews per orchestration cycle, or a lower positive capacity when the providers routed to `qa_review` are configured more conservatively. The cycle settles that wave, merges ready branches, and starts newly unblocked coding before scheduling more reviews. Provider admission remains authoritative and may reduce effective concurrency further under host pressure.
 
+Each QA reviewer receives an execution audit row before its isolated snapshot is prepared. If Docker or workspace preparation fails before a provider invocation is linked, Code UX closes that audit row with the preparation error and leaves the QA attempt retryable; the Live view does not keep showing provider work that never started.
+
 Codex QA coding follow-ups resolve the coding invocation associated with the task's durable workspace-binding run, then read that exact native thread's rollout from the paired runtime volume. This prevents another rollout in a reused runtime home, or a newer logical retry id, from separating the continuation thread from its saved `.codex` state. If a legacy or corrupt record still names a thread whose rollout is already unavailable, Code UX preserves the workspace and retries the self-contained QA fix prompt once in a fresh Codex conversation. Other resume failures remain failures, and strict recovery flows that require the exact recorded conversation do not use this fallback.
 
 ## Troubleshooting

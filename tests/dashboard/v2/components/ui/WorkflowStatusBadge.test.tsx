@@ -96,6 +96,31 @@ describe("WorkflowStatusBadge", () => {
     expect(workflow.querySelector(".workflow-status__chevron")).toBeInTheDocument();
   });
 
+  it("suppresses stale requested-edit controls after a task is completed", () => {
+    render(
+      <WorkflowStatusBadge
+        scope="task"
+        status="completed"
+        review={review}
+        compact
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Workflow status: Completed/i });
+    expect(trigger).toHaveTextContent("Completed");
+    expect(trigger.closest("[data-workflow-state]")).not.toHaveAttribute("data-qa-state");
+    expect(screen.queryByText("QA edits")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "QA review details" })).not.toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    const workflow = screen.getByRole("region", { name: "Workflow details" });
+    expect(workflow.querySelector('[data-workflow-stage="qa"]')).toHaveAttribute(
+      "data-workflow-stage-state",
+      "successful",
+    );
+    expect(within(workflow).getByText("QA cleared")).toBeVisible();
+  });
+
   it("remains interactive without a QA review or CI projection", () => {
     render(<WorkflowStatusBadge scope="sprint" status="running" compact />);
 

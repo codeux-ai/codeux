@@ -181,6 +181,8 @@ Higher-level **automation level** governs the master switch:
 - `SEMI_AUTO` — respect individual toggles.
 - `ALWAYS_ASK` — never auto-handle; always escalate.
 
+Intervention deduplication is scoped to one provider revision, not only the waiting-state name. If Code UX is offline while a provider resumes and then asks for feedback again, the newer remote revision creates a fresh action-required episode and can receive a new automated answer. A restart while the same revision is still waiting continues to reuse the durable prior checkpoint.
+
 ## Finalisation
 
 When every subtask reaches a terminal merged state, the watch loop runs the **finalisation step**:
