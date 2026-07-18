@@ -614,7 +614,7 @@ export class SprintTaskDispatchService {
     }
 
     const remoteActive = this.uniqueActiveJulesSessions(sessions);
-    const localRunning = this.executionRepository.listRunningProviderInvocationUsages(["jules"])
+    const localRunning = this.providerConcurrencyService.listCapacityConsumingProviderInvocations(["jules"])
       .filter((invocation) => invocation.id !== excludedLocalInvocationId);
     const localSessionIds = new Set<string>();
     for (const invocation of localRunning) {

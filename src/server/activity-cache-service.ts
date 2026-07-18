@@ -2,27 +2,26 @@ import type { GitTrackingStatus, JulesActivity, Subtask } from "../contracts/app
 import {
   mapBoundedOrdered,
   normalizeActivityFetchError,
-  withActivityFetchTimeout,
+  withAbortableActivityFetchTimeout,
 } from "../domain/sprint/session-sync/activity-fetch-utils.js";
+import { projectJulesActivityForLiveView } from "../domain/jules/jules-live-projection.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 const DEFAULT_LIVE_ACTIVITY_FETCH_TIMEOUT_MS = 30_000;
 const LIVE_ACTIVITY_FETCH_TIMEOUT_ERROR_NAME = "ActivityFetchTimeoutError";
-const MAX_LIVE_ACTIVITY_DESCRIPTION_CHARS = 64 * 1024;
 
 const boundLiveActivity = (activity: JulesActivity): JulesActivity => {
-  const description = activity.description;
-  if (typeof description !== "string" || description.length <= MAX_LIVE_ACTIVITY_DESCRIPTION_CHARS) {
-    return activity;
-  }
-  const marker = "\n… [activity preview truncated] …\n";
-  const retainedChars = MAX_LIVE_ACTIVITY_DESCRIPTION_CHARS - marker.length;
-  const headChars = Math.ceil(retainedChars / 2);
-  const tailChars = retainedChars - headChars;
-  return {
-    ...activity,
-    description: `${description.slice(0, headChars)}${marker}${description.slice(-tailChars)}`,
-  };
+  const { artifacts: _discardedArtifacts, ...bounded } = activity;
+  const projected = projectJulesActivityForLiveView(activity);
+  if (activity.agentMessaged) bounded.agentMessaged = projected.agentMessaged;
+  if (activity.userMessaged) bounded.userMessaged = projected.userMessaged;
+  if (activity.progressUpdated) bounded.progressUpdated = projected.progressUpdated;
+  if (activity.planGenerated) bounded.planGenerated = projected.planGenerated;
+  if (activity.planApproved) bounded.planApproved = projected.planApproved;
+  if (activity.sessionFailed) bounded.sessionFailed = projected.sessionFailed;
+  if (activity.sessionCompleted !== undefined) bounded.sessionCompleted = projected.sessionCompleted;
+  if (activity.description !== undefined) bounded.description = projected.description;
+  return bounded;
 };
 
 const getFetchFailureMetadata = (
@@ -48,7 +47,11 @@ const getFetchFailureMetadata = (
 export interface ActivityCacheServiceDependencies {
   getSubtasks: () => Subtask[];
   resolveSessionNameFromTask: (task: Subtask) => string | undefined;
-  fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
+  fetchRecentActivities: (
+    sessionName: string,
+    pageSize?: number,
+    signal?: AbortSignal,
+  ) => Promise<JulesActivity[]>;
   resolveGitStatusRepoPath: () => string;
   fetchGitStatusForRepo: (repoPath: string, cacheTtlMs?: number) => Promise<GitTrackingStatus>;
   invalidateGitStatusCache?: (repoPath: string) => void;
@@ -136,8 +139,8 @@ export class ActivityCacheService {
           concurrency: this.activityFetchConcurrency,
           mapper: async (sessionName) => {
             try {
-              const activities = await withActivityFetchTimeout(
-                this.deps.fetchRecentActivities(sessionName, this.activityPageSize),
+              const activities = await withAbortableActivityFetchTimeout(
+                (signal) => this.deps.fetchRecentActivities(sessionName, this.activityPageSize, signal),
                 {
                   timeoutMs: this.liveActivityFetchTimeoutMs,
                   createTimeoutError: () => {

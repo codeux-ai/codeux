@@ -41,7 +41,7 @@ export function listConversationThreadsQuery(
           cm.thread_id,
           cm.created_at,
           cm.body_markdown,
-          ROW_NUMBER() OVER (PARTITION BY cm.thread_id ORDER BY cm.created_at DESC, cm.id DESC) as rn
+          ROW_NUMBER() OVER (PARTITION BY cm.thread_id ORDER BY cm.created_at DESC, cm.rowid DESC) as rn
         FROM conversation_messages cm
         INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
         WHERE ct.project_id = ? AND ${visibleConversationMessageFilter("cm")}
@@ -86,7 +86,7 @@ export function requireConversationThreadQuery(db: DatabaseAdapter, threadId: st
           thread_id,
           created_at,
           body_markdown,
-          ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY created_at DESC, id DESC) as rn
+          ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY created_at DESC, cm.rowid DESC) as rn
         FROM conversation_messages cm
         WHERE cm.thread_id = ?
           AND ${visibleConversationMessageFilter("cm")}

@@ -40,6 +40,17 @@ function listDefinedUpdateFields(input: UpdateProviderInvocationUsageInput): str
     .sort();
 }
 
+function calculateDurationMs(startedAt: string, finishedAt: string | null): number | null {
+  if (!finishedAt) {
+    return null;
+  }
+  const startedAtMs = Date.parse(startedAt);
+  const finishedAtMs = Date.parse(finishedAt);
+  return Number.isFinite(startedAtMs) && Number.isFinite(finishedAtMs)
+    ? Math.max(0, finishedAtMs - startedAtMs)
+    : null;
+}
+
 export function writeProviderInvocationUsage(
   db: DatabaseAdapter,
   logger: Logger,
@@ -67,6 +78,8 @@ export function writeProviderInvocationUsage(
 
     const id = randomUUID();
     const now = new Date().toISOString();
+    const status = input.status || "running";
+    const terminalAt = status === "running" ? null : now;
     db.prepare(`
       INSERT INTO provider_invocations (
         id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id, task_run_id, attention_item_id,
@@ -86,13 +99,13 @@ export function writeProviderInvocationUsage(
       input.sessionId,
       input.provider,
       input.purpose,
-      input.status || "running",
+      status,
       input.model ?? null,
       input.executionMode ?? null,
       input.nativeSessionId ?? null,
       input.startedAt || now,
-      null,
-      null,
+      terminalAt,
+      terminalAt ? 0 : null,
       input.promptChars ?? 0,
       0,
       0,
@@ -136,7 +149,19 @@ export function writeProviderInvocationUsageIfSlotAvailable(
     const runningRow = db.prepare(`
       SELECT COUNT(*) as count
       FROM provider_invocations
-      WHERE status = 'running' AND provider = ?
+      WHERE status = 'running'
+        AND finished_at IS NULL
+        AND provider = ?
+        AND (
+          provider <> 'jules'
+          OR task_run_id IS NULL
+          OR EXISTS (
+            SELECT 1
+            FROM task_runs
+            WHERE task_runs.id = provider_invocations.task_run_id
+              AND task_runs.state = 'RUNNING'
+          )
+        )
     `).get(input.provider) as { count: number };
 
     if (runningRow.count >= limit) {
@@ -217,6 +242,15 @@ export function writeProviderInvocationUsageUpdate(
   try {
     const current = requireProviderInvocationUsage(getters.getProviderInvocationUsage, invocationId);
     const now = new Date().toISOString();
+    const nextStatus = input.status || current.status;
+    const nextFinishedAt = nextStatus === "running"
+      ? null
+      : (input.finishedAt || current.finishedAt || now);
+    const nextDurationMs = nextStatus === "running"
+      ? null
+      : (input.durationMs === undefined
+          ? current.durationMs ?? calculateDurationMs(current.startedAt, nextFinishedAt)
+          : input.durationMs);
     db.prepare(`
       UPDATE provider_invocations
       SET status = ?, model = ?, execution_mode = ?, native_session_id = ?, finished_at = ?, duration_ms = ?, transcript_chars = ?,
@@ -224,12 +258,12 @@ export function writeProviderInvocationUsageUpdate(
         token_accounting_version = 2, tool_call_count = ?, jules_tokens = ?, usage_source = ?, invocation_source = ?, raw_usage_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
-      input.status || current.status,
+      nextStatus,
       input.model === undefined ? current.model : input.model,
       input.executionMode === undefined ? current.executionMode : input.executionMode,
       input.nativeSessionId === undefined ? current.nativeSessionId : input.nativeSessionId,
-      input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
-      input.durationMs === undefined ? current.durationMs : input.durationMs,
+      nextFinishedAt,
+      nextDurationMs,
       input.transcriptChars === undefined ? current.transcriptChars : input.transcriptChars,
       input.inputTokens === undefined ? current.inputTokens : input.inputTokens,
       input.cachedInputTokens === undefined ? current.cachedInputTokens : input.cachedInputTokens,

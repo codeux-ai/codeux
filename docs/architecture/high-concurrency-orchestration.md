@@ -52,6 +52,12 @@ plan limit. Executing sessions visible to the API but absent from local runtime 
 part of the configured cap, and the remaining local slots are claimed atomically. Capacity
 verification fails closed if the fresh preflight cannot be read.
 
+The admission preflight and every sprint watch loop share the same in-flight page and compatible
+fresh cache entry. Session records are projected to bounded orchestration fields before caching, so
+provider-owned payloads and long historical outputs cannot accumulate in the process heap. A
+recorded task outside the newest-first page uses a coalesced, TTL-cached exact read; tasks already
+present in the shared page never trigger an exact read per cycle.
+
 Jules does not expose a state-filtered list, subscription-slot counter, or atomic slot-reservation
 endpoint. Its history is paginated and old queued work can occur beyond the bounded preflight page,
 so the provider's create response remains authoritative for the unavoidable list/create and
@@ -59,6 +65,11 @@ pagination races. Explicit capacity `400`/`409`/exhausted `429` responses and th
 `400 FAILED_PRECONDITION` currently emitted for a full subscription are retryable deferrals: Code UX
 releases the provisional claim and applies a 30-second learned-cap backoff. `INVALID_ARGUMENT` and
 other validation failures remain terminal with bounded provider detail.
+
+The Jules client globally spaces request starts, performs at most one retry for a quota response,
+honors `Retry-After`, and never transport-retries create, approve, or message mutations. A timed-out
+live activity request aborts the underlying HTTP transport, so abandoned pagination or retries
+cannot continue consuming quota after the caller has moved on.
 
 Persisted Jules sessions are durable across runtime restarts. Startup recovery preserves running
 hosted invocations even when a stale local sprint projection is terminal, then compares the cached
@@ -248,6 +259,13 @@ released after bounded messages and numeric usage are derived, before SQLite rec
 This keeps wide hosted-session synchronization from multiplying large patch and media payloads in
 the Node.js heap.
 
+Ordinary orchestration does not read Jules activity history. The live dashboard owns the
+best-effort recent feed: it advances at most one 50-activity page per cache refresh, coalesces
+callers per session, rejects responses above 16 MiB, keeps at most 50 projected activities for at
+most 32 sessions, and removes cumulative patches, base64 media, and shell artifacts before caching.
+Only terminal usage estimation scans complete history, through the serialized ten-activity
+projection described below.
+
 Jules usage history is projected page-by-page in batches of ten activities. Every activity/tool
 event remains available to the estimator, including bash output, while provider-only metadata and
 base64 media bytes are discarded immediately. Because Jules repeats the complete current patch on
@@ -318,6 +336,10 @@ while older files that predate that mode may safely no-op until an explicit offl
   capacity, including adaptive reply reservations; configured capacity is only an upper bound.
 - Task QA runs in waves of at most four reviews. The cycle merges settled work and starts newly
   unblocked coding before scheduling another QA wave.
+- Provider-backed clarification generation runs as bounded background work instead of holding the
+  watch cycle open. A per-epoch reservation prevents duplicate reply workers, durable events
+  preserve the outcome, and the configured worker timeout aborts a wedged provider run and releases
+  its invocation slot.
 - Provider claims remain atomic across every project and runtime process.
 - Interactive work cannot exceed an explicit positive provider cap.
 - Existing providers are not killed in response to pressure.

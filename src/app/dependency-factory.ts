@@ -36,7 +36,11 @@ export interface ServerContext {
   isActionRequiredState: (state?: string) => boolean;
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
-  fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
+  fetchRecentActivities: (
+    sessionName: string,
+    pageSize?: number,
+    signal?: AbortSignal,
+  ) => Promise<JulesActivity[]>;
   listSessionsForSync: () => Promise<{ sessions?: JulesSession[] }>;
   getCiStatusForScope: (args: GetCiStatusForScopeArgs) => Promise<GitTrackingStatus | null>;
   autoMergeFeaturePr: (args: AutoMergeFeaturePrArgs) => Promise<AutoMergeFeaturePrResult>;

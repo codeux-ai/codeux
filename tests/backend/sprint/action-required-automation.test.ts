@@ -73,8 +73,46 @@ describe("action-required-automation", () => {
     expect(result.reportText).toContain("Auto-Approved Plan");
     expect(onTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
       eventType: "action_required_auto_approved",
-      sourceEventKey: "action-required:T1:auto-approved:abc123",
+      sourceEventKey: expect.stringContaining("action-required:T1:auto-approved:abc123"),
     }));
+  });
+
+  it("does not approve the same durable plan epoch again after a restart", async () => {
+    const approve = vi.fn().mockResolvedValue({});
+    const task = createTask({
+      session_state: "AWAITING_PLAN_APPROVAL",
+      action_required_epoch: "AWAITING_PLAN_APPROVAL:episode-1",
+    });
+    const persisted = JSON.stringify({
+      key: "plan-approval|epoch:AWAITING_PLAN_APPROVAL:episode-1",
+      storedAtMs: 1_000,
+    });
+
+    const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+        clarificationCooldownSeconds: 300,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: approve,
+      sendSessionMessage: vi.fn(),
+      lastAutomatedInterventionKeys: new Map(),
+      loadPersistedInterventionKey: vi.fn().mockReturnValue(persisted),
+    });
+
+    expect(approve).not.toHaveBeenCalled();
+    expect(result.subtasks[0]).toMatchObject({
+      status: "RUNNING",
+      intervention_owner: "AGENT",
+    });
   });
 
 
@@ -369,8 +407,11 @@ describe("action-required-automation", () => {
       sprintGoal: "test goal",
       task,
     }));
-    expect(sendMessage).toHaveBeenCalledWith("abc123", "Worker generated answer");
     expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(result.reportText).toContain("without blocking orchestration");
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith("abc123", "Worker generated answer");
+    });
   });
 
   it("does not start a second worker clarification invocation while the same question is already in flight", async () => {
@@ -405,20 +446,20 @@ describe("action-required-automation", () => {
       lastAutomatedInterventionKeys,
     };
 
-    const first = applyActionRequiredAutomation([{ ...task }], commonArgs);
+    const first = await applyActionRequiredAutomation([{ ...task }], commonArgs);
     const second = await applyActionRequiredAutomation([{ ...task }], commonArgs);
 
     expect(generateWorkerReply).toHaveBeenCalledTimes(1);
     expect(sendMessage).not.toHaveBeenCalled();
+    expect(first.subtasks[0].intervention_hint).toContain("background");
     expect(second.subtasks[0].status).toBe("RUNNING");
-    expect(second.subtasks[0].intervention_hint).toContain("already answered automatically");
+    expect(second.subtasks[0].intervention_hint).toContain("still preparing");
 
     resolveWorkerReply("Worker generated answer");
-    await first;
-
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith("abc123", "Worker generated answer");
+    });
     expect(generateWorkerReply).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith("abc123", "Worker generated answer");
   });
 
   it("clears the clarification reservation when auto-answering fails", async () => {
@@ -495,6 +536,104 @@ describe("action-required-automation", () => {
     expect(result2.subtasks[0].status).toBe("RUNNING");
     expect(result2.subtasks[0].intervention_owner).toBe("AGENT");
     expect(result2.subtasks[0].intervention_hint).toContain("already answered automatically");
+  });
+
+  it("restores clarification deduplication after restart and escalates an expired reply", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    let now = 1_000;
+    let persisted: string | undefined;
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      action_required_epoch: "AWAITING_USER_FEEDBACK:episode-1",
+      activities: [{ agentMessaged: { agentMessage: "Should I change the public contract?" } }],
+    });
+    const settings = {
+      autoApprovePlan: true,
+      autoAnswerClarification: true,
+      autoAnswerClarificationMode: "TEMPLATE" as const,
+      autoResumePaused: true,
+      clarificationAnswerTemplate: "Keep the public contract stable.",
+      clarificationCooldownSeconds: 5,
+    };
+    const firstMap = new Map<string, string>();
+    await applyActionRequiredAutomation([{ ...task }], {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL",
+      settings,
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      lastAutomatedInterventionKeys: firstMap,
+      now: () => now,
+      onTaskEvent: ({ eventType, payload }) => {
+        if (eventType === "action_required_auto_replied") {
+          persisted = JSON.stringify({
+            key: payload.interventionKey,
+            storedAtMs: payload.interventionStoredAtMs,
+          });
+        }
+      },
+    });
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(persisted).toBeDefined();
+
+    now += 6_000;
+    const restartedMap = new Map<string, string>();
+    const loadPersistedInterventionKey = vi.fn().mockReturnValue(persisted);
+    const afterRestart = await applyActionRequiredAutomation([
+      { ...task, status: "RUNNING" },
+    ], {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL",
+      settings,
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      lastAutomatedInterventionKeys: restartedMap,
+      loadPersistedInterventionKey,
+      now: () => now,
+    });
+
+    expect(loadPersistedInterventionKey).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(afterRestart.subtasks[0]).toMatchObject({
+      status: "BLOCKED",
+      intervention_owner: "HUMAN",
+    });
+  });
+
+  it("allows a new action-required epoch to receive a new reply", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      action_required_epoch: "AWAITING_USER_FEEDBACK:episode-2",
+    });
+
+    await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "Proceed within scope.",
+        clarificationCooldownSeconds: 300,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      lastAutomatedInterventionKeys: new Map(),
+      loadPersistedInterventionKey: vi.fn().mockReturnValue(undefined),
+    });
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a task running when a user reply already exists after the latest agent clarification", async () => {

@@ -464,22 +464,73 @@ export class WatchLoopRunner {
     sprintRunId: string;
     planningAgentPresetId?: string;
   }) {
-    const cycleResult = await this.cycleRunner.run({
-      action: params.args.action as "status" | "orchestrate",
-      automationLevel: params.automationLevel,
-      automationInterventions: params.automationInterventions,
-      executionContext: params.scopedExecutionContext,
-      repoPath: params.repoPath,
-      defaultFeatureBranch: params.defaultFeatureBranch,
-      retryFailed: params.retryFailed,
-      loopSteps: params.loopSteps,
-      ciIntelligence: params.ciIntelligence,
-      githubMode: params.githubMode,
-      defaultBranch: params.defaultBranch,
-      featureBranchPrefix: params.featureBranchPrefix,
-      sprintRunId: params.sprintRunId,
-      planningAgentPresetId: params.planningAgentPresetId,
-    });
+    const cycleStartedAtMs = Date.now();
+    const cycleStartedAt = new Date(cycleStartedAtMs).toISOString();
+    const stallThresholdMs = Math.max(
+      30_000,
+      Math.max(1, params.loopSteps.watchLoopIntervalSeconds) * 3_000,
+    );
+    let stalled = false;
+    const watchdog = setTimeout(() => {
+      stalled = true;
+      this.deps.logger.warn("Sprint watch cycle exceeded its progress deadline", {
+        sprintRunId: params.sprintRunId,
+        projectId: params.scopedExecutionContext.project.id,
+        sprintId: params.scopedExecutionContext.sprint.id,
+        cycleStartedAt,
+        stallThresholdMs,
+      });
+      try {
+        this.deps.executionRepository.appendSprintRunEvent(
+          params.sprintRunId,
+          "watch_cycle_stalled",
+          "system",
+          {
+            cycleStartedAt,
+            stallThresholdMs,
+          },
+          {
+            sourceEventKey: `watch-cycle-stalled:${params.sprintRunId}:${cycleStartedAt}`,
+          },
+        );
+      } catch (error) {
+        this.deps.logger.warn("Failed to persist sprint watch-cycle stall event", {
+          sprintRunId: params.sprintRunId,
+          error,
+        });
+      }
+    }, stallThresholdMs);
+    watchdog.unref?.();
+
+    let cycleResult: Awaited<ReturnType<CycleRunner["run"]>>;
+    try {
+      cycleResult = await this.cycleRunner.run({
+        action: params.args.action as "status" | "orchestrate",
+        automationLevel: params.automationLevel,
+        automationInterventions: params.automationInterventions,
+        executionContext: params.scopedExecutionContext,
+        repoPath: params.repoPath,
+        defaultFeatureBranch: params.defaultFeatureBranch,
+        retryFailed: params.retryFailed,
+        loopSteps: params.loopSteps,
+        ciIntelligence: params.ciIntelligence,
+        githubMode: params.githubMode,
+        defaultBranch: params.defaultBranch,
+        featureBranchPrefix: params.featureBranchPrefix,
+        sprintRunId: params.sprintRunId,
+        planningAgentPresetId: params.planningAgentPresetId,
+      });
+    } finally {
+      clearTimeout(watchdog);
+      const cycleDurationMs = Date.now() - cycleStartedAtMs;
+      const log = stalled ? this.deps.logger.info.bind(this.deps.logger) : this.deps.logger.debug?.bind(this.deps.logger);
+      log?.("Sprint watch cycle completed", {
+        sprintRunId: params.sprintRunId,
+        cycleStartedAt,
+        cycleDurationMs,
+        recoveredFromStall: stalled,
+      });
+    }
 
     this.publishStatusSnapshot({
       args: params.args,

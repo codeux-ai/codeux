@@ -380,119 +380,132 @@ export class WorkerInboxReplyService {
 
     const providerInvocationId = randomUUID();
     const sessionId = "worker-reply-" + providerInvocationId;
+    const timeoutSeconds = Math.max(30, Math.floor(settings.workers?.timeoutSeconds || 300));
+    const timeoutMs = timeoutSeconds * 1000;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort(new Error(
+        `Clarification reply generation timed out after ${timeoutSeconds}s`,
+      ));
+    }, timeoutMs);
+    timeout.unref?.();
 
-    const usageRecord = await this.deps.providerConcurrencyService.waitForSlotAndClaim(
-      route.provider,
-      providerSettings.maxConcurrentTasks,
-      {
-        projectId: args.projectId,
-        taskId: invocationTaskId,
-        sessionId,
-        provider: route.provider,
-        purpose: "clarification_reply",
-        status: "running",
-        model: providerSettings.model,
-        startedAt,
-        promptChars: invocationPrompt.length,
-      }
-    );
-
-    const execInvocation = this.deps.executionRepository.createExecutionInvocation({
-      projectId: args.projectId,
-      skipValidation: true,
-      type: "worker_reply",
-      provider: route.provider,
-      model: providerSettings.model,
-      startedAt,
-      attentionItemId: null,
-      dispatchId: null,
-      providerInvocationId: usageRecord.id,
-      sprintId: invocationSprintId,
-      sprintRunId: null,
-      taskId: invocationTaskId,
-      taskRunId: null,
-    });
-
-    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-      role: "user",
-      contentMarkdown: invocationPrompt,
-    });
-
-    let output: string;
-    let providerResult: ProviderRunResult & { text: string };
     try {
-      providerResult = await this.runProvider({
-        provider: route.provider,
-        prompt,
-        repoPath: project.baseDir,
-        model: providerSettings.model,
-        thinkingMode: providerSettings.thinkingMode,
-        apiKey: providerSettings.apiKey,
-        qwenAuthMode: providerSettings.qwenAuthMode,
-        qwenRegion: providerSettings.qwenRegion,
-        qwenBaseUrl: providerSettings.qwenBaseUrl,
-        qwenEnvKey: providerSettings.qwenEnvKey,
-        qwenModelId: providerSettings.qwenModelId,
-        qwenProtocol: providerSettings.qwenProtocol,
-        qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
-        openCodeAuthMode: providerSettings.openCodeAuthMode,
-        openCodeProviderId: providerSettings.openCodeProviderId,
-        openCodeModelId: providerSettings.openCodeModelId,
-        openCodeBaseUrl: providerSettings.openCodeBaseUrl,
-        openCodeEnvKey: providerSettings.openCodeEnvKey,
-        openCodePackage: providerSettings.openCodePackage,
-        providerMountAuth: providerSettings.mountAuth,
-        providerAuthPath: providerSettings.authPath,
-        providerConfigMode: providerSettings.providerConfigMode,
-        providerConfigPath: providerSettings.providerConfigPath,
-        customBaseUrl: providerSettings.customBaseUrl,
-        customModel: providerSettings.customModel,
-        githubToken: this.deps.getGithubToken(),
-        projectId: args.projectId,
-        sprintId: invocationSprintId,
-        agentMcpAccess: projectManagerClarificationAgentMcpAccess(clarificationAgent.mcpAccess),
-        mcpAgentId: clarificationAgent.id,
-        persistentSkillRuntime: persistentSkillContext.runtime,
-        googleDriveMount,
-      });
-      output = providerResult.text;
-    } catch (err) {
-      const finishedAt = new Date().toISOString();
-      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
-        status: "failed",
-        finishedAt,
-      });
-      this.deps.executionRepository.updateProviderInvocationUsage(usageRecord.id, {
-        status: "failed",
-        finishedAt,
-        durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
-      });
-      throw err;
+      const usageRecord = await this.deps.providerConcurrencyService.waitForSlotAndClaim(
+        route.provider,
+        providerSettings.maxConcurrentTasks,
+        {
+          projectId: args.projectId,
+          taskId: invocationTaskId,
+          sessionId,
+          provider: route.provider,
+          purpose: "clarification_reply",
+          status: "running",
+          model: providerSettings.model,
+          startedAt,
+          promptChars: invocationPrompt.length,
+        },
+        controller.signal,
+        timeoutMs,
+      );
+
+      let executionInvocationId: string | null = null;
+      try {
+        const execInvocation = this.deps.executionRepository.createExecutionInvocation({
+          projectId: args.projectId,
+          skipValidation: true,
+          type: "worker_reply",
+          provider: route.provider,
+          model: providerSettings.model,
+          startedAt,
+          attentionItemId: null,
+          dispatchId: null,
+          providerInvocationId: usageRecord.id,
+          sprintId: invocationSprintId,
+          sprintRunId: null,
+          taskId: invocationTaskId,
+          taskRunId: null,
+        });
+        executionInvocationId = execInvocation.id;
+        this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+          role: "user",
+          contentMarkdown: invocationPrompt,
+        });
+
+        const providerResult: ProviderRunResult & { text: string } = await this.runProvider({
+          provider: route.provider,
+          prompt,
+          repoPath: project.baseDir,
+          model: providerSettings.model,
+          thinkingMode: providerSettings.thinkingMode,
+          apiKey: providerSettings.apiKey,
+          qwenAuthMode: providerSettings.qwenAuthMode,
+          qwenRegion: providerSettings.qwenRegion,
+          qwenBaseUrl: providerSettings.qwenBaseUrl,
+          qwenEnvKey: providerSettings.qwenEnvKey,
+          qwenModelId: providerSettings.qwenModelId,
+          qwenProtocol: providerSettings.qwenProtocol,
+          qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
+          openCodeAuthMode: providerSettings.openCodeAuthMode,
+          openCodeProviderId: providerSettings.openCodeProviderId,
+          openCodeModelId: providerSettings.openCodeModelId,
+          openCodeBaseUrl: providerSettings.openCodeBaseUrl,
+          openCodeEnvKey: providerSettings.openCodeEnvKey,
+          openCodePackage: providerSettings.openCodePackage,
+          providerMountAuth: providerSettings.mountAuth,
+          providerAuthPath: providerSettings.authPath,
+          providerConfigMode: providerSettings.providerConfigMode,
+          providerConfigPath: providerSettings.providerConfigPath,
+          customBaseUrl: providerSettings.customBaseUrl,
+          customModel: providerSettings.customModel,
+          githubToken: this.deps.getGithubToken(),
+          projectId: args.projectId,
+          sprintId: invocationSprintId,
+          agentMcpAccess: projectManagerClarificationAgentMcpAccess(clarificationAgent.mcpAccess),
+          mcpAgentId: clarificationAgent.id,
+          persistentSkillRuntime: persistentSkillContext.runtime,
+          googleDriveMount,
+          signal: controller.signal,
+        });
+        const reply = normalizeProviderReply(providerResult.text);
+        if (!reply) {
+          throw new Error(`Provider ${route.provider} returned an empty clarification reply.`);
+        }
+
+        const finishedAt = new Date().toISOString();
+        this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+          role: "assistant",
+          contentMarkdown: reply,
+        });
+        this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
+          status: "completed",
+          finishedAt,
+        });
+        this.deps.executionRepository.updateProviderInvocationUsage(usageRecord.id, {
+          status: "completed",
+          finishedAt,
+          durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
+          ...providerResult.usageTelemetry,
+        });
+        return reply;
+      } catch (error) {
+        const finishedAt = new Date().toISOString();
+        if (executionInvocationId) {
+          this.deps.executionRepository.updateExecutionInvocation(executionInvocationId, {
+            status: "failed",
+            finishedAt,
+          });
+        }
+        this.deps.executionRepository.updateProviderInvocationUsage(usageRecord.id, {
+          status: "failed",
+          finishedAt,
+          durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
+        });
+        throw error;
+      }
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const reply = normalizeProviderReply(output);
-
-    const finishedAt = new Date().toISOString();
-    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-      role: "assistant",
-      contentMarkdown: reply,
-    });
-    this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
-      status: "completed",
-      finishedAt,
-    });
-    this.deps.executionRepository.updateProviderInvocationUsage(usageRecord.id, {
-      status: "completed",
-      finishedAt,
-      durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
-      ...providerResult.usageTelemetry,
-    });
-
-    if (!reply) {
-      throw new Error(`Provider ${route.provider} returned an empty clarification reply.`);
-    }
-
-    return reply;
   }
 
   private firstNonEmptyString(...values: Array<string | null | undefined>): string | null {
@@ -664,6 +677,7 @@ export class WorkerInboxReplyService {
     mcpAgentId?: string | null;
     persistentSkillRuntime?: PersistentSkillStorageRuntime | null;
     googleDriveMount?: GoogleDriveRuntimeMount | null;
+    signal?: AbortSignal;
   }): Promise<ProviderRunResult & { text: string }> {
     const dashboardSettings = this.deps.getDashboardSettings(input.projectId
       ? { projectId: input.projectId, sprintId: input.sprintId ?? undefined }
@@ -740,6 +754,7 @@ export class WorkerInboxReplyService {
       customMcpServers: resolvedMcp.customMcpServers,
       persistentSkillStorageMounts: persistentSkillRuntime?.mounts,
       googleDriveMount: input.googleDriveMount ?? undefined,
+      signal: input.signal,
       onActivity: () => {},
     });
   }

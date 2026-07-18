@@ -220,7 +220,7 @@ describe("Dashboard Factory", () => {
 
     // Test fetchRecentActivities
     activityCacheArgs.fetchRecentActivities("session1", 10);
-    expect(mockContext.fetchRecentActivities).toHaveBeenCalledWith("session1", 10);
+    expect(mockContext.fetchRecentActivities).toHaveBeenCalledWith("session1", 10, undefined);
 
     // Test resolveGitStatusRepoPath
     activityCacheArgs.resolveGitStatusRepoPath();

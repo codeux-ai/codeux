@@ -819,7 +819,7 @@ export class CodeUxServer {
       isActionRequiredState: (state) => this.isActionRequiredState(state),
       resolveSessionName: (session) => this.resolveSessionName(session),
       extractSessionId: (session) => this.extractSessionId(session),
-      fetchRecentActivities: (sessionName, pageSize) => this.fetchRecentActivities(sessionName, pageSize),
+      fetchRecentActivities: (sessionName, pageSize, signal) => this.fetchRecentActivities(sessionName, pageSize, signal),
       listSessionsForSync: () => this.listSessionsForSync(),
       getCiStatusForScope: (args) => this.getCiStatusForScope(args),
       autoMergeFeaturePr: (args) => this.autoMergeFeaturePr(args),
@@ -1156,14 +1156,18 @@ export class CodeUxServer {
     return { sessions: merged };
   }
 
-  private async fetchRecentActivities(sessionName: string, pageSize: number = CodeUxServer.DASHBOARD_ACTIVITY_PAGE_SIZE): Promise<JulesActivity[]> {
+  private async fetchRecentActivities(
+    sessionName: string,
+    pageSize: number = CodeUxServer.DASHBOARD_ACTIVITY_PAGE_SIZE,
+    signal?: AbortSignal,
+  ): Promise<JulesActivity[]> {
     if (this.isTrackedCliSession(sessionName)) {
       return this.sessionTracking.fetchRecentActivities(sessionName, pageSize);
     }
     if (!this.isJulesApiConfigured()) {
       return [];
     }
-    return this.julesApi.fetchRecentActivities(sessionName, pageSize);
+    return this.julesApi.fetchRecentActivities(sessionName, pageSize, signal);
   }
 
   private async fetchGitStatusForRepo(repoPath: string, cacheTtlMs?: number): Promise<GitTrackingStatus> {

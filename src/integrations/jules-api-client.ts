@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AxiosInstance } from "axios";
+import type { AxiosInstance, GenericAbortSignal } from "axios";
 import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
 import type { JulesClient } from "../domain/jules/jules-client.js";
 import {
@@ -7,6 +7,10 @@ import {
   JulesUsageConversationProjector,
   type JulesUsageConversation,
 } from "../domain/jules/jules-activity-projection.js";
+import {
+  projectJulesActivityForLiveView,
+  projectJulesSessionForOrchestration,
+} from "../domain/jules/jules-live-projection.js";
 
 export class JulesNotFoundError extends Error {
   readonly status = 404;
@@ -21,6 +25,12 @@ export class JulesNotFoundError extends Error {
 
 const MAX_JULES_API_ERROR_MESSAGE_CHARS = 2_048;
 export const JULES_MAX_API_RESPONSE_BYTES = 64 * 1024 * 1024;
+const JULES_MAX_LIVE_ACTIVITY_RESPONSE_BYTES = 16 * 1024 * 1024;
+const JULES_RECENT_ACTIVITY_API_PAGE_SIZE = 50;
+const JULES_RECENT_ACTIVITY_CACHE_LIMIT = 50;
+const JULES_RECENT_ACTIVITY_SESSION_CACHE_LIMIT = 32;
+const DEFAULT_RECENT_ACTIVITY_CACHE_TTL_MS = 10_000;
+const DEFAULT_EXACT_SESSION_CACHE_TTL_MS = 15_000;
 const JULES_SESSION_CAPACITY_PATTERN = /(?:concurren\w*|too many|max(?:imum)?|limit|quota|capacity|resource\s+exhausted).{0,80}(?:active\s+)?sessions?|(?:active\s+)?sessions?.{0,80}(?:concurren\w*|too many|max(?:imum)?|limit|quota|capacity|resource\s+exhausted)/i;
 const JULES_CONCURRENT_TASK_STATES = new Set(["QUEUED", "PLANNING", "IN_PROGRESS"]);
 
@@ -141,7 +151,7 @@ export interface JulesApiClientOptions {
    * Minimum spacing between outgoing request starts, in milliseconds. Acts as a
    * client-side rate limiter so that fan-out from many callers (session sync,
    * the dashboard activity cache, clarification replies, …) cannot stampede the
-   * Jules API into 429s. Defaults to 250ms (~4 req/s).
+   * Jules API into 429s. Defaults to 500ms (~2 req/s).
    */
   minRequestIntervalMs?: number;
   /**
@@ -152,15 +162,17 @@ export interface JulesApiClientOptions {
    */
   requestTimeoutMs?: number;
   /**
-   * Maximum automatic retries for transient transport failures (network resets,
-   * timeouts, DNS hiccups) and 429s. Defaults to 4.
+   * Maximum automatic retries for idempotent reads after transient transport
+   * failures. Quota responses are retried at most once, and mutating requests
+   * are never transport-retried because a timed-out create/reply can already
+   * have succeeded remotely. Defaults to 2.
    */
   maxTransientRetries?: number;
   /**
    * Time-to-live for the shared session snapshot returned by
    * {@link JulesApiClient.getCachedSessions}. Across many concurrent sprint
    * watch loops this collapses N `listSessions` calls per cycle into a single
-   * shared fetch. Defaults to 12s (just above the 10s watch-loop interval so
+   * shared fetch. Defaults to 15s (just above the 10s watch-loop interval so
    * concurrent loops share one fetch while state stays near-real-time).
    */
   sessionsCacheTtlMs?: number;
@@ -173,10 +185,14 @@ export interface JulesApiClientOptions {
   sessionsCapacityCacheTtlMs?: number;
   /**
    * Upper bound on how many sessions the shared snapshot paginates through per
-   * refresh. This bounds watch-loop work on accounts with thousands of
-   * historical sessions. Defaults to 300.
+   * refresh. Recorded sessions outside this newest-first page are resolved
+   * through the exact-session cache. Defaults to 100, matching one API page.
    */
   maxSnapshotSessions?: number;
+  /** TTL for exact session reads used when a durable task is outside the shared snapshot. */
+  exactSessionCacheTtlMs?: number;
+  /** Minimum interval between incremental activity-page reads for one session. */
+  recentActivityCacheTtlMs?: number;
   /** Injectable clock for deterministic tests. Defaults to `Date.now`. */
   now?: () => number;
 }
@@ -256,7 +272,6 @@ const TRANSIENT_NETWORK_CODES = new Set([
   "EPIPE",
   "ECONNREFUSED",
   "ERR_NETWORK",
-  "ERR_CANCELED",
 ]);
 
 const isTransientNetworkError = (error: unknown): boolean => {
@@ -267,6 +282,9 @@ const isTransientNetworkError = (error: unknown): boolean => {
   // may also surface these as an AggregateError (happy-eyeballs) whose own code
   // is unset, so fall back to scanning the message.
   const err = error as { response?: unknown; code?: string; name?: string; message?: string };
+  if (err.code === "ERR_CANCELED" || err.name === "CanceledError" || err.name === "AbortError") {
+    return false;
+  }
   if (err.response) {
     return false;
   }
@@ -284,6 +302,20 @@ const isTransientNetworkError = (error: unknown): boolean => {
     || message.includes("network error");
 };
 
+interface ExactSessionCacheEntry {
+  at: number;
+  session: JulesSession;
+}
+
+interface RecentActivityCacheEntry {
+  activities: JulesActivity[];
+  nextPageToken?: string;
+  tailPageToken?: string;
+  complete: boolean;
+  revision: string | null;
+  fetchedAt: number;
+}
+
 export class JulesApiClient implements JulesClient {
   private readonly axiosInstance: AxiosInstance;
   private apiKey: string | null;
@@ -292,20 +324,30 @@ export class JulesApiClient implements JulesClient {
   private readonly sessionsCacheTtlMs: number;
   private readonly sessionsCapacityCacheTtlMs: number;
   private readonly maxSnapshotSessions: number;
+  private readonly exactSessionCacheTtlMs: number;
+  private readonly recentActivityCacheTtlMs: number;
   private readonly now: () => number;
   private nextRequestSlot = 0;
+  private credentialEpoch = 0;
+  private sessionCacheEpoch = 0;
   private sessionSnapshot: { at: number; sessions: JulesSession[] } | null = null;
   private sessionSnapshotInFlight: Promise<JulesSession[]> | null = null;
   private sessionCapacitySnapshot: { at: number; sessions: JulesSession[] } | null = null;
   private sessionCapacitySnapshotInFlight: Promise<JulesSession[]> | null = null;
+  private readonly exactSessionCache = new Map<string, ExactSessionCacheEntry>();
+  private readonly exactSessionInFlight = new Map<string, Promise<JulesSession>>();
+  private readonly recentActivityCache = new Map<string, RecentActivityCacheEntry>();
+  private readonly recentActivityInFlight = new Map<string, Promise<RecentActivityCacheEntry>>();
 
   constructor(options: JulesApiClientOptions) {
     this.apiKey = this.normalizeApiKey(options.apiKey);
-    this.minRequestIntervalMs = Math.max(0, options.minRequestIntervalMs ?? 250);
-    this.maxTransientRetries = Math.max(0, options.maxTransientRetries ?? 4);
-    this.sessionsCacheTtlMs = Math.max(0, options.sessionsCacheTtlMs ?? 12_000);
+    this.minRequestIntervalMs = Math.max(0, options.minRequestIntervalMs ?? 500);
+    this.maxTransientRetries = Math.max(0, options.maxTransientRetries ?? 2);
+    this.sessionsCacheTtlMs = Math.max(0, options.sessionsCacheTtlMs ?? 15_000);
     this.sessionsCapacityCacheTtlMs = Math.max(0, options.sessionsCapacityCacheTtlMs ?? 10_000);
-    this.maxSnapshotSessions = Math.max(1, options.maxSnapshotSessions ?? 300);
+    this.maxSnapshotSessions = Math.max(1, options.maxSnapshotSessions ?? 100);
+    this.exactSessionCacheTtlMs = Math.max(0, options.exactSessionCacheTtlMs ?? DEFAULT_EXACT_SESSION_CACHE_TTL_MS);
+    this.recentActivityCacheTtlMs = Math.max(0, options.recentActivityCacheTtlMs ?? DEFAULT_RECENT_ACTIVITY_CACHE_TTL_MS);
     this.now = options.now ?? Date.now;
     this.axiosInstance = axios.create({
       baseURL: options.baseUrl,
@@ -325,7 +367,7 @@ export class JulesApiClient implements JulesClient {
         delete headers["X-Goog-Api-Key"];
       }
       config.headers = headers;
-      await this.acquireRequestSlot();
+      await this.acquireRequestSlot(config.signal);
       return config;
     });
 
@@ -338,14 +380,30 @@ export class JulesApiClient implements JulesClient {
         if (!config) {
           return Promise.reject(error);
         }
+        if (
+          config.signal?.aborted
+          || error.code === "ERR_CANCELED"
+          || error.name === "CanceledError"
+          || error.name === "AbortError"
+        ) {
+          return Promise.reject(error);
+        }
 
         const is429 = Boolean(error.response && error.response.status === 429);
         const isTransient = !error.response && isTransientNetworkError(error);
+        const method = String(config.method || "get").toUpperCase();
+        const isIdempotentRead = method === "GET" || method === "HEAD" || method === "OPTIONS";
 
-        if (is429 || isTransient) {
+        if (isIdempotentRead && (is429 || isTransient)) {
           const retryCount = retryCounts.get(config) || 0;
+          // One server-directed retry is enough for quota responses. Repeating
+          // a 429 several times consumes more of the same constrained quota and
+          // delays recovery for every caller sharing the global schedule.
+          const retryLimit = is429
+            ? Math.min(1, this.maxTransientRetries)
+            : this.maxTransientRetries;
 
-          if (retryCount < this.maxTransientRetries) {
+          if (retryCount < retryLimit) {
             const nextCount = retryCount + 1;
             retryCounts.set(config, nextCount);
 
@@ -356,12 +414,12 @@ export class JulesApiClient implements JulesClient {
             const delay = Math.min(Math.max(retryAfterMs ?? backoffMs, backoffMs), 30000);
 
             const reason = is429 ? "returned 429" : `hit a transient network error (${error.code || error.name || "unknown"})`;
-            console.warn(`Jules API ${reason}. Retrying request to ${config.url} (Attempt ${nextCount}/${this.maxTransientRetries}) after ${Math.round(delay)}ms...`);
+            console.warn(`Jules API ${reason}. Retrying request to ${config.url} (Attempt ${nextCount}/${retryLimit}) after ${Math.round(delay)}ms...`);
 
             // Push the global request schedule out so concurrent in-flight
             // requests also back off, instead of all hammering at once.
             this.deferRequestSlot(delay);
-            await new Promise((resolve) => setTimeout(resolve, delay));
+            await this.waitForDelay(delay, config.signal);
 
             return this.axiosInstance(config);
           }
@@ -378,7 +436,7 @@ export class JulesApiClient implements JulesClient {
    * `minRequestIntervalMs` apart, bounding the outgoing request rate across all
    * callers without blocking concurrency once a request has started.
    */
-  private async acquireRequestSlot(): Promise<void> {
+  private async acquireRequestSlot(signal?: GenericAbortSignal): Promise<void> {
     if (this.minRequestIntervalMs <= 0) {
       return;
     }
@@ -387,8 +445,29 @@ export class JulesApiClient implements JulesClient {
     this.nextRequestSlot = slot + this.minRequestIntervalMs;
     const wait = slot - now;
     if (wait > 0) {
-      await new Promise((resolve) => setTimeout(resolve, wait));
+      await this.waitForDelay(wait, signal);
     }
+  }
+
+  private async waitForDelay(delayMs: number, signal?: GenericAbortSignal): Promise<void> {
+    const abortReason = (): Error => {
+      const reason = (signal as AbortSignal | undefined)?.reason;
+      return reason instanceof Error ? reason : new Error("Jules request aborted");
+    };
+    if (signal?.aborted) {
+      throw abortReason();
+    }
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal?.removeEventListener?.("abort", onAbort);
+        resolve();
+      }, delayMs);
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        reject(abortReason());
+      };
+      signal?.addEventListener?.("abort", onAbort, { once: true });
+    });
   }
 
   /** Pushes the global request schedule out by at least `delayMs` after a 429. */
@@ -413,7 +492,18 @@ export class JulesApiClient implements JulesClient {
   }
 
   setApiKey(apiKey?: string | null): void {
-    this.apiKey = this.normalizeApiKey(apiKey);
+    const normalized = this.normalizeApiKey(apiKey);
+    if (normalized === this.apiKey) {
+      return;
+    }
+    this.apiKey = normalized;
+    this.credentialEpoch += 1;
+    // Cached provider data must never cross a credential/account boundary.
+    // Detach old in-flight reads as well; their epoch prevents late responses
+    // from repopulating caches after the key changed.
+    this.invalidateSessionsCache();
+    this.recentActivityCache.clear();
+    this.recentActivityInFlight.clear();
   }
 
   hasApiKey(): boolean {
@@ -531,6 +621,38 @@ export class JulesApiClient implements JulesClient {
     }
   }
 
+  /**
+   * Returns a coalesced exact-session snapshot for durable tasks that are not
+   * present in the shared newest-first account snapshot.
+   */
+  async getCachedSession(sessionId: string): Promise<JulesSession> {
+    const id = this.toSessionId(sessionId);
+    const cached = this.exactSessionCache.get(id);
+    if (cached && this.now() - cached.at < this.exactSessionCacheTtlMs) {
+      return cached.session;
+    }
+    const inFlight = this.exactSessionInFlight.get(id);
+    if (inFlight) {
+      return inFlight;
+    }
+    const cacheEpoch = this.sessionCacheEpoch;
+    const pending = this.getSession(id)
+      .then((session) => {
+        const projected = projectJulesSessionForOrchestration(session);
+        if (cacheEpoch === this.sessionCacheEpoch) {
+          this.cacheExactSession(projected);
+        }
+        return projected;
+      })
+      .finally(() => {
+        if (this.exactSessionInFlight.get(id) === pending) {
+          this.exactSessionInFlight.delete(id);
+        }
+      });
+    this.exactSessionInFlight.set(id, pending);
+    return pending;
+  }
+
   async listSessions(args: JulesListSessionsRequest = {}): Promise<JulesListSessionsResponse> {
     this.ensureApiKey();
     const params: JulesPageQuery = this.toPageQuery(args);
@@ -547,7 +669,7 @@ export class JulesApiClient implements JulesClient {
    * (×N sprints, every 10s) is what drives the account into 429s and timeouts.
    * This coalesces all concurrent callers onto a single in-flight fetch and
    * caches the result for `sessionsCacheTtlMs`, so the whole orchestrator makes
-   * at most one `listSessions` pagination per TTL window regardless of how many
+   * at most one bounded `listSessions` page per TTL window regardless of how many
    * sprints are running. On a transient failure it serves the last good
    * snapshot rather than disrupting every sprint's sync.
    */
@@ -556,12 +678,25 @@ export class JulesApiClient implements JulesClient {
     if (fresh) {
       return this.sessionSnapshot!.sessions;
     }
+    const freshCapacitySnapshot = this.sessionCapacitySnapshot
+      && (this.now() - this.sessionCapacitySnapshot.at) < this.sessionsCacheTtlMs;
+    if (freshCapacitySnapshot) {
+      return this.sessionCapacitySnapshot!.sessions;
+    }
     if (this.sessionSnapshotInFlight) {
       return this.sessionSnapshotInFlight;
     }
-    this.sessionSnapshotInFlight = this.refreshSessionSnapshot()
-      .finally(() => { this.sessionSnapshotInFlight = null; });
-    return this.sessionSnapshotInFlight;
+    if (this.sessionCapacitySnapshotInFlight) {
+      return this.sessionCapacitySnapshotInFlight;
+    }
+    const pending = this.refreshSessionSnapshot(this.sessionCacheEpoch)
+      .finally(() => {
+        if (this.sessionSnapshotInFlight === pending) {
+          this.sessionSnapshotInFlight = null;
+        }
+      });
+    this.sessionSnapshotInFlight = pending;
+    return pending;
   }
 
   /**
@@ -581,38 +716,68 @@ export class JulesApiClient implements JulesClient {
     if (fresh) {
       return this.sessionCapacitySnapshot!.sessions;
     }
+    const freshSharedSnapshot = this.sessionSnapshot
+      && (this.now() - this.sessionSnapshot.at) < this.sessionsCapacityCacheTtlMs;
+    if (freshSharedSnapshot) {
+      return this.sessionSnapshot!.sessions;
+    }
     if (this.sessionCapacitySnapshotInFlight) {
       return this.sessionCapacitySnapshotInFlight;
     }
-    this.sessionCapacitySnapshotInFlight = this.refreshSessionCapacitySnapshot()
-      .finally(() => { this.sessionCapacitySnapshotInFlight = null; });
-    return this.sessionCapacitySnapshotInFlight;
+    if (this.sessionSnapshotInFlight) {
+      return this.sessionSnapshotInFlight;
+    }
+    const pending = this.refreshSessionCapacitySnapshot(this.sessionCacheEpoch)
+      .finally(() => {
+        if (this.sessionCapacitySnapshotInFlight === pending) {
+          this.sessionCapacitySnapshotInFlight = null;
+        }
+      });
+    this.sessionCapacitySnapshotInFlight = pending;
+    return pending;
   }
 
   /** Drops the cached session snapshot so the next read re-fetches fresh state. */
   invalidateSessionsCache(): void {
+    this.sessionCacheEpoch += 1;
     this.sessionSnapshot = null;
     this.sessionCapacitySnapshot = null;
+    this.sessionSnapshotInFlight = null;
+    this.sessionCapacitySnapshotInFlight = null;
+    this.exactSessionCache.clear();
+    this.exactSessionInFlight.clear();
   }
 
-  private async refreshSessionCapacitySnapshot(): Promise<JulesSession[]> {
+  private async refreshSessionCapacitySnapshot(cacheEpoch: number): Promise<JulesSession[]> {
     const response = await this.listSessions({ page_size: 100 });
-    const sessions = response.sessions || [];
-    this.sessionCapacitySnapshot = { at: this.now(), sessions };
+    const sessions = (response.sessions || []).map(projectJulesSessionForOrchestration);
+    if (cacheEpoch === this.sessionCacheEpoch) {
+      this.sessionCapacitySnapshot = { at: this.now(), sessions };
+      this.sessionSnapshot = { at: this.now(), sessions };
+      for (const session of sessions) {
+        this.cacheExactSession(session);
+      }
+    }
     return sessions;
   }
 
-  private async refreshSessionSnapshot(allowStaleOnError = true): Promise<JulesSession[]> {
+  private async refreshSessionSnapshot(cacheEpoch: number, allowStaleOnError = true): Promise<JulesSession[]> {
     try {
       const all: JulesSession[] = [];
       let pageToken: string | undefined = undefined;
       do {
         const response: JulesListSessionsResponse = await this.listSessions({ page_size: 100, page_token: pageToken });
-        const sessions = response.sessions || [];
+        const sessions = (response.sessions || []).map(projectJulesSessionForOrchestration);
         all.push(...sessions);
         pageToken = sessions.length > 0 ? response.nextPageToken : undefined;
       } while (pageToken && all.length < this.maxSnapshotSessions);
-      this.sessionSnapshot = { at: this.now(), sessions: all };
+      if (cacheEpoch === this.sessionCacheEpoch) {
+        this.sessionSnapshot = { at: this.now(), sessions: all };
+        this.sessionCapacitySnapshot = { at: this.now(), sessions: all };
+        for (const session of all) {
+          this.cacheExactSession(session);
+        }
+      }
       return all;
     } catch (error) {
       if (allowStaleOnError && this.sessionSnapshot) {
@@ -629,6 +794,7 @@ export class JulesApiClient implements JulesClient {
     const name = this.toSessionName(sessionId);
     const response = await this.axiosInstance.post<JulesSessionActionResponse>(`/${name}:approvePlan`);
     this.invalidateSessionsCache();
+    this.invalidateRecentActivities(name);
     return response.data;
   }
 
@@ -637,7 +803,31 @@ export class JulesApiClient implements JulesClient {
     const name = this.toSessionName(sessionId);
     const response = await this.axiosInstance.post<JulesSessionActionResponse>(`/${name}:sendMessage`, { prompt });
     this.invalidateSessionsCache();
+    this.invalidateRecentActivities(name);
     return response.data;
+  }
+
+  private cacheExactSession(session: JulesSession): void {
+    const id = this.extractSessionId(session);
+    if (!id) {
+      return;
+    }
+    this.exactSessionCache.set(id, { at: this.now(), session });
+    if (this.exactSessionCache.size > this.maxSnapshotSessions * 2) {
+      const oldestKey = this.exactSessionCache.keys().next().value;
+      if (oldestKey) {
+        this.exactSessionCache.delete(oldestKey);
+      }
+    }
+  }
+
+  private invalidateRecentActivities(sessionNameOrId: string): void {
+    const name = this.toSessionName(sessionNameOrId);
+    const cached = this.recentActivityCache.get(name);
+    if (cached) {
+      cached.revision = null;
+      cached.fetchedAt = 0;
+    }
   }
 
   async getActivity(sessionId: string, activityId: string): Promise<JulesActivity> {
@@ -704,92 +894,133 @@ export class JulesApiClient implements JulesClient {
     return (await this.getUsageConversation(sessionId)).activities;
   }
 
-  async fetchRecentActivities(sessionName: string, pageSize: number): Promise<JulesActivity[]> {
+  async fetchRecentActivities(
+    sessionName: string,
+    pageSize: number,
+    signal?: AbortSignal,
+  ): Promise<JulesActivity[]> {
     this.ensureApiKey();
     if (pageSize <= 0) {
       return [];
     }
     const normalizedSessionName = this.toSessionName(sessionName);
-    let pageToken: string | undefined = undefined;
-    let recentActivities: JulesActivity[] = [];
+    const requestedSize = Math.min(JULES_RECENT_ACTIVITY_CACHE_LIMIT, Math.max(1, Math.floor(pageSize)));
+    const cached = this.recentActivityCache.get(normalizedSessionName);
+    const revision = this.getKnownSessionRevision(normalizedSessionName);
+    const cacheFresh = cached && this.now() - cached.fetchedAt < this.recentActivityCacheTtlMs;
+    const revisionUnchanged = cached?.complete && revision !== null && cached.revision === revision;
+    if (cached && (cacheFresh || revisionUnchanged)) {
+      return cached.activities.slice(-requestedSize);
+    }
 
-    do {
-      const response: { data: JulesListActivitiesResponse } = await this.axiosInstance.get<JulesListActivitiesResponse>(`/${normalizedSessionName}/activities`, {
-        params: { pageSize, pageToken },
-      });
-      const activities = response.data.activities || [];
-      if (activities.length > 0) {
-        recentActivities = recentActivities.concat(activities).slice(-pageSize);
-      }
-      pageToken = response.data.nextPageToken;
-    } while (pageToken);
+    let inFlight = this.recentActivityInFlight.get(normalizedSessionName);
+    if (!inFlight) {
+      inFlight = this.fetchNextRecentActivityPage(
+        normalizedSessionName,
+        revision,
+        this.credentialEpoch,
+        signal,
+      )
+        .finally(() => {
+          if (this.recentActivityInFlight.get(normalizedSessionName) === inFlight) {
+            this.recentActivityInFlight.delete(normalizedSessionName);
+          }
+        });
+      this.recentActivityInFlight.set(normalizedSessionName, inFlight);
+    }
+    const refreshed = await inFlight;
+    return refreshed.activities.slice(-requestedSize);
+  }
 
-    const hydratedActivities = await Promise.all(
-      recentActivities.map(async (activity) => {
-        const activityId = this.extractActivityId(activity);
-        if (!activityId) {
-          return activity;
-        }
-        try {
-          return await this.getActivity(normalizedSessionName, activityId);
-        } catch {
-          return activity;
-        }
-      })
+  private async fetchNextRecentActivityPage(
+    sessionName: string,
+    revision: string | null,
+    credentialEpoch: number,
+    signal?: AbortSignal,
+  ): Promise<RecentActivityCacheEntry> {
+    const previous = this.recentActivityCache.get(sessionName);
+    const continuingScan = previous && !previous.complete;
+    const pageToken = continuingScan
+      ? previous.nextPageToken
+      : previous?.tailPageToken;
+    const response = await this.axiosInstance.get<JulesListActivitiesResponse>(
+      `/${sessionName}/activities`,
+      {
+        params: {
+          pageSize: JULES_RECENT_ACTIVITY_API_PAGE_SIZE,
+          pageToken,
+        },
+        signal,
+        maxContentLength: JULES_MAX_LIVE_ACTIVITY_RESPONSE_BYTES,
+      },
     );
-
-    return hydratedActivities.slice().sort((a, b) => {
-      const left = new Date(a.createTime || 0).getTime();
-      const right = new Date(b.createTime || 0).getTime();
-      return left - right;
-    });
-  }
-
-  /**
-   * Like {@link fetchRecentActivities} but without the per-activity hydration
-   * round-trips. The list response already includes message/progress fields,
-   * so callers that only need text (e.g. reading the latest clarification) can
-   * avoid issuing one extra request per activity. Returns the most recent
-   * `pageSize` activities sorted ascending by createTime.
-   */
-  async fetchRecentActivitiesLite(sessionName: string, pageSize: number): Promise<JulesActivity[]> {
-    this.ensureApiKey();
-    if (pageSize <= 0) {
-      return [];
-    }
-    const normalizedSessionName = this.toSessionName(sessionName);
-    let pageToken: string | undefined = undefined;
-    let recentActivities: JulesActivity[] = [];
-
-    do {
-      const response: { data: JulesListActivitiesResponse } = await this.axiosInstance.get<JulesListActivitiesResponse>(`/${normalizedSessionName}/activities`, {
-        params: { pageSize, pageToken },
-      });
-      const activities = response.data.activities || [];
-      if (activities.length > 0) {
-        recentActivities = recentActivities.concat(activities).slice(-pageSize);
+    const nextPageToken = response.data.nextPageToken || undefined;
+    const rawActivities = response.data.activities || [];
+    const projectedActivities = rawActivities.map(projectJulesActivityForLiveView);
+    rawActivities.length = 0;
+    const activities = this.mergeRecentActivities(
+      previous?.activities || [],
+      projectedActivities,
+    );
+    const entry: RecentActivityCacheEntry = {
+      activities,
+      nextPageToken,
+      tailPageToken: nextPageToken ? previous?.tailPageToken : pageToken,
+      complete: !nextPageToken,
+      revision,
+      fetchedAt: this.now(),
+    };
+    if (credentialEpoch === this.credentialEpoch) {
+      this.recentActivityCache.set(sessionName, entry);
+      if (this.recentActivityCache.size > JULES_RECENT_ACTIVITY_SESSION_CACHE_LIMIT) {
+        const oldestKey = this.recentActivityCache.keys().next().value;
+        if (oldestKey) {
+          this.recentActivityCache.delete(oldestKey);
+        }
       }
-      pageToken = response.data.nextPageToken;
-    } while (pageToken);
-
-    return recentActivities.slice().sort((a, b) => {
-      const left = new Date(a.createTime || 0).getTime();
-      const right = new Date(b.createTime || 0).getTime();
-      return left - right;
-    });
+    }
+    return entry;
   }
 
-  private extractActivityId(activity: Pick<JulesActivity, "id" | "name">): string | null {
-    const rawId = typeof activity.id === "string" && activity.id.trim().length > 0
-      ? activity.id.trim()
-      : typeof activity.name === "string" && activity.name.trim().length > 0
-        ? activity.name.trim().split("/").pop() || ""
-        : "";
-
-    if (!rawId) {
-      return null;
+  private mergeRecentActivities(
+    existing: JulesActivity[],
+    incoming: JulesActivity[],
+  ): JulesActivity[] {
+    const byIdentity = new Map<string, JulesActivity>();
+    let anonymousIndex = 0;
+    for (const activity of [...existing, ...incoming]) {
+      const identity = activity.id || activity.name || `${activity.createTime || "unknown"}:${anonymousIndex++}`;
+      byIdentity.set(identity, activity);
     }
+    return Array.from(byIdentity.values())
+      .sort((left, right) => {
+        const leftTime = Date.parse(left.createTime || "");
+        const rightTime = Date.parse(right.createTime || "");
+        if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) {
+          return 0;
+        }
+        return leftTime - rightTime;
+      })
+      .slice(-JULES_RECENT_ACTIVITY_CACHE_LIMIT);
+  }
 
-    return rawId.split("/").pop() || null;
+  private getKnownSessionRevision(sessionName: string): string | null {
+    const sessionId = this.toSessionId(sessionName);
+    const exact = this.exactSessionCache.get(sessionId)?.session;
+    const session = exact
+      || this.sessionSnapshot?.sessions.find((entry) => this.extractSessionId(entry) === sessionId)
+      || this.sessionCapacitySnapshot?.sessions.find((entry) => this.extractSessionId(entry) === sessionId);
+    return typeof session?.updateTime === "string" && session.updateTime.trim().length > 0
+      ? session.updateTime
+      : null;
+  }
+
+  /** Compatibility alias for callers that only need the bounded cached list view. */
+  async fetchRecentActivitiesLite(
+    sessionName: string,
+    pageSize: number,
+    signal?: AbortSignal,
+  ): Promise<JulesActivity[]> {
+    return this.fetchRecentActivities(sessionName, pageSize, signal);
   }
 }
