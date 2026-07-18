@@ -5,14 +5,20 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
-import { SprintTaskDispatchService, ProviderCapReachedError } from "../../../src/services/sprint-task-dispatch-service.js";
+import {
+  SprintTaskDispatchService,
+  ProviderCapReachedError,
+  WorkerClarificationPendingError,
+} from "../../../src/services/sprint-task-dispatch-service.js";
 import { ProviderConcurrencyService } from "../../../src/services/provider-concurrency-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { JulesApiRequestError } from "../../../src/integrations/jules-api-client.js";
 
 const tempDirs: string[] = [];
 
-async function createFixture() {
+async function createFixture(workerClarificationService?: {
+  findPendingForTask: ReturnType<typeof vi.fn>;
+}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-dispatch-service-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -44,6 +50,8 @@ async function createFixture() {
     providerConcurrencyService,
     () => DEFAULT_DASHBOARD_SETTINGS,
     logger as any,
+    undefined,
+    workerClarificationService as any,
   );
 
   return {
@@ -112,6 +120,7 @@ describe("SprintTaskDispatchService", () => {
       id: "session-1",
       name: "Container task",
       provider: "codex",
+      startedNew: true,
     });
     expect(taskService.startSprintTask).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -137,6 +146,81 @@ describe("SprintTaskDispatchService", () => {
       executorType: "docker_cli",
       status: "running",
     });
+  });
+
+  it("hard-gates ordinary dispatch while a clarification is pending and only admits its exact continuation", async () => {
+    const workerClarificationService = {
+      findPendingForTask: vi.fn().mockReturnValue({ id: "clarification-1" }),
+    };
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture(
+      workerClarificationService,
+    );
+    const project = projectManagementRepository.createProject({
+      name: "Clarification Gate Project",
+      sourceType: "local",
+      sourceRef: "/workspace/clarification-gate-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Clarification Gate Sprint",
+      number: 81,
+    });
+    const taskRecord = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Wait for manager answer",
+      promptMarkdown: "Continue only after the clarification answer.",
+      executorType: "docker_cli",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+    });
+    const args = {
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING" as const,
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/clarification-gate",
+      repoPath: "/workspace/clarification-gate-project",
+      sprintNumber: 81,
+    };
+
+    await expect(service.startTask(args)).rejects.toBeInstanceOf(WorkerClarificationPendingError);
+    expect(taskService.startSprintTask).not.toHaveBeenCalled();
+    expect(executionRepository.listTaskDispatches({ projectId: project.id })).toEqual([]);
+
+    taskService.startSprintTask.mockResolvedValue({
+      id: "continued-session",
+      name: "Continued task",
+      provider: "codex",
+    });
+    await expect(service.startTask({
+      ...args,
+      clarificationContinuationId: "clarification-1",
+    })).resolves.toMatchObject({
+      id: "continued-session",
+      startedNew: true,
+      dispatchId: expect.any(String),
+      taskRunId: expect.any(String),
+    });
+    expect(workerClarificationService.findPendingForTask).toHaveBeenCalledWith(
+      project.id,
+      taskRecord.id,
+      sprintRun.id,
+    );
+    await expect(service.startTask({
+      ...args,
+      clarificationContinuationId: "clarification-1",
+    })).rejects.toThrow(/already has active dispatch/);
   });
 
   it("re-queues docker-cli dispatches when the provider cap is reached during startup", async () => {

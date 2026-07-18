@@ -59,6 +59,9 @@ import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import { parseTaskExecutionOutcomeFromProviderOutput, type TaskExecutionOutcome } from "../domain/sprint/task-execution-outcome.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { resolveEffectiveModel } from "./provider-execution-service.js";
+import type { WorkerClarificationService } from "./worker-clarification-service.js";
+import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
+import type { WorkerClarificationRecord } from "../contracts/worker-clarification-types.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -71,6 +74,8 @@ interface CliWorkflowServiceDependencies {
   agentPresetRepository?: AgentPresetRepository;
   providerConcurrencyService?: ProviderConcurrencyService;
   sprintRunLifecycleService?: Pick<SprintRunLifecycleService, "finalizeCancellationIfIdle">;
+  workerClarificationService?: WorkerClarificationService;
+  projectAttentionService?: ProjectAttentionService;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   agentPresetSyncService: AgentPresetSyncService;
   getGithubToken: () => string | undefined;
@@ -93,6 +98,7 @@ interface StartCliTaskInput {
   resumeWorkspaceSessionId?: string;
   resumeWorkerBranch?: string;
   forceFreshWorkspace?: boolean;
+  requireProviderSessionResume?: boolean;
 }
 
 function isNonRecoverableGitWorkflowError(message: string): boolean {
@@ -317,11 +323,13 @@ export class CliWorkflowService {
       worktreePath,
       workspaceSessionId,
       allowExistingWorkerBranch: Boolean(args.resumeFromFailedSessionId),
+      requireProviderSessionResume: args.requireProviderSessionResume,
       abortSignal: abortController.signal,
       initialHead: "",
       workflowSucceeded: false,
       preserveSuccessfulWorktree,
       preserveSuccessfulWorktreeForActiveSprint,
+      preserveWorkspaceForClarification: false,
       agentPresetId: workerAgent?.id,
       agentMemoryConfig: workerAgent?.memoryConfig,
       agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : undefined,
@@ -476,6 +484,24 @@ export class CliWorkflowService {
         }
       }
 
+      const currentTaskRun = this.resolveTaskRun(args);
+      const pendingClarification = currentTaskRun
+        ? this.deps.workerClarificationService?.findPendingForTaskRun(
+            currentTaskRun.projectId,
+            currentTaskRun.id,
+          )
+        : null;
+      if (pendingClarification) {
+        this.parkWorkflowForClarification(
+          ctx,
+          args,
+          pendingClarification,
+          "worker_clarification_requested",
+          "Coding agent requested project-manager clarification before continuing.",
+        );
+        return;
+      }
+
       this.appendExecutionEvent(args, "cli_git_finalize_started", {
         provider: args.provider,
         worktreePath: ctx.worktreePath,
@@ -491,24 +517,37 @@ export class CliWorkflowService {
           const category = providerOutcome.kind === "blocked"
             ? "agent_reported_blocker"
             : "agent_outcome_missing";
-          this.deps.sessionTracking.updateSession(args.sessionId, { state: "BLOCKED" });
-          this.deps.sessionTracking.appendActivity(args.sessionId, {
-            originator: "system",
-            description: `Coding workflow requires attention: ${blocker}`,
-          });
-          this.updateExecutionState(args, {
-            state: "BLOCKED",
-            finishedAt,
-            dispatchStatus: "blocked",
-            errorMessage: blocker,
-            workerBranch: null,
-          }, ctx.executionInvocationId);
-          this.appendExecutionEvent(args, "cli_workflow_blocked", {
-            provider: args.provider,
-            category,
-            errorMessage: blocker,
-          }, `cli:workflow:blocked:agent:${args.sessionId}`);
-          this.finalizeExecutionInvocation(ctx.executionInvocationId, "failed", finishedAt, blocker);
+          const taskRun = this.resolveTaskRun(args);
+          const existingClarification = taskRun
+            ? this.deps.workerClarificationService?.findPendingForTaskRun(taskRun.projectId, taskRun.id)
+            : null;
+          const clarification = existingClarification ?? (
+            taskRun && this.deps.workerClarificationService
+              ? this.deps.workerClarificationService.create({
+                projectId: taskRun.projectId,
+                sprintId: taskRun.sprintId,
+                sprintRunId: taskRun.sprintRunId,
+                taskId: taskRun.taskId,
+                dispatchId: taskRun.dispatchId,
+                taskRunId: taskRun.id,
+                sessionId: taskRun.sessionId || args.sessionId,
+                executionInvocationId: ctx.executionInvocationId,
+                requesterAgentId: ctx.agentPresetId || "coding-agent",
+                deduplicationKey: `coding-outcome:${ctx.executionInvocationId || taskRun.id}`,
+                questionMarkdown: [
+                  "The coding agent ended its turn without repository changes and reported that it could not continue.",
+                  "",
+                  `Reported blocker: ${blocker}`,
+                  "",
+                  "Decide how the task should proceed. Give the coding agent concrete instructions so it can continue in the preserved provider session and workspace. If no file change is actually required, tell it to confirm that explicitly so the normal no-change QA path can verify the task.",
+                ].join("\n"),
+              })
+              : null
+          );
+          if (!clarification) {
+            throw new Error("Coding turn requires clarification, but no durable clarification service is available.");
+          }
+          this.parkWorkflowForClarification(ctx, args, clarification, category, blocker, finishedAt);
           return;
         }
         this.appendExecutionEvent(args, "cli_git_no_changes", {
@@ -689,6 +728,33 @@ export class CliWorkflowService {
           message,
         });
       } else if (isNonRecoverableGitWorkflowError(message) || isNonRecoverableExecutionEnvironmentError(message)) {
+        const taskRun = this.resolveTaskRun(args);
+        const category = isNonRecoverableGitWorkflowError(message)
+          ? "git_configuration"
+          : "execution_environment";
+        const attention = taskRun && this.deps.projectAttentionService
+          ? this.deps.projectAttentionService.openItem({
+            projectId: taskRun.projectId,
+            sprintId: taskRun.sprintId,
+            sprintRunId: taskRun.sprintRunId,
+            taskId: taskRun.taskId,
+            dispatchId: taskRun.dispatchId,
+            attentionType: "manual_attention",
+            severity: "critical",
+            ownerType: "human",
+            title: "Coding runtime configuration requires attention",
+            summaryMarkdown: message,
+            deduplicationKey: `cli-runtime:${taskRun.id}:${category}`,
+            refreshOnDuplicate: false,
+            payload: {
+              category,
+              taskRunId: taskRun.id,
+              executionInvocationId: ctx.executionInvocationId ?? null,
+              provider: args.provider,
+              errorMessage: message,
+            },
+          })
+          : null;
         this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
         this.deps.sessionTracking.appendActivity(args.sessionId, {
           originator: "system",
@@ -702,8 +768,9 @@ export class CliWorkflowService {
         }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_blocked", {
           provider: args.provider,
-          category: isNonRecoverableGitWorkflowError(message) ? "git_configuration" : "execution_environment",
+          category,
           errorMessage: message,
+          attentionItemId: attention?.id ?? null,
         });
         this.deps.logger?.error("CLI workflow blocked by unrecoverable execution environment error", {
           sessionId: args.sessionId,
@@ -924,7 +991,7 @@ export class CliWorkflowService {
     this.deps.projectManagementRepository?.updateTask(taskRun.taskId, {
       status: input.state === "COMPLETED"
         ? "coding_completed"
-        : input.state === "QUOTA"
+        : input.state === "QUOTA" || input.state === "BLOCKED"
           ? "in_progress"
           : "pending",
     });
@@ -937,6 +1004,50 @@ export class CliWorkflowService {
         errorMessage: input.errorMessage ?? null,
       });
     }
+  }
+
+  private parkWorkflowForClarification(
+    ctx: PipelineContext,
+    args: {
+      taskRunId?: string;
+      sessionId: string;
+      workerBranch: string;
+      provider: string;
+    },
+    clarification: WorkerClarificationRecord,
+    category: "worker_clarification_requested" | "agent_reported_blocker" | "agent_outcome_missing",
+    message: string,
+    finishedAt = new Date().toISOString(),
+  ): void {
+    // A provider can ask after making partial edits. Stop before Git finalization
+    // and pin the workspace so neither cleanup nor a phantom no-change
+    // projection can discard the exact continuation state.
+    ctx.preserveWorkspaceForClarification = true;
+    this.deps.sessionTracking.updateSession(args.sessionId, { state: "BLOCKED" });
+    this.deps.sessionTracking.appendActivity(args.sessionId, {
+      originator: "system",
+      description: `Coding workflow requires clarification: ${message}`,
+    });
+    this.updateExecutionState(args, {
+      state: "BLOCKED",
+      finishedAt,
+      dispatchStatus: "blocked",
+      errorMessage: message,
+      workerBranch: args.workerBranch,
+    }, ctx.executionInvocationId);
+    this.appendExecutionEvent(args, "cli_workflow_blocked", {
+      provider: args.provider,
+      category,
+      errorMessage: message,
+      clarificationId: clarification.id,
+      attentionItemId: clarification.id,
+    }, `cli:workflow:blocked:clarification:${clarification.id}`);
+    this.finalizeExecutionInvocation(
+      ctx.executionInvocationId,
+      "completed",
+      finishedAt,
+      `Coding turn ended while clarification ${clarification.id} awaits a project-manager decision.`,
+    );
   }
 
   private finalizeExecutionInvocation(
@@ -963,7 +1074,7 @@ export class CliWorkflowService {
     this.deps.executionRepository.appendExecutionInvocationMessage(invocationId, {
       role: "system",
       contentMarkdown: status === "completed"
-        ? "CLI workflow completed successfully."
+        ? errorMessage || "CLI workflow completed successfully."
         : status === "cancelled"
           ? `CLI workflow cancelled${errorMessage ? `: ${errorMessage}` : "."}`
           : `CLI workflow failed${errorMessage ? `: ${errorMessage}` : "."}`,

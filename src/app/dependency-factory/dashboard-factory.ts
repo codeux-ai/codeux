@@ -451,7 +451,7 @@ export function createDashboardDependencies(
       });
       return { sprintRunId: created.id, created: true };
     },
-    startTask: ({ task, projectId, sprintId, sprintRunId, sourceId, featureBranch, repoPath, sprintNumber, providerConfigId, resumeWorkspaceSessionId, resumeWorkerBranch, forceFreshWorkspace }) =>
+    startTask: ({ task, projectId, sprintId, sprintRunId, sourceId, featureBranch, repoPath, sprintNumber, providerConfigId, resumeWorkspaceSessionId, resumeWorkerBranch, forceFreshWorkspace, requireProviderSessionResume, clarificationContinuationId }) =>
       sprintTaskDispatchService.startTask({
         task,
         projectId,
@@ -465,6 +465,8 @@ export function createDashboardDependencies(
         resumeWorkspaceSessionId,
         resumeWorkerBranch,
         forceFreshWorkspace,
+        requireProviderSessionResume,
+        clarificationContinuationId,
       }),
     resolveSessionName: (session) => context.resolveSessionName(session),
     extractSessionId: (session) => context.extractSessionId(session),

@@ -65,7 +65,7 @@ const DEFAULT_SESSION_TIMEOUT_MS = 60 * 60 * 1000;
 const MIN_SERVER_MODE_AUTH_TOKEN_LENGTH = 32;
 const MAX_AUTHORIZATION_HEADER_LENGTH = 4096;
 const BEARER_TOKEN_PATTERN = /^[A-Za-z0-9._~+/-]+={0,2}$/;
-const IDENTIFIER_PATTERN = /^[a-zA-Z0-9-]+$/;
+const IDENTIFIER_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 function isLoopbackHost(host: string): boolean {
   const normalized = host.trim().toLowerCase();
@@ -126,6 +126,10 @@ function readThreadIdHeader(req: IncomingMessage): string | null {
   return readIdentifierHeader(req, "x-code-ux-thread");
 }
 
+function readExecutionInvocationIdHeader(req: IncomingMessage): string | null {
+  return readIdentifierHeader(req, "x-code-ux-invocation");
+}
+
 function readAuthorizationHeader(req: IncomingMessage): string | null {
   const value = readSingleHeader(req, "authorization");
   if (!value) {
@@ -165,6 +169,7 @@ interface ValidatedMcpHttpRequestHeaders {
   sessionId: string | null;
   agentId: string | null;
   threadId: string | null;
+  executionInvocationId: string | null;
 }
 
 function respondUnauthorized(res: ServerResponse): void {
@@ -340,6 +345,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         sessionId: readSessionIdHeader(req),
         agentId: readAgentIdHeader(req),
         threadId: readThreadIdHeader(req),
+        executionInvocationId: readExecutionInvocationIdHeader(req),
       };
     } catch {
       deps.logger.warn("Rejected MCP HTTP request with invalid identifiers", {
@@ -399,6 +405,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
       await runWithMcpAgentContext(
         headers.agentId,
         headers.threadId,
+        headers.executionInvocationId,
         () => entry!.transport.handleRequest(req, res, req.body),
       );
 

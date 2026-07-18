@@ -71,7 +71,7 @@ Every tool uses the existing `project_manager` gateway runtime role and is enabl
 
 ## Worker clarification contract
 
-The clarification tools are narrow audience grants on the existing project-manager MCP gateway. They do not create a worker runtime role or grant coding agents project-manager management tools. An eligible task-coding agent can receive `request_clarification`; it never receives `reply_to_clarification`. The configured clarification-reply/dashboard-reply Project manager agent, the built-in fallback when applicable, or an unscoped project-manager client can receive `reply_to_clarification`.
+The clarification tools are narrow audience grants on the existing project-manager MCP gateway. They do not create a worker runtime role or grant coding agents project-manager management tools. An eligible task-coding agent can receive `request_clarification`; it never receives `reply_to_clarification`. Every provider-side MCP configuration carries an opaque, server-validated execution-invocation header, so Code UX can authorize and bind a local CLI request to its exact task run even when the agent has no static project assignment. The configured clarification-reply/dashboard-reply Project manager agent, the built-in fallback when applicable, or an unscoped project-manager client can receive `reply_to_clarification`.
 
 ### `request_clarification`
 
@@ -85,9 +85,9 @@ The clarification tools are narrow audience grants on the existing project-manag
 }
 ```
 
-Required fields are `projectId`, non-blank `questionMarkdown` (maximum 16,000 characters), and a stable project-scoped `deduplicationKey` (maximum 512 characters). Optional context is `taskId`, `sprintId`, `sprintRunId`, `dispatchId`, `taskRunId`, and `sessionId`. The authenticated MCP agent supplies the requester identity; payloads cannot spoof it. Code UX verifies every supplied reference against the project and the other linked execution records. An assignment-only coding agent must address its assigned task.
+Required fields are `projectId`, non-blank `questionMarkdown` (maximum 16,000 characters), and a stable project-scoped `deduplicationKey` (maximum 512 characters). Optional context is `taskId`, `sprintId`, `sprintRunId`, `dispatchId`, `taskRunId`, and `sessionId`. The authenticated MCP agent and execution invocation supply the requester identity and runtime lineage; payloads cannot spoof either. Code UX derives omitted task scope from the invocation and verifies every supplied reference against the project and the other linked execution records. An assignment-only coding agent must address its assigned task.
 
-Success returns `{ "clarification": ... }`. A new clarification is `pending` and its id is the durable project attention-item id. Repeating the same requester, question, key, and full runtime scope returns that existing record in its current state. Reusing the key with different content or scope is rejected.
+Success returns `{ "clarification": ... }`. A new clarification is `pending` and its id is the durable project attention-item id. Repeating the same requester, question, key, and full runtime scope returns that existing record in its current state. Reusing the key with different content or scope is rejected. The clarification coordinator routes a new request to the configured Project manager automatically after the current coding turn settles, then applies the reply through the same durable reply service used by an interactive manager.
 
 ### `reply_to_clarification`
 
@@ -112,7 +112,7 @@ A successful runtime response includes the `clarification`, its typed `continuat
 }
 ```
 
-`deliveryMode` is `jules_message` after the existing Jules session accepts the answer, `cli_workspace` after the task-rerun path accepts continuation in the preserved local workspace/native session lineage, or `recorded_answer` for a taskless general question. These values do not claim the coding task completed. A task-backed clarification becomes `replied` only after provider delivery or workspace continuation succeeds; otherwise it remains `pending`.
+`deliveryMode` is `jules_message` after the existing Jules session accepts the answer, `cli_workspace` after the task-rerun path accepts continuation in the preserved local workspace/native session lineage, or `recorded_answer` for a taskless general question. Local continuation supports Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity. It fails closed when the recorded native conversation cannot be resumed instead of silently starting a fresh conversation. These values do not claim the coding task completed. A task-backed clarification becomes `replied` only after provider delivery or workspace continuation succeeds; otherwise it remains `pending` and its attention item records why human action is required.
 
 Clarification states are `pending`, `replied`, `expired`, and `cancelled`. Repeating a reply after `replied` returns the original settled result with `alreadySettled: true` and does not send or dispatch twice. Concurrent duplicate replies share the in-flight operation. Schema errors return `InvalidParams`; disabled tools, unknown agents, wrong audiences, ineligible task scope, and cross-project calls fail closed with `MethodNotFound`; service or delivery failures return the management error envelope with `isError: true`.
 

@@ -45,10 +45,14 @@ import { DockerService } from "../services/docker-service.js";
 import { CliWorkflowService } from "../services/cli-workflow-service.js";
 import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
+import { getCurrentMcpExecutionInvocationId } from "./mcp-agent-context.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { ExecutionControlService } from "../services/execution-control-service.js";
 import {
+  automaticClarificationReplyAgentMcpAccess,
   dashboardReplyAgentMcpAccess,
+  isAutomaticClarificationReplyInvocation,
+  isInvocationScopedWorkerClarificationAgent,
   isProjectManagerClarificationAgent,
   isWorkerClarificationAgent,
   toAgentCodeUxToolAccess,
@@ -190,6 +194,7 @@ export class CodeUxServer {
   private agentPresetRepository: AgentPresetRepository;
   private dockerService: DockerService;
   private managementToolHandler: import("../mcp/management-tool-handler.js").ManagementToolHandler;
+  private workerClarificationCoordinatorService: import("../services/worker-clarification-coordinator-service.js").WorkerClarificationCoordinatorService;
   private sprintPreviewRepository: SprintPreviewRepository;
   private sprintPreviewService: SprintPreviewService;
   private sprintFileBrowserService: SprintFileBrowserService;
@@ -315,6 +320,7 @@ export class CodeUxServer {
     this.sessionTracking = deps.sessionTracking;
     this.cliWorkflowService = deps.cliWorkflowService;
     this.managementToolHandler = deps.managementToolHandler;
+    this.workerClarificationCoordinatorService = deps.workerClarificationCoordinatorService;
     this.headlessAuthService = deps.headlessAuthService;
     this.credentialBroker = deps.credentialBroker;
     this.automationAuditService = deps.automationAuditService;
@@ -434,6 +440,7 @@ export class CodeUxServer {
     }
     this.startupTaskTimers.clear();
     this.virtualWorkerService.stop();
+    this.workerClarificationCoordinatorService.stop();
     this.schedulerService.stop();
     const requestedDispatchStops = await this.shutdownContainerService.requestActiveDispatchStops().catch((error) => {
       this.logger.warn("Failed to request active dispatch stops during shutdown", {
@@ -569,10 +576,19 @@ export class CodeUxServer {
         const agent = this.agentPresetRepository.getAgentPreset(agentId);
         if (!agent) return null;
         const settings = this.settingsRepository.resolveProjectDashboardSettings(agent.projectId).settings;
+        const executionInvocationId = getCurrentMcpExecutionInvocationId();
+        const executionInvocation = executionInvocationId
+          ? this.executionRepository.getExecutionInvocation(executionInvocationId)
+          : null;
+        const invocationWorkerEligible = isInvocationScopedWorkerClarificationAgent({
+          agentId: agent.id,
+          projectId: agent.projectId,
+          invocation: executionInvocation,
+        });
         const assignedTaskIds = this.projectManagementRepository.listTasks(agent.projectId)
           .filter((task) => task.agentPresetId === agent.id)
           .map((task) => task.id);
-        const workerEligible = isWorkerClarificationAgent({
+        const workerEligible = invocationWorkerEligible || isWorkerClarificationAgent({
           agentId: agent.id,
           assignedTaskAgentIds: assignedTaskIds.length > 0 ? [agent.id] : [],
           settings,
@@ -596,7 +612,22 @@ export class CodeUxServer {
           const routing = settings.agents.routing.taskCoding;
           const hasProjectWorkerRole = (routing.mode === "MANUAL" && routing.agentPresetId === agent.id)
             || routing.orchestratorAgentPresetIds.includes(agent.id);
-          if (!workerEligible || (!hasProjectWorkerRole && !assignedTaskIds.includes(String(requestArgs?.taskId ?? "")))) {
+          const invocationScopeMatches = requestArgs?.projectId === executionInvocation?.projectId
+            && isInvocationScopedWorkerClarificationAgent({
+              agentId: agent.id,
+              projectId: agent.projectId,
+              invocation: executionInvocation,
+              requestedTaskId: requestArgs?.taskId,
+              requestedTaskRunId: requestArgs?.taskRunId,
+            });
+          if (
+            !workerEligible
+            || (
+              !invocationScopeMatches
+              && !hasProjectWorkerRole
+              && !assignedTaskIds.includes(String(requestArgs?.taskId ?? ""))
+            )
+          ) {
             return null;
           }
         }
@@ -616,6 +647,17 @@ export class CodeUxServer {
           : persistentSkillRetrievalEnabled
             ? toAgentCodeUxToolAccess({ codeUxEnabled: false, codeUxToolToggles: [] }, true)
             : { codeUxEnabled: false, codeUxToolToggles: [] };
+        const invocationProviderUsage = executionInvocation?.providerInvocationId
+          ? this.executionRepository.getProviderInvocationUsage(executionInvocation.providerInvocationId)
+          : null;
+        if (isAutomaticClarificationReplyInvocation({
+          agentId: agent.id,
+          projectId: agent.projectId,
+          invocation: executionInvocation,
+          providerUsage: invocationProviderUsage,
+        })) {
+          return toAgentCodeUxToolAccess(automaticClarificationReplyAgentMcpAccess());
+        }
         if (this.nodeFlowService.listAgentSkillsForAgent(agent.projectId, agent.id).length > 0) {
           resolvedAccess = withAttachedFlowAccess(resolvedAccess);
         }

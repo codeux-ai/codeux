@@ -61,6 +61,8 @@ Server mode requires an explicit bearer token from CLI or environment even when 
 
 Invalid or missing bearer credentials are rejected with HTTP 401 + JSON-RPC error `-32001`.
 
+Provider-launched MCP clients also send `X-Code-Ux-Agent` and `X-Code-Ux-Invocation`. The server resolves both headers into request-scoped context and validates the execution invocation before granting the narrow worker clarification audience. This binds a clarification to the exact project, task run, dispatch, and provider turn rather than trusting payload-supplied identity.
+
 The Express middleware uses `express.json({ limit: "1mb" })`. Larger payloads return HTTP 400.
 
 Source: `src/app/lifecycle/mcp-lifecycle-service.ts:108-240`.
@@ -103,7 +105,9 @@ router
   .register("manage_chat_providers", h.handleManageChatProviders)
   .register("manage_telemetry",   h.handleManageTelemetry)
   .register("search_knowledge",   h.handleSearchKnowledge)
-  .register("search_skills",      h.handleSearchSkills);
+  .register("search_skills",      h.handleSearchSkills)
+  .register("request_clarification", h.handleRequestClarification)
+  .register("reply_to_clarification", h.handleReplyToClarification);
 ```
 
 Every tool's input schema is declared in `TOOL_DEFINITIONS` (`src/contracts/mcp-tool-definitions.ts`).
@@ -131,6 +135,8 @@ the full built-in Code UX MCP surface, `scheduler_code_ux`, `add_long_term_memor
 even when their saved preset access disables Code UX or has no MCP policy. This default is keyed to the dashboard
 reply route assignment, not the generic `project_manager` runtime role.
 
+Task-coding invocations have a second narrow exception: an invocation-bound coding agent may call only `request_clarification` for its own derived runtime scope. It cannot inherit project-manager tools or call `reply_to_clarification`.
+
 ### `CallTool`
 
 ```
@@ -146,6 +152,8 @@ Errors:
 - `InvalidParams` for schema-validation failures.
 - `MethodNotFound` for unknown or disabled tools.
 - `InternalError` for handler exceptions.
+
+Worker clarification requests create a durable attention item and execution-invocation lineage. After the source coding turn settles, the clarification coordinator asks the configured Project manager for an answer and sends it through the ordinary reply service. Local CLI replies start a new observable Code UX invocation in the preserved workspace and resume the recorded provider-native conversation for Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity. Missing native session evidence fails closed and leaves the attention item open for a human; it never silently starts a fresh provider conversation.
 
 ## Tool toggling
 

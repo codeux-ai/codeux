@@ -56,6 +56,9 @@ export function buildQwenRuntimeConfig(
   if (conn?.agentId) {
     headers["X-Code-Ux-Agent"] = conn.agentId;
   }
+  if (conn?.executionInvocationId) {
+    headers["X-Code-Ux-Invocation"] = conn.executionInvocationId;
+  }
   if (conn?.threadId) {
     headers["X-Code-Ux-Thread"] = conn.threadId;
   }
@@ -173,6 +176,9 @@ export function buildOpenCodeRuntimeConfig(
     }
     if (conn.agentId) {
       headers["X-Code-Ux-Agent"] = conn.agentId;
+    }
+    if (conn.executionInvocationId) {
+      headers["X-Code-Ux-Invocation"] = conn.executionInvocationId;
     }
     if (conn.threadId) {
       headers["X-Code-Ux-Thread"] = conn.threadId;

@@ -5,7 +5,11 @@ import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task
 import type { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { applyPendingTaskRuntimeReset } from "../../domain/sprint/task-reset-state.js";
 import { isCompletedTaskSettled } from "../../domain/sprint/task-merge-state.js";
-import { failStaleProviderInvocation } from "../../domain/runtime/provider-invocation-recovery.js";
+import {
+  cancelStaleProviderInvocation,
+  completeStaleProviderInvocation,
+  failStaleProviderInvocation,
+} from "../../domain/runtime/provider-invocation-recovery.js";
 import { isNotFoundError } from "../../integrations/jules-api-client.js";
 import {
   extractProviderErrorCategory,
@@ -593,6 +597,121 @@ const recoverMissingRecordedSession = (
   }
 };
 
+const reconcileActiveRemoteInvocationLifecycle = (
+  deps: SessionSyncDependencies,
+  sessionId: string | null,
+  provider: string | null | undefined,
+): void => {
+  if (!deps.executionRepository || provider !== "jules" || !sessionId) {
+    return;
+  }
+  const usage = deps.executionRepository.getLatestProviderInvocationUsageBySession(
+    sessionId,
+    "task_coding",
+  );
+  if (!usage || usage.provider !== provider) {
+    return;
+  }
+  if (usage.status !== "running" || usage.finishedAt !== null) {
+    deps.executionRepository.updateProviderInvocationUsage(usage.id, {
+      status: "running",
+      finishedAt: null,
+      durationMs: null,
+    });
+  }
+  for (const invocation of deps.executionRepository.listExecutionInvocationsByProviderInvocationId(usage.id)) {
+    if (invocation.status === "running" && invocation.finishedAt === null) {
+      continue;
+    }
+    deps.executionRepository.updateExecutionInvocation(invocation.id, {
+      status: "running",
+      finishedAt: null,
+      errorMessage: null,
+      lastErrorCategory: null,
+      lastErrorMessage: null,
+      lastRetryAfterIso: null,
+    });
+    deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
+      role: "system",
+      contentMarkdown: "Reopened the invocation because its Jules session resumed after reaching a terminal state.",
+      metadata: {
+        recovery: "session_sync_remote_session_reactivated",
+        provider: "jules",
+        sessionId,
+      },
+    });
+  }
+};
+
+const reconcileTerminalRemoteInvocationLifecycle = (
+  deps: SessionSyncDependencies,
+  sessionId: string | null,
+  provider: string | null | undefined,
+  sessionState: string | undefined,
+  finishedAt: string,
+): void => {
+  if (!deps.executionRepository || provider !== "jules" || !sessionId) {
+    return;
+  }
+  const usage = deps.executionRepository.getLatestProviderInvocationUsageBySession(
+    sessionId,
+    "task_coding",
+  );
+  if (!usage || usage.provider !== provider) {
+    return;
+  }
+
+  const providerStatus = sessionState === "COMPLETED"
+    ? "completed"
+    : sessionState === "CANCELLED"
+      ? "cancelled"
+      : "failed";
+  const linkedInvocations = deps.executionRepository.listExecutionInvocationsByProviderInvocationId(usage.id);
+  const hasUnsettledExecutionInvocation = linkedInvocations.some(
+    (invocation) => invocation.status === "running" || invocation.status === "paused",
+  );
+  if (
+    usage.status === providerStatus
+    && usage.finishedAt !== null
+    && !hasUnsettledExecutionInvocation
+  ) {
+    return;
+  }
+
+  const reconciledAt = usage.finishedAt || finishedAt;
+  const context = {
+    reconciledAt,
+    recoveryReason: "session_sync_remote_session_terminal",
+    systemMessage: sessionState === "COMPLETED"
+      ? "Completed the invocation because the Jules session reached a terminal completed state."
+      : sessionState === "CANCELLED"
+        ? "Cancelled the invocation because the Jules session was cancelled."
+        : `Failed the invocation because the Jules session reached ${sessionState || "FAILED"}.`,
+  };
+  if (providerStatus === "completed") {
+    completeStaleProviderInvocation(
+      deps.executionRepository,
+      usage,
+      linkedInvocations,
+      context,
+    );
+  } else if (providerStatus === "cancelled") {
+    cancelStaleProviderInvocation(
+      deps.executionRepository,
+      usage,
+      linkedInvocations,
+      context,
+    );
+  } else {
+    failStaleProviderInvocation(
+      deps.executionRepository,
+      usage,
+      linkedInvocations,
+      context,
+    );
+  }
+};
+
 const syncExecutionRunState = async (
   deps: SessionSyncDependencies,
   sessionMetadataLookup: SessionMetadataLookup,
@@ -691,6 +810,33 @@ const syncExecutionRunState = async (
     && !task.is_merged
     && (nextRunState === "RUNNING" || nextRunState === "BLOCKED");
 
+  const sessionMetadata = sessionMetadataLookup.getForSession(session);
+  const sessionName = sessionMetadata.sessionName || taskRun.sessionName;
+  const sessionId = sessionMetadata.sessionId || taskRun.sessionId;
+  const provider = sessionProvider;
+  const workerBranch = resolveWorkerBranch(session) || taskRun.workerBranch;
+  const prUrl = resolvePrUrl(session) || taskRun.prUrl;
+  const now = new Date().toISOString();
+  const nextFinishedAt = nextRunState === "RUNNING"
+    ? null
+    : (taskRun.finishedAt || currentDispatch?.finishedAt || now);
+  const nextDurationMs = nextRunState === "RUNNING" || !taskRun.startedAt
+    ? null
+    : Math.max(0, new Date(nextFinishedAt || now).getTime() - new Date(taskRun.startedAt).getTime());
+  const nextStartedAt = taskRun.startedAt || now;
+
+  if (sessionReactivated) {
+    reconcileActiveRemoteInvocationLifecycle(deps, sessionId, provider);
+  } else if (nextRunState === "COMPLETED" || nextRunState === "FAILED") {
+    reconcileTerminalRemoteInvocationLifecycle(
+      deps,
+      sessionId,
+      provider,
+      session.state,
+      nextFinishedAt || now,
+    );
+  }
+
   if (wasTerminal && wasDispatchTerminal && !sessionReactivated) {
     if (currentDispatch && taskRun.dispatchId) {
       const preserveCancelledDispatch = isFinishedLocalCliRun && currentDispatch.status === "cancelled";
@@ -717,21 +863,6 @@ const syncExecutionRunState = async (
     }
     return combinedProjection;
   }
-
-  const sessionMetadata = sessionMetadataLookup.getForSession(session);
-  const sessionName = sessionMetadata.sessionName || taskRun.sessionName;
-  const sessionId = sessionMetadata.sessionId || taskRun.sessionId;
-  const provider = sessionProvider;
-  const workerBranch = resolveWorkerBranch(session) || taskRun.workerBranch;
-  const prUrl = resolvePrUrl(session) || taskRun.prUrl;
-  const now = new Date().toISOString();
-  const nextFinishedAt = nextRunState === "RUNNING"
-    ? null
-    : (taskRun.finishedAt || currentDispatch?.finishedAt || now);
-  const nextDurationMs = nextRunState === "RUNNING" || !taskRun.startedAt
-    ? null
-    : Math.max(0, new Date(nextFinishedAt || now).getTime() - new Date(taskRun.startedAt).getTime());
-  const nextStartedAt = taskRun.startedAt || now;
 
   const taskRunChanged = taskRun.sessionId !== sessionId
     || taskRun.sessionName !== sessionName

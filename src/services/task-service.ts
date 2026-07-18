@@ -249,6 +249,7 @@ export class TaskService {
       resumeWorkerBranch?: string;
       forceFreshWorkspace?: boolean;
       providerConfigId?: string;
+      requireProviderSessionResume?: boolean;
     },
   ): Promise<JulesSession> {
     // Respect task.provider if already set (e.g. from a rerun with provider override)
@@ -308,6 +309,7 @@ export class TaskService {
         resumeWorkspaceSessionId: rerunOptions?.resumeWorkspaceSessionId,
         resumeWorkerBranch: rerunOptions?.resumeWorkerBranch,
         forceFreshWorkspace: rerunOptions?.forceFreshWorkspace,
+        requireProviderSessionResume: rerunOptions?.requireProviderSessionResume,
       });
       session.provider = provider;
       return session;

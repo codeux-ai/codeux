@@ -49,6 +49,8 @@ export interface PipelineContext {
   workspaceSessionId: string;
   /** Whether this invocation intentionally continues an already allocated worker branch. */
   allowExistingWorkerBranch: boolean;
+  /** Fail rather than replacing a missing native conversation during a clarification continuation. */
+  requireProviderSessionResume?: boolean;
   /**
    * Proof that a fresh HOST invocation atomically created and owns the local worker branch.
    * Fresh remote publication still requires the origin ref to be absent.
@@ -66,6 +68,8 @@ export interface PipelineContext {
   workflowSucceeded: boolean;
   preserveSuccessfulWorktree?: boolean;
   preserveSuccessfulWorktreeForActiveSprint?: boolean;
+  /** Keep the exact provider workspace available until a pending manager clarification continues. */
+  preserveWorkspaceForClarification?: boolean;
   /** Worker agent preset ID for per-agent memory tagging. */
   agentPresetId?: string;
   /** Per-agent memory injection config. Undefined means use defaults (inject all). */

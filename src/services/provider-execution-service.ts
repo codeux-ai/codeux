@@ -423,6 +423,7 @@ export class ProviderExecutionService {
     const resolvedMcp = resolveAgentMcpRuntime({
       access: args.agentMcpAccess,
       agentId: args.mcpAgentId,
+      executionInvocationId: execInvocationId,
       customMcpServers: args.customMcpServers ?? [],
       mcpConnection: baseMcpConnection,
       persistentSkillRetrievalEnabled: Boolean(persistentSkillRuntime),

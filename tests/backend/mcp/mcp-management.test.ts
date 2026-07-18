@@ -161,6 +161,9 @@ describe("ManagementToolHandler", () => {
       workerClarificationContinuationService: {
         continueReply: vi.fn(),
       },
+      workerClarificationService: {
+        create: vi.fn(),
+      },
     };
     handler = new ManagementToolHandler(deps);
   });
@@ -225,6 +228,31 @@ describe("ManagementToolHandler", () => {
     expect(JSON.parse(response.content[0].text)).toMatchObject({
       deliveryMode: "cli_workspace",
       alreadySettled: false,
+    });
+  });
+
+  it("binds coding clarification requests to the authenticated execution invocation", async () => {
+    deps.workerClarificationService.create.mockReturnValue({
+      id: "clarification-1",
+      status: "pending",
+    });
+
+    await runWithMcpAgentContext("worker-1", null, "xi_123", () =>
+      handler.handleRequestClarification({
+        projectId: "project-1",
+        taskId: "task-1",
+        deduplicationKey: "question-1",
+        questionMarkdown: "Should I preserve this behavior?",
+      }),
+    );
+
+    expect(deps.workerClarificationService.create).toHaveBeenCalledWith({
+      projectId: "project-1",
+      taskId: "task-1",
+      deduplicationKey: "question-1",
+      questionMarkdown: "Should I preserve this behavior?",
+      requesterAgentId: "worker-1",
+      executionInvocationId: "xi_123",
     });
   });
 

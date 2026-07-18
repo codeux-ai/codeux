@@ -26,13 +26,14 @@ describe("provider-runtime-config", () => {
       const result = JSON.parse(buildQwenRuntimeConfig(
         "qwen3-coder-plus",
         { qwenAuthMode: "LOCAL_AUTH" },
-        { url: "http://127.0.0.1:3000", authToken: "token", agentId: "agent", threadId: "thread-7" },
+        { url: "http://127.0.0.1:3000", authToken: "token", agentId: "agent", executionInvocationId: "xi_123", threadId: "thread-7" },
         true,
         rewriteUrl,
       ));
       expect(result.mcpServers.code_ux.headers).toMatchObject({
         Authorization: "Bearer token",
         "X-Code-Ux-Agent": "agent",
+        "X-Code-Ux-Invocation": "xi_123",
         "X-Code-Ux-Thread": "thread-7",
       });
     });
@@ -54,13 +55,14 @@ describe("provider-runtime-config", () => {
         const result = JSON.parse(buildOpenCodeRuntimeConfig(
             "custom/model",
             { openCodeAuthMode: "LOCAL_AUTH" },
-            { url: "http://127.0.0.1:3000", authToken: "token", agentId: "agent", threadId: "thread-7" },
+            { url: "http://127.0.0.1:3000", authToken: "token", agentId: "agent", executionInvocationId: "xi_123", threadId: "thread-7" },
             true,
             rewriteUrl
         ));
         expect(result.mcp.code_ux.url).toBe("http://host.docker.internal:3000");
         expect(result.mcp.code_ux.headers.Authorization).toBe("Bearer token");
         expect(result.mcp.code_ux.headers["X-Code-Ux-Agent"]).toBe("agent");
+        expect(result.mcp.code_ux.headers["X-Code-Ux-Invocation"]).toBe("xi_123");
         expect(result.mcp.code_ux.headers["X-Code-Ux-Thread"]).toBe("thread-7");
     });
   });

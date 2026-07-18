@@ -1,4 +1,5 @@
 import type { ProviderId } from "../contracts/app-types.js";
+import type { SprintRunStatus } from "../contracts/execution-types.js";
 import type {
   WorkerClarificationContinuationRequest,
   WorkerClarificationReplyResult,
@@ -18,6 +19,11 @@ const LOCAL_CONTINUATION_PROVIDERS = new Set<ProviderId>([
   "antigravity",
   "mockup-cli",
 ]);
+
+const CLARIFICATION_CONTINUATION_SPRINT_STATUSES = new Set<SprintRunStatus>(["queued", "running"]);
+
+export const canAutomaticallyContinueClarificationSprint = (status: SprintRunStatus): boolean =>
+  CLARIFICATION_CONTINUATION_SPRINT_STATUSES.has(status);
 
 export type WorkerClarificationDeliveryMode = "jules_message" | "cli_workspace" | "recorded_answer";
 
@@ -104,6 +110,24 @@ export class WorkerClarificationContinuationService {
     if (!taskRun || taskRun.projectId !== continuation.projectId || taskRun.taskId !== continuation.taskId) {
       throw new ValidationError(`Clarification ${continuation.clarificationId} task-run scope is no longer valid.`);
     }
+    const sprintRunId = continuation.sprintRunId || taskRun.sprintRunId;
+    if (!sprintRunId) {
+      throw new ValidationError(`Clarification ${continuation.clarificationId} has no sprint run to continue.`);
+    }
+    const sprintRun = this.deps.executionRepository.getSprintRun(sprintRunId);
+    if (
+      !sprintRun
+      || sprintRun.projectId !== continuation.projectId
+      || sprintRun.sprintId !== continuation.sprintId
+      || taskRun.sprintRunId !== sprintRun.id
+    ) {
+      throw new ValidationError(`Clarification ${continuation.clarificationId} sprint-run scope is no longer valid.`);
+    }
+    if (!canAutomaticallyContinueClarificationSprint(sprintRun.status)) {
+      throw new ValidationError(
+        `Clarification ${continuation.clarificationId} cannot continue while sprint run ${sprintRun.id} is ${sprintRun.status}.`,
+      );
+    }
     const sessionId = continuation.sessionId || taskRun.sessionId;
     if (!sessionId) {
       throw new ValidationError(`Clarification ${continuation.clarificationId} has no provider session to continue.`);
@@ -124,10 +148,20 @@ export class WorkerClarificationContinuationService {
       continuation.taskId,
       continuation.sprintRunId ?? undefined,
     );
-    const resumeWorkspaceSessionId = workspace?.sessionId || sessionId;
-    const resumeWorkerBranch = workspace?.workerBranch || taskRun.workerBranch;
+    const resumeWorkspaceSessionId = workspace?.sessionId;
+    const resumeWorkerBranch = workspace?.workerBranch;
     if (!workspace || !resumeWorkspaceSessionId || !resumeWorkerBranch) {
       throw new ValidationError(`Clarification ${continuation.clarificationId} has no preserved CLI workspace to continue.`);
+    }
+    if (resumeWorkspaceSessionId !== sessionId) {
+      throw new ValidationError(
+        `Clarification ${continuation.clarificationId} preserved workspace session does not match its source task run.`,
+      );
+    }
+    if (taskRun.workerBranch && resumeWorkerBranch !== taskRun.workerBranch) {
+      throw new ValidationError(
+        `Clarification ${continuation.clarificationId} preserved workspace branch does not match its source task run.`,
+      );
     }
     if (workspace.provider && workspace.provider !== provider) {
       throw new ValidationError(`Clarification ${continuation.clarificationId} preserved workspace provider does not match its task run.`);
@@ -141,7 +175,14 @@ export class WorkerClarificationContinuationService {
       resumeWorkspaceSessionId,
       "task_coding",
     );
-    await this.deps.taskRerunService.continueTaskFromClarification(continuation.taskId, {
+    if (!invocation) {
+      throw new ValidationError(`Clarification ${continuation.clarificationId} has no prior provider invocation to resume.`);
+    }
+    if (provider === "claude-code" && !invocation.nativeSessionId) {
+      throw new ValidationError(`Clarification ${continuation.clarificationId} has no captured Claude Code session id to resume.`);
+    }
+    const continuedTask = await this.deps.taskRerunService.continueTaskFromClarification(continuation.taskId, {
+      clarificationId: continuation.clarificationId,
       answerMarkdown: continuation.answerMarkdown,
       provider,
       model: invocation?.model || task.model || undefined,
@@ -149,6 +190,47 @@ export class WorkerClarificationContinuationService {
       resumeWorkspaceSessionId,
       resumeWorkerBranch,
     });
+    const continuedSessionId = continuedTask.session_id;
+    const continuedTaskRun = continuedSessionId
+      && typeof this.deps.executionRepository.getLatestTaskRunBySessionId === "function"
+      ? this.deps.executionRepository.getLatestTaskRunBySessionId(continuedSessionId)
+      : null;
+    if (continuedTaskRun) {
+      this.deps.executionRepository.appendTaskRunEvent(
+        continuedTaskRun.id,
+        "worker_clarification_continuation_started",
+        continuation.repliedByAgentId,
+        {
+          clarificationId: continuation.clarificationId,
+          attentionItemId: continuation.clarificationId,
+          parentTaskRunId: continuation.taskRunId,
+          parentExecutionInvocationId: continuation.executionInvocationId,
+          parentWorkspaceSessionId: resumeWorkspaceSessionId,
+          provider,
+          workerBranch: resumeWorkerBranch,
+        },
+        { sourceEventKey: `worker-clarification:${continuation.clarificationId}:continuation-started` },
+      );
+      const continuedInvocation = this.deps.executionRepository.listExecutionInvocations({
+        projectId: continuation.projectId,
+        taskRunId: continuedTaskRun.id,
+        limit: 1,
+      })[0];
+      if (continuedInvocation) {
+        this.deps.executionRepository.appendExecutionInvocationMessage(continuedInvocation.id, {
+          role: "system",
+          contentMarkdown: `Continuing clarification ${continuation.clarificationId} in the preserved ${provider} session and workspace.`,
+          metadata: {
+            kind: "worker_clarification_continuation",
+            clarificationId: continuation.clarificationId,
+            attentionItemId: continuation.clarificationId,
+            parentTaskRunId: continuation.taskRunId,
+            parentExecutionInvocationId: continuation.executionInvocationId,
+            workspaceSessionId: resumeWorkspaceSessionId,
+          },
+        });
+      }
+    }
     this.appendDeliveryEvent(continuation, "cli_workspace", provider, resumeWorkspaceSessionId);
     return "cli_workspace";
   }

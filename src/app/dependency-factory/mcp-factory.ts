@@ -6,13 +6,13 @@ import { type DashboardSettings, type DashboardSettingsScope } from "../../contr
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
 
 import type { DashboardDependencies } from "./dashboard-factory.js";
-import { WorkerClarificationRepository } from "../../repositories/worker-clarification-repository.js";
-import { WorkerClarificationService } from "../../services/worker-clarification-service.js";
 import { WorkerClarificationContinuationService } from "../../services/worker-clarification-continuation-service.js";
+import { WorkerClarificationCoordinatorService } from "../../services/worker-clarification-coordinator-service.js";
 import { isProjectManagerClarificationAgent } from "../../services/agent-mcp-access.js";
 
 export interface McpDependencies {
   managementToolHandler: ManagementToolHandler;
+  workerClarificationCoordinatorService: WorkerClarificationCoordinatorService;
 }
 
 export function createMcpDependencies(
@@ -35,11 +35,7 @@ export function createMcpDependencies(
     return effective.settings;
   };
 
-  const workerClarificationService = new WorkerClarificationService(
-    new WorkerClarificationRepository(coreDeps.projectAttentionRepository),
-    coreDeps.projectManagementRepository,
-    coreDeps.executionRepository,
-  );
+  const workerClarificationService = coreDeps.workerClarificationService;
   const workerClarificationContinuationService = new WorkerClarificationContinuationService({
     clarificationService: workerClarificationService,
     taskRerunService: dashboardDeps.taskRerunService,
@@ -66,6 +62,17 @@ export function createMcpDependencies(
       return agent?.projectId === projectId ? agent.providerConfigId ?? undefined : undefined;
     },
   });
+  const workerClarificationCoordinatorService = new WorkerClarificationCoordinatorService({
+    clarificationService: workerClarificationService,
+    continuationService: workerClarificationContinuationService,
+    workerInboxReplyService: sprintDeps.workerInboxReplyService,
+    executionRepository: coreDeps.executionRepository,
+    projectManagementRepository: coreDeps.projectManagementRepository,
+    projectAttentionRepository: coreDeps.projectAttentionRepository,
+    guardrailService: coreDeps.guardrailService,
+    logger: coreDeps.logger.child({ component: "worker-clarification-coordinator" }),
+  });
+  workerClarificationCoordinatorService.start();
 
   const managementToolHandler = new ManagementToolHandler({
     sprintPreviewService: coreDeps.sprintPreviewService,
@@ -105,5 +112,6 @@ export function createMcpDependencies(
 
   return {
     managementToolHandler,
+    workerClarificationCoordinatorService,
   };
 }

@@ -108,7 +108,7 @@ For a resolved agent policy:
 
 The dashboard chat reply route is the only route-local default exception. The agent assigned to that route receives full built-in Code UX MCP access, `scheduler_code_ux`, `add_long_term_memory`, and the default Playwright MCP server for dashboard reply turns even when its saved preset has Code UX disabled or no MCP policy. An explicitly narrowed dashboard reply policy still has both dedicated lanes forced on. This default is keyed to the dashboard reply route assignment, not to the generic `project_manager` runtime role.
 
-Clarification tools add a separate audience boundary on the same gateway. `request_clarification` is limited to an assigned task agent, the manual coding route, or an `orchestratorAgentPresetIds` worker-pool member. `reply_to_clarification` is limited to the clarification-reply/dashboard-reply project-manager agent or an unscoped project-manager client. Agent-scoped calls must match the agent's project, and assignment-only workers must address their assigned task. Listing and calling share the same resolver, so unknown, ineligible, cross-project, and cross-audience requests fail closed with `MethodNotFound`.
+Clarification tools add a separate audience boundary on the same gateway. `request_clarification` is first authorized by the active coding execution invocation advertised internally as `X-Code-Ux-Invocation`; static assignment, the manual coding route, and `orchestratorAgentPresetIds` remain fallback eligibility paths. `reply_to_clarification` is limited to the clarification-reply/dashboard-reply project-manager agent or an unscoped project-manager client. Agent-scoped calls must match the agent's project, and assignment-only workers must address their assigned task. Listing and calling share the same resolver, so unknown, ineligible, cross-project, and cross-audience requests fail closed with `MethodNotFound`.
 
 ## Worker Clarification Tools
 
@@ -128,7 +128,7 @@ Both clarification tools travel through the existing `project_manager` MCP gatew
 | `taskRunId` | no | Task-run context. When present, Code UX derives and verifies the linked task, sprint, sprint run, dispatch, and session. |
 | `sessionId` | no | Provider-session context. |
 
-The requester identity is taken from the authenticated `X-Code-Ux-Agent` context and cannot be supplied in the payload. Every optional runtime reference is checked against `projectId` and the other linked records before the question is persisted.
+The requester identity and execution invocation are taken from the authenticated `X-Code-Ux-Agent` and `X-Code-Ux-Invocation` context and cannot be supplied in the payload. Every optional runtime reference is checked against `projectId` and the other linked records before the question is persisted.
 
 ```json
 {
@@ -140,7 +140,7 @@ The requester identity is taken from the authenticated `X-Code-Ux-Agent` context
 }
 ```
 
-A successful request returns `{ "clarification": ... }`. A new record has `status: "pending"`; the public clarification id is the project attention-item id. Submitting the same key with the same requester, question, and full runtime scope returns the existing record in its current state without another attention item or duplicate task-run event. Reusing the key for different content or scope is a validation error.
+A successful request returns `{ "clarification": ... }`. A new record has `status: "pending"`; the public clarification id is the project attention-item id. The runtime automatically routes new task-backed requests to the configured clarification-reply Project manager after the coding turn stops. The answer is delivered through the normal reply continuation path; the model does not directly mutate clarification state. Submitting the same key with the same requester, question, and full runtime scope returns the existing record in its current state without another attention item or duplicate task-run event. Reusing the key for different content or scope is a validation error.
 
 `reply_to_clarification` accepts only the owning project, clarification id, and answer:
 
@@ -165,7 +165,7 @@ The normal server response contains:
 }
 ```
 
-`deliveryMode` is `jules_message` when the answer was accepted by the existing Jules session, `cli_workspace` when Code UX accepted a task-rerun continuation against the preserved local workspace and native session lineage, or `recorded_answer` for a taskless general question. These states confirm delivery or persistence, not task completion. The clarification becomes `replied` only after delivery/continuation succeeds. If a task-backed provider session, task-run scope, or preserved CLI workspace is missing or invalid, the call fails and the clarification stays `pending`.
+`deliveryMode` is `jules_message` when the answer was accepted by the existing Jules session, `cli_workspace` when Code UX accepted a task-rerun continuation against the preserved local workspace and native session lineage, or `recorded_answer` for a taskless general question. Local clarification continuation never silently falls back to a fresh provider conversation. These states confirm delivery or persistence, not task completion. The clarification becomes `replied` only after delivery/continuation succeeds. If a task-backed provider session, task-run scope, or preserved CLI workspace is missing or invalid, the call fails and the clarification stays `pending`.
 
 Clarification records move from `pending` to one of `replied`, `expired`, or `cancelled`. A repeated reply to an already replied clarification returns the original settled result with `alreadySettled: true` and performs no second message or dispatch. Concurrent identical replies share the in-flight operation; a non-replied terminal record rejects a reply. Schema failures return MCP `InvalidParams`; disabled, unknown, wrong-audience, cross-project, or ineligible-agent calls fail closed with `MethodNotFound`; service validation and delivery failures use the management error envelope with `isError: true`.
 

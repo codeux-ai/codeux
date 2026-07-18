@@ -51,6 +51,7 @@ function mapItem(item: ProjectAttentionItemRecord): WorkerClarificationRecord | 
     dispatchId: item.dispatchId,
     taskRunId: optionalString(payload.taskRunId),
     sessionId: optionalString(payload.sessionId),
+    executionInvocationId: optionalString(payload.executionInvocationId),
     requesterAgentId: payload.requesterAgentId,
     deduplicationKey: payload.deduplicationKey,
     status: payload.status,
@@ -75,6 +76,7 @@ function isSameRequest(record: WorkerClarificationRecord, input: PersistWorkerCl
     && record.dispatchId === (input.dispatchId ?? null)
     && record.taskRunId === (input.taskRunId ?? null)
     && record.sessionId === (input.sessionId ?? null)
+    && record.executionInvocationId === (input.executionInvocationId ?? null)
     && record.requesterAgentId === input.requesterAgentId
     && record.questionMarkdown === input.questionMarkdown;
 }
@@ -103,6 +105,7 @@ export class WorkerClarificationRepository {
       status: "pending",
       taskRunId: input.taskRunId ?? null,
       sessionId: input.sessionId ?? null,
+      executionInvocationId: input.executionInvocationId ?? null,
       requesterAgentId: input.requesterAgentId,
       questionMarkdown: input.questionMarkdown,
       answerMarkdown: null,

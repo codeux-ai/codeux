@@ -1938,7 +1938,10 @@ describe("ProviderRunner MCP config generation", () => {
       { id: "1", name: "tool", transport: "stdio", command: "bash", args: ["-c", "echo hello"], enabled: true }
     ]);
     const json = JSON.parse(getWrittenContent(".agents/mcp_config.json")!);
-    expect(json.mcpServers.code_ux).toEqual({ serverUrl: "http://127.0.0.1/mcp" });
+    expect(json.mcpServers.code_ux).toEqual({
+      serverUrl: "http://127.0.0.1/mcp",
+      headers: { Accept: "application/json, text/event-stream" },
+    });
     expect(json.mcpServers.tool).toEqual({ command: "bash", args: ["-c", "echo hello"] });
   });
 });

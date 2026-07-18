@@ -10,6 +10,7 @@ export interface WorkerClarificationPayload {
   status: WorkerClarificationStatus;
   taskRunId: string | null;
   sessionId: string | null;
+  executionInvocationId: string | null;
   requesterAgentId: string;
   questionMarkdown: string;
   answerMarkdown: string | null;
@@ -31,6 +32,7 @@ export interface WorkerClarificationRecord {
   dispatchId: string | null;
   taskRunId: string | null;
   sessionId: string | null;
+  executionInvocationId: string | null;
   requesterAgentId: string;
   deduplicationKey: string;
   status: WorkerClarificationStatus;
@@ -55,6 +57,8 @@ export interface CreateWorkerClarificationInput {
   dispatchId?: string | null;
   taskRunId?: string | null;
   sessionId?: string | null;
+  /** Filled from the authenticated MCP request context for coding-agent calls. */
+  executionInvocationId?: string | null;
   requesterAgentId: string;
   deduplicationKey: string;
   questionMarkdown: string;
@@ -76,7 +80,7 @@ export interface ResolveWorkerClarificationInput {
   reason?: string;
 }
 
-/** Provider/session continuation is deliberately performed by a later integration task. */
+/** Durable answer payload delivered to the original hosted or local provider-session lineage. */
 export interface WorkerClarificationContinuationRequest {
   kind: "worker_clarification_reply";
   clarificationId: string;
@@ -87,6 +91,7 @@ export interface WorkerClarificationContinuationRequest {
   dispatchId: string | null;
   taskRunId: string | null;
   sessionId: string | null;
+  executionInvocationId: string | null;
   requesterAgentId: string;
   repliedByAgentId: string;
   answerMarkdown: string;
@@ -107,6 +112,7 @@ export interface WorkerClarificationEventMetadata {
   dispatchId: string | null;
   taskRunId: string | null;
   sessionId: string | null;
+  executionInvocationId: string | null;
   requesterAgentId: string;
   status: WorkerClarificationStatus;
 }

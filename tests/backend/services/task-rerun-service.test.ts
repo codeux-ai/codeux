@@ -187,9 +187,13 @@ describe("TaskRerunService", () => {
       name: "sessions/continuation-session",
       prompt: "",
       provider: "codex",
+      dispatchId: "continuation-dispatch",
+      taskRunId: "continuation-task-run",
+      startedNew: true,
     });
 
     const continued = await service.continueTaskFromClarification("task-record-1", {
+      clarificationId: "clarification-1",
       answerMarkdown: "Preserve the legacy rows.",
       provider: "codex",
       model: "gpt-5.1-codex",
@@ -203,6 +207,7 @@ describe("TaskRerunService", () => {
       resumeWorkspaceSessionId: "old-session",
       resumeWorkerBranch: "worker/task-1",
       forceFreshWorkspace: false,
+      clarificationContinuationId: "clarification-1",
       task: expect.objectContaining({
         provider: "codex",
         model: "gpt-5.1-codex",
@@ -226,12 +231,32 @@ describe("TaskRerunService", () => {
 
   it("rejects clarification continuation without preserved workspace metadata", async () => {
     await expect(service.continueTaskFromClarification("task-record-1", {
+      clarificationId: "clarification-1",
       answerMarkdown: "Proceed.",
       provider: "codex",
       resumeWorkspaceSessionId: "",
       resumeWorkerBranch: "worker/task-1",
     })).rejects.toThrow(/preserved workspace session and worker branch/i);
     expect(startTask).not.toHaveBeenCalled();
+  });
+
+  it("rejects a clarification continuation that reuses an existing active dispatch", async () => {
+    resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-1", created: false });
+    startTask.mockResolvedValue({
+      id: "already-running-session",
+      provider: "codex",
+      dispatchId: "existing-dispatch",
+      taskRunId: "existing-task-run",
+      startedNew: false,
+    });
+
+    await expect(service.continueTaskFromClarification("task-record-1", {
+      clarificationId: "clarification-1",
+      answerMarkdown: "Proceed.",
+      provider: "codex",
+      resumeWorkspaceSessionId: "old-session",
+      resumeWorkerBranch: "worker/task-1",
+    })).rejects.toThrow(/no new task dispatch was started/i);
   });
 
   it("marks the task failed when fresh session start fails", async () => {

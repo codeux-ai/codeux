@@ -90,6 +90,7 @@ export interface RuntimeStartupRecoveryResult {
   requeuedInterruptedRepairAttentionItemIds: string[];
   reactivatedDurableRemoteTaskRunIds: string[];
   reactivatedDurableRemoteSprintRunIds: string[];
+  supersededDurableRemoteTaskRunIds: string[];
   resumedPlanningInvocationIds: string[];
 }
 
@@ -145,7 +146,7 @@ export class RuntimeStartupRecoveryService {
     const durableRemoteRecoveryResult = shouldRecoverInterruptedInvocations
       && restartPolicies.invocationPolicy === "continue"
       ? await this.reconcileDurableRemoteSessions()
-      : { reactivatedTaskRunIds: [], reactivatedSprintRunIds: [] };
+      : { reactivatedTaskRunIds: [], reactivatedSprintRunIds: [], supersededTaskRunIds: [] };
     const reconciledLocalDispatchIds = shouldRecoverInterruptedInvocations
       ? await this.reconcileInterruptedLocalDispatches(new Set(recoveredCliSessionIds), activeContainerSessionIds, restartPolicies.invocationPolicy)
       : [];
@@ -220,6 +221,7 @@ export class RuntimeStartupRecoveryService {
       || requeuedInterruptedRepairAttentionItemIds.length > 0
       || durableRemoteRecoveryResult.reactivatedTaskRunIds.length > 0
       || durableRemoteRecoveryResult.reactivatedSprintRunIds.length > 0
+      || durableRemoteRecoveryResult.supersededTaskRunIds.length > 0
       || resumedPlanningInvocationIds.length > 0
       || rehydratedSprintRunIds.length > 0
       || reconciledTaskRunIds.length > 0
@@ -251,6 +253,7 @@ export class RuntimeStartupRecoveryService {
         requeuedInterruptedRepairAttentionItems: requeuedInterruptedRepairAttentionItemIds.length,
         reactivatedDurableRemoteTaskRuns: durableRemoteRecoveryResult.reactivatedTaskRunIds.length,
         reactivatedDurableRemoteSprintRuns: durableRemoteRecoveryResult.reactivatedSprintRunIds.length,
+        supersededDurableRemoteTaskRuns: durableRemoteRecoveryResult.supersededTaskRunIds.length,
         resumedPlanningInvocations: resumedPlanningInvocationIds.length,
         rehydratedSprintRuns: rehydratedSprintRunIds.length,
         reconciledTaskRuns: reconciledTaskRunIds.length,
@@ -289,6 +292,7 @@ export class RuntimeStartupRecoveryService {
       requeuedInterruptedRepairAttentionItemIds,
       reactivatedDurableRemoteTaskRunIds: durableRemoteRecoveryResult.reactivatedTaskRunIds,
       reactivatedDurableRemoteSprintRunIds: durableRemoteRecoveryResult.reactivatedSprintRunIds,
+      supersededDurableRemoteTaskRunIds: durableRemoteRecoveryResult.supersededTaskRunIds,
       resumedPlanningInvocationIds,
       restartPolicyPausedSprintRunIds: restartPolicyResult.pausedSprintRunIds,
       restartPolicyCancelledSprintRunIds: restartPolicyResult.cancelledSprintRunIds,
@@ -340,9 +344,10 @@ export class RuntimeStartupRecoveryService {
   private async reconcileDurableRemoteSessions(): Promise<{
     reactivatedTaskRunIds: string[];
     reactivatedSprintRunIds: string[];
+    supersededTaskRunIds: string[];
   }> {
     if (!this.deps.listDurableRemoteSessions) {
-      return { reactivatedTaskRunIds: [], reactivatedSprintRunIds: [] };
+      return { reactivatedTaskRunIds: [], reactivatedSprintRunIds: [], supersededTaskRunIds: [] };
     }
     const sessionsPromise = this.deps.listDurableRemoteSessions();
     try {
@@ -399,11 +404,16 @@ export class RuntimeStartupRecoveryService {
               });
             });
           }
-          if (repaired.reactivatedTaskRunIds.length > 0 || repaired.reactivatedSprintRunIds.length > 0) {
+          if (
+            repaired.reactivatedTaskRunIds.length > 0
+            || repaired.reactivatedSprintRunIds.length > 0
+            || repaired.supersededTaskRunIds.length > 0
+          ) {
             this.deps.logger?.info("Reconciled durable remote sessions after startup readiness", {
               provider: "jules",
               reactivatedTaskRuns: repaired.reactivatedTaskRunIds.length,
               reactivatedSprintRuns: repaired.reactivatedSprintRunIds.length,
+              supersededTaskRuns: repaired.supersededTaskRunIds.length,
             });
           }
         }).catch((lateError) => {
@@ -1757,7 +1767,7 @@ export class RuntimeStartupRecoveryService {
         if (taskRun && !isTerminalTaskRunState(taskRun)) {
           this.deps.executionRepository.updateTaskRun(taskRun.id, {
             connectionId: null,
-            state: "BLOCKED",
+            state: "FAILED",
             finishedAt: reconciledAt,
             durationMs: calculateDurationMs(taskRun, reconciledAt),
           });

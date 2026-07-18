@@ -152,9 +152,17 @@ export function loadLatestTaskReviewSummaryMap(
             ) AS reviewer_row_number
           FROM qa_review_runs q
           LEFT JOIN latest_sprint_runs lsr ON lsr.sprint_id = q.sprint_id
+          JOIN tasks reviewed_task ON reviewed_task.id = q.task_id
           WHERE q.task_id`,
     sqlSuffix: `
             AND q.trigger_type IN ('task_completion', 'completed_task_without_pr')
+            AND NOT (
+              (reviewed_task.status = 'completed' OR reviewed_task.is_merged = 1)
+              AND (
+                q.status IN ('running', 'failed', 'cancelled', 'errored')
+                OR q.outcome IN ('changes_requested', 'failed', 'rejected')
+              )
+            )
             AND (
               lsr.id IS NULL
               OR q.sprint_run_id = lsr.id

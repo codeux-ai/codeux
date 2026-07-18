@@ -24,7 +24,11 @@ import type {
   RunAttachedFlowArgs,
 } from "../contracts/internal-management-types.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
-import { getCurrentMcpAgentId, getCurrentMcpThreadId } from "../server/mcp-agent-context.js";
+import {
+  getCurrentMcpAgentId,
+  getCurrentMcpExecutionInvocationId,
+  getCurrentMcpThreadId,
+} from "../server/mcp-agent-context.js";
 import type { SprintPreviewService } from "../services/sprint-preview-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
@@ -624,6 +628,7 @@ export class ManagementToolHandler {
       const clarification = this.deps.workerClarificationService.create({
         ...args,
         requesterAgentId,
+        executionInvocationId: getCurrentMcpExecutionInvocationId(),
       });
       return { content: [{ type: "text", text: JSON.stringify({ clarification }, null, 2) }] };
     } catch (error) {

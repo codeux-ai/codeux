@@ -2346,6 +2346,7 @@ describe("runSessionSyncStep", () => {
             name: "sessions/s-completed",
             title: "Sprint 1: [run:my-repo/s1/task-completed] [task-completed] Task C",
             state: "IN_PROGRESS",
+            provider: "jules",
           },
         ],
       }),
@@ -2356,12 +2357,34 @@ describe("runSessionSyncStep", () => {
       logger: { warn: vi.fn() },
       executionRepository: {
         // Local run is terminal (COMPLETED) — the remote session reactivated.
-        getLatestTaskRun: vi.fn().mockReturnValue({ id: "run-id", state: "COMPLETED", startedAt: "2026-03-09T10:00:00.000Z", finishedAt: "2026-03-09T11:00:00.000Z" }),
+        getLatestTaskRun: vi.fn().mockReturnValue({
+          id: "run-id",
+          state: "COMPLETED",
+          provider: "jules",
+          sessionId: "s-completed",
+          sessionName: "sessions/s-completed",
+          startedAt: "2026-03-09T10:00:00.000Z",
+          finishedAt: "2026-03-09T11:00:00.000Z",
+        }),
         updateTaskRun: vi.fn(),
         getTaskDispatch: vi.fn().mockReturnValue({ id: "d-1", finishedAt: "2026-03-09T11:00:00.000Z" }),
         updateTaskDispatch: vi.fn(),
         appendTaskRunEvent: vi.fn(),
         finalizeSprintRunCancellationIfIdle: vi.fn(),
+        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue({
+          id: "provider-invocation-1",
+          provider: "jules",
+          status: "completed",
+          finishedAt: "2026-03-09T11:00:00.000Z",
+        }),
+        updateProviderInvocationUsage: vi.fn(),
+        listExecutionInvocationsByProviderInvocationId: vi.fn().mockReturnValue([{
+          id: "execution-invocation-1",
+          status: "completed",
+          finishedAt: "2026-03-09T11:00:00.000Z",
+        }]),
+        updateExecutionInvocation: vi.fn(),
+        appendExecutionInvocationMessage: vi.fn(),
       },
       sprintRunId: "sprint-run-1",
       projectManagementRepository: {
@@ -2379,6 +2402,31 @@ describe("runSessionSyncStep", () => {
     expect(result.subtasks.find(t => t.id === "task-completed")?.status).toBe("RUNNING");
     // Planning status must be persisted as in_progress (not left on completed).
     expect(updateTaskMock).toHaveBeenCalledWith("rec-c", expect.objectContaining({ status: "in_progress" }));
+    expect(deps.executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith(
+      "provider-invocation-1",
+      {
+        status: "running",
+        finishedAt: null,
+        durationMs: null,
+      },
+    );
+    expect(deps.executionRepository.updateExecutionInvocation).toHaveBeenCalledWith(
+      "execution-invocation-1",
+      expect.objectContaining({
+        status: "running",
+        finishedAt: null,
+        errorMessage: null,
+      }),
+    );
+    expect(deps.executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "execution-invocation-1",
+      expect.objectContaining({
+        role: "system",
+        metadata: expect.objectContaining({
+          recovery: "session_sync_remote_session_reactivated",
+        }),
+      }),
+    );
   });
 
   it("holds a rate-limited task in QUOTA until the retry delay expires, then requeues it", async () => {
@@ -3128,6 +3176,20 @@ describe("runSessionSyncStep", () => {
       purpose: "task_coding",
       status: "running",
     });
+    const executionInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: pausedRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      providerInvocationId: usage.id,
+      type: "task_coding",
+      status: "running",
+      provider: "jules",
+      model: "jules-agent",
+      startedAt: "2026-06-28T14:00:00.000Z",
+    });
 
     const subtasks: Subtask[] = [
       {
@@ -3191,7 +3253,60 @@ describe("runSessionSyncStep", () => {
     expect(updatedUsage?.sprintRunId).toBe(resumedRun.id);
     expect(updatedUsage?.taskRunId).toBe(taskRun.id);
     expect(updatedUsage?.status).toBe("completed");
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      status: "completed",
+      finishedAt: expect.any(String),
+    });
     expect(updatedTask?.status).toBe("coding_completed");
+
+    // A restart or older runtime may leave invocation rows active even though
+    // the task run and dispatch are already terminal. A subsequent sync must
+    // converge those rows too; terminal task state must not short-circuit it.
+    executionRepository.updateProviderInvocationUsage(usage.id, {
+      status: "running",
+      finishedAt: null,
+      durationMs: null,
+    });
+    executionRepository.updateExecutionInvocation(executionInvocation.id, {
+      status: "running",
+      finishedAt: null,
+    });
+
+    await runSessionSyncStep(
+      result.subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "resumed-jules-session",
+              name: "sessions/resumed-jules-session",
+              title: "Sprint 28: [run:codeux/s28/t02] [T02] Resume stale Jules run",
+              state: "COMPLETED",
+              provider: "jules",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: resumedRun.id,
+        logger: { warn: vi.fn() },
+      },
+      true,
+      { repoPath: "/tmp/codeux", sprintNumber: 28 },
+    );
+
+    expect(executionRepository.getProviderInvocationUsage(usage.id)).toMatchObject({
+      status: "completed",
+      finishedAt: expect.any(String),
+    });
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      status: "completed",
+      finishedAt: expect.any(String),
+    });
   });
 
   it("recovers a stale recorded Jules task when the provider session is gone", async () => {

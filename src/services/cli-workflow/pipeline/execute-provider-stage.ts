@@ -44,6 +44,16 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
   const previousInvocation = (ctx.deps.executionRepository && typeof ctx.deps.executionRepository.getLatestProviderInvocationUsageBySession === "function")
     ? ctx.deps.executionRepository.getLatestProviderInvocationUsageBySession(ctx.workspaceSessionId, "task_coding")
     : null;
+  if (ctx.requireProviderSessionResume && !previousInvocation) {
+    throw new Error(`Cannot continue clarification: no prior ${ctx.provider} invocation exists for the preserved workspace session.`);
+  }
+  if (
+    ctx.requireProviderSessionResume
+    && ctx.provider === "claude-code"
+    && !previousInvocation?.nativeSessionId
+  ) {
+    throw new Error("Cannot continue clarification: the prior Claude Code native session id was not captured.");
+  }
   const continueSessionId = previousInvocation?.nativeSessionId
     || (ctx.provider === "claude-code" || ctx.provider === "codex" ? null : ctx.workspaceSessionId);
   const continueSessionWithoutNativeId = ctx.provider === "codex"
@@ -111,6 +121,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     workspaceSessionId: ctx.workspaceSessionId,
     continueSessionId,
     continueSessionWithoutNativeId,
+    allowFreshSessionFallback: ctx.requireProviderSessionResume ? false : undefined,
     openCodeBaselineRawUsageJson,
     invocationId: ctx.executionInvocationId,
     finalizeExecutionInvocation: ctx.executionInvocationId ? false : undefined,

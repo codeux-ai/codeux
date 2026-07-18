@@ -4,6 +4,8 @@ import { TOOL_DEFINITIONS } from "../contracts/mcp-tool-definitions.js";
 import type { McpToolAudience, ToolName } from "../contracts/mcp-tool-definitions.js";
 import type { DashboardSettings } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { ProviderInvocationUsageRecord } from "../contracts/execution-types.js";
+import type { ExecutionInvocationRecord } from "../contracts/invocation-types.js";
 import { sanitizeCustomMcpServers } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../repositories/settings-defaults.js";
 import type { AgentCodeUxToolAccess } from "../mcp/mcp-tool-availability.js";
@@ -90,6 +92,37 @@ export const isWorkerClarificationAgent = (args: {
     || routing.orchestratorAgentPresetIds.includes(args.agentId);
 };
 
+/**
+ * Authorize the narrow clarification audience from the live execution that
+ * launched the MCP client. Request scope may be omitted because the service
+ * derives it from the invocation, but any supplied scope must match exactly.
+ */
+export const isInvocationScopedWorkerClarificationAgent = (args: {
+  agentId: string;
+  projectId: string;
+  invocation: Pick<
+    ExecutionInvocationRecord,
+    "agentPresetId" | "projectId" | "status" | "taskId" | "taskRunId" | "type"
+  > | null;
+  requestedTaskId?: unknown;
+  requestedTaskRunId?: unknown;
+}): boolean => {
+  const invocation = args.invocation;
+  if (
+    !invocation
+    || invocation.projectId !== args.projectId
+    || invocation.agentPresetId !== args.agentId
+    || invocation.type !== "cli_task_coding"
+    || invocation.status !== "running"
+  ) {
+    return false;
+  }
+  if (args.requestedTaskId !== undefined && args.requestedTaskId !== invocation.taskId) {
+    return false;
+  }
+  return args.requestedTaskRunId === undefined || args.requestedTaskRunId === invocation.taskRunId;
+};
+
 export const isProjectManagerClarificationAgent = (args: {
   agentId: string;
   agentName: string;
@@ -154,6 +187,55 @@ export const workerClarificationAgentMcpAccess = (
 export const projectManagerClarificationAgentMcpAccess = (
   access: AgentMcpAccessConfig | null | undefined,
 ): AgentMcpAccessConfig => clarificationGatewayAccess(access, "reply_to_clarification");
+
+/**
+ * Automated clarification generation is a decision-only turn. It may inspect
+ * project knowledge and persistent skill guidance, but it must not mutate
+ * project state or contact arbitrary linked MCP servers. The runtime delivers
+ * the returned answer after the provider exits, so this turn does not need the
+ * reply tool either.
+ */
+export const automaticClarificationReplyAgentMcpAccess = (): AgentMcpAccessConfig => {
+  const readOnlyTools = new Set<ToolName>(["search_knowledge", "search_skills"]);
+  return {
+    codeUxEnabled: true,
+    codeUxToolToggles: TOOL_DEFINITIONS.map((tool) => ({
+      name: tool.name,
+      enabled: readOnlyTools.has(tool.name),
+      isInternal: true,
+    })),
+    linkedServerIds: [],
+  };
+};
+
+/**
+ * Identify the exact internal provider turn used to draft an automatic
+ * clarification answer. Persisted agent permissions must not broaden this
+ * decision-only invocation.
+ */
+export const isAutomaticClarificationReplyInvocation = (args: {
+  agentId: string;
+  projectId: string;
+  invocation: Pick<
+    ExecutionInvocationRecord,
+    "agentPresetId" | "projectId" | "providerInvocationId" | "status" | "type"
+  > | null;
+  providerUsage: Pick<ProviderInvocationUsageRecord, "id" | "projectId" | "purpose" | "status"> | null;
+}): boolean => {
+  const { invocation, providerUsage } = args;
+  return Boolean(
+    invocation
+    && providerUsage
+    && invocation.type === "worker_reply"
+    && invocation.status === "running"
+    && invocation.agentPresetId === args.agentId
+    && invocation.projectId === args.projectId
+    && invocation.providerInvocationId === providerUsage.id
+    && providerUsage.projectId === args.projectId
+    && providerUsage.purpose === "clarification_reply"
+    && providerUsage.status === "running",
+  );
+};
 
 export const isSchedulerOnlyAgentMcpAccess = (
   access: Pick<AgentMcpAccessConfig, "codeUxEnabled" | "codeUxToolToggles">,
@@ -237,6 +319,7 @@ const withSkillRetrievalEnabled = (access: AgentMcpAccessConfig): AgentMcpAccess
 export const resolveAgentMcpRuntime = (args: {
   access: AgentMcpAccessConfig | null | undefined;
   agentId: string | null | undefined;
+  executionInvocationId?: string | null;
   customMcpServers: CustomMcpServer[];
   mcpConnection: McpConnectionInfo | null;
   persistentSkillRetrievalEnabled?: boolean;
@@ -246,7 +329,11 @@ export const resolveAgentMcpRuntime = (args: {
 
   if (resolvedAccess == null) {
     const mcpConnection = args.mcpConnection && args.agentId
-      ? { ...args.mcpConnection, agentId: args.agentId }
+      ? {
+        ...args.mcpConnection,
+        agentId: args.agentId,
+        executionInvocationId: args.executionInvocationId ?? undefined,
+      }
       : args.mcpConnection;
     return {
       customMcpServers: args.customMcpServers,
@@ -261,7 +348,11 @@ export const resolveAgentMcpRuntime = (args: {
   const customMcpServers = sanitizeCustomMcpServers(args.customMcpServers).filter((server) => linked.has(server.id));
   const baseConnection = access.codeUxEnabled ? args.mcpConnection : null;
   const mcpConnection = baseConnection && args.agentId
-    ? { ...baseConnection, agentId: args.agentId }
+    ? {
+      ...baseConnection,
+      agentId: args.agentId,
+      executionInvocationId: args.executionInvocationId ?? undefined,
+    }
     : baseConnection;
 
   return { customMcpServers, mcpConnection };

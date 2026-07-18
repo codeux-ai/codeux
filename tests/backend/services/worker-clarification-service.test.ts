@@ -67,7 +67,17 @@ describe("WorkerClarificationService", () => {
         sessionId: `session-${suffix}`,
         state: "RUNNING",
       });
-      return { project, sprint, task, sprintRun, dispatch, taskRun };
+      const executionInvocation = execution.createExecutionInvocation({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        taskRunId: taskRun.id,
+        type: "cli_task_coding",
+        agentPresetId: null,
+      });
+      return { project, sprint, task, sprintRun, dispatch, taskRun, executionInvocation };
     };
 
     return { attention, execution, service, primary: createScope("one"), foreign: createScope("two") };
@@ -78,6 +88,7 @@ describe("WorkerClarificationService", () => {
     const created = service.create({
       projectId: primary.project.id,
       taskRunId: primary.taskRun.id,
+      executionInvocationId: primary.executionInvocation.id,
       requesterAgentId: "coding-agent",
       deduplicationKey: "provider-request-42",
       questionMarkdown: "Should this migration preserve legacy rows?",
@@ -85,6 +96,7 @@ describe("WorkerClarificationService", () => {
     const duplicate = service.create({
       projectId: primary.project.id,
       taskRunId: primary.taskRun.id,
+      executionInvocationId: primary.executionInvocation.id,
       requesterAgentId: "coding-agent",
       deduplicationKey: "provider-request-42",
       questionMarkdown: "Should this migration preserve legacy rows?",
@@ -99,8 +111,14 @@ describe("WorkerClarificationService", () => {
       dispatchId: primary.dispatch.id,
       taskRunId: primary.taskRun.id,
       sessionId: "session-one",
+      executionInvocationId: primary.executionInvocation.id,
     });
     expect(attention.getAttentionItem(created.id)).toMatchObject({ ownerType: "human", status: "open" });
+    expect(service.findPendingForTask(
+      primary.project.id,
+      primary.task.id,
+      primary.sprintRun.id,
+    )?.id).toBe(created.id);
     expect(execution.listTaskRunEvents(primary.taskRun.id).filter((event) => event.eventType === "worker_clarification_requested"))
       .toHaveLength(1);
 
@@ -109,11 +127,17 @@ describe("WorkerClarificationService", () => {
       repliedByAgentId: "project-manager",
     });
     expect(result.clarification.status).toBe("replied");
+    expect(service.findPendingForTask(
+      primary.project.id,
+      primary.task.id,
+      primary.sprintRun.id,
+    )).toBeNull();
     expect(result.continuation).toEqual(expect.objectContaining({
       kind: "worker_clarification_reply",
       clarificationId: created.id,
       taskRunId: primary.taskRun.id,
       sessionId: "session-one",
+      executionInvocationId: primary.executionInvocation.id,
       answerMarkdown: "Yes, preserve them.",
     }));
     const replyEvent = execution.listTaskRunEvents(primary.taskRun.id)
@@ -127,6 +151,7 @@ describe("WorkerClarificationService", () => {
     expect(service.create({
       projectId: primary.project.id,
       taskRunId: primary.taskRun.id,
+      executionInvocationId: primary.executionInvocation.id,
       requesterAgentId: "coding-agent",
       deduplicationKey: "provider-request-42",
       questionMarkdown: "Should this migration preserve legacy rows?",
@@ -143,6 +168,7 @@ describe("WorkerClarificationService", () => {
       { sprintRunId: foreign.sprintRun.id },
       { dispatchId: foreign.dispatch.id },
       { taskRunId: foreign.taskRun.id },
+      { executionInvocationId: foreign.executionInvocation.id },
     ];
 
     for (const [index, reference] of foreignReferences.entries()) {

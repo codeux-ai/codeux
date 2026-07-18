@@ -589,6 +589,9 @@ describe("CliWorkflowService unpushed commit detection", () => {
         prUrl: null,
         workerBranch: null,
         taskId: "task-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        sprintRunId: null,
       }),
       getLatestTaskRunBySessionId: vi.fn(),
       appendTaskRunEvent: vi.fn(),
@@ -609,6 +612,9 @@ describe("CliWorkflowService unpushed commit detection", () => {
       executionRepository,
       projectManagementRepository: {
         updateTask: vi.fn(),
+      },
+      projectAttentionService: {
+        openItem: vi.fn().mockReturnValue({ id: "attention-1" }),
       },
       logger: { error: vi.fn() },
     };
@@ -647,7 +653,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
     );
     expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith(
       "task-1",
-      { status: "pending" },
+      { status: "in_progress" },
     );
     expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
       "run-1",
@@ -656,8 +662,17 @@ describe("CliWorkflowService unpushed commit detection", () => {
       expect.objectContaining({
         category: "git_configuration",
         errorMessage: "fatal: could not read Username for 'https://github.com': No such device or address",
+        attentionItemId: "attention-1",
       }),
       expect.objectContaining({ sourceEventKey: undefined }),
+    );
+    expect(deps.projectAttentionService.openItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "project-1",
+        taskId: "task-1",
+        attentionType: "manual_attention",
+        ownerType: "human",
+      }),
     );
   });
 
@@ -1050,9 +1065,13 @@ describe("CliWorkflowService unpushed commit detection", () => {
     const executionRepository = {
       getTaskRun: vi.fn().mockReturnValue({
         id: "run-blocked",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        sprintRunId: null,
         startedAt: "2026-07-11T08:00:00.000Z",
         taskId: "task-blocked",
         dispatchId: "dispatch-blocked",
+        sessionId: "session-blocked",
       }),
       updateTaskRun: vi.fn(),
       updateTaskDispatch: vi.fn(),
@@ -1069,6 +1088,13 @@ describe("CliWorkflowService unpushed commit detection", () => {
       agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       executionRepository,
+      sprintRunLifecycleService: {
+        finalizeCancellationIfIdle: vi.fn(),
+      },
+      workerClarificationService: {
+        findPendingForTaskRun: vi.fn().mockReturnValue(null),
+        create: vi.fn().mockReturnValue({ id: "clarification-1" }),
+      },
       logger: { error: vi.fn() },
     };
     const service = new CliWorkflowService(deps as any);
@@ -1092,7 +1118,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
 
     expect(executionRepository.updateTaskRun).toHaveBeenCalledWith(
       "run-blocked",
-      expect.objectContaining({ state: "BLOCKED", workerBranch: null }),
+      expect.objectContaining({ state: "BLOCKED", workerBranch: "worker-blocked" }),
     );
     expect(executionRepository.updateTaskDispatch).toHaveBeenCalledWith(
       "dispatch-blocked",
@@ -1114,6 +1140,125 @@ describe("CliWorkflowService unpushed commit detection", () => {
       expect.anything(),
       expect.anything(),
       expect.anything(),
+    );
+    expect(deps.workerClarificationService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "project-1",
+        taskId: "task-blocked",
+        taskRunId: "run-blocked",
+        deduplicationKey: "coding-outcome:run-blocked",
+      }),
+    );
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-blocked",
+      "cli_workflow_blocked",
+      "system",
+      expect.objectContaining({
+        attentionItemId: "clarification-1",
+      }),
+      expect.any(Object),
+    );
+    expect(executeCleanupStage).toHaveBeenCalledWith(
+      expect.objectContaining({ preserveWorkspaceForClarification: true }),
+    );
+  });
+
+  it("parks before Git finalization when the coding agent requested clarification through MCP", async () => {
+    const clarification = {
+      id: "clarification-mcp",
+      projectId: "project-1",
+      taskId: "task-mcp",
+      sprintId: "sprint-1",
+      sprintRunId: "sprint-run-1",
+      dispatchId: "dispatch-mcp",
+      taskRunId: "run-mcp",
+      sessionId: "session-mcp",
+      executionInvocationId: "xi-mcp",
+      requesterAgentId: "coding-agent",
+      deduplicationKey: "mcp-question",
+      status: "pending",
+      questionMarkdown: "Should I preserve the existing format?",
+    };
+    const executionRepository = {
+      getTaskRun: vi.fn().mockReturnValue({
+        id: "run-mcp",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        sprintRunId: "sprint-run-1",
+        startedAt: "2026-07-18T08:00:00.000Z",
+        taskId: "task-mcp",
+        dispatchId: "dispatch-mcp",
+        sessionId: "session-mcp",
+        workerBranch: null,
+      }),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue({ status: "running" }),
+    };
+    const deps = {
+      sessionTracking: {
+        appendActivity: vi.fn(),
+        updateSession: vi.fn(),
+      },
+      projectManagementRepository: { updateTask: vi.fn() },
+      getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  " } }),
+      agentPresetSyncService: {
+        getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }),
+      },
+      getGithubToken: vi.fn().mockReturnValue("token"),
+      executionRepository,
+      sprintRunLifecycleService: {
+        finalizeCancellationIfIdle: vi.fn(),
+      },
+      workerClarificationService: {
+        findPendingForTaskRun: vi.fn().mockReturnValue(clarification),
+        create: vi.fn(),
+      },
+      logger: { error: vi.fn() },
+    };
+    const service = new CliWorkflowService(deps as any);
+
+    vi.mocked(executePrepareStage).mockResolvedValue({ providerPrompt: "mock prompt" } as any);
+    vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult(
+      "I completed the turn.\nCODE_UX_TASK_OUTCOME: completed",
+    ));
+    vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: false });
+
+    await (service as any).runTaskWorkflow({
+      provider: "claude-code",
+      task: { id: "T03", prompt: "prompt", title: "title" },
+      repoPath: "/repo",
+      featureBranch: "main",
+      sprintNumber: 1,
+      sessionId: "session-mcp",
+      taskRunId: "run-mcp",
+      workerBranch: "worker-mcp",
+      title: "Title",
+    });
+
+    expect(executeGitFinalizeStage).not.toHaveBeenCalled();
+    expect(deps.workerClarificationService.create).not.toHaveBeenCalled();
+    expect(executionRepository.updateTaskRun).toHaveBeenCalledWith(
+      "run-mcp",
+      expect.objectContaining({
+        state: "BLOCKED",
+        workerBranch: "worker-mcp",
+      }),
+    );
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-mcp",
+      "cli_workflow_blocked",
+      "system",
+      expect.objectContaining({
+        category: "worker_clarification_requested",
+        clarificationId: "clarification-mcp",
+        attentionItemId: "clarification-mcp",
+      }),
+      expect.any(Object),
+    );
+    expect(executeCleanupStage).toHaveBeenCalledWith(
+      expect.objectContaining({ preserveWorkspaceForClarification: true }),
     );
   });
 

@@ -3,7 +3,10 @@ import * as path from "node:path";
 import os from "node:os";
 import type { ProviderId } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
-import { buildProviderMcpConfigArtifact } from "../infrastructure/providers/cli/mcp-config-format.js";
+import {
+  buildProviderMcpConfigArtifact,
+  MCP_STREAMABLE_HTTP_ACCEPT,
+} from "../infrastructure/providers/cli/mcp-config-format.js";
 
 export type LocalMcpCliProvider = Extract<ProviderId, "claude-code" | "gemini" | "codex" | "qwen-code" | "opencode" | "antigravity">;
 
@@ -100,7 +103,10 @@ const buildAntigravityConfig = async (configPath: string, conn: McpConnectionInf
   }
   mcpServers.code_ux = {
     serverUrl: conn.url,
-    ...(Object.keys(headers).length > 0 ? { headers } : {}),
+    headers: {
+      ...headers,
+      Accept: MCP_STREAMABLE_HTTP_ACCEPT,
+    },
   };
   return `${JSON.stringify({ ...existing, mcpServers }, null, 2)}\n`;
 };

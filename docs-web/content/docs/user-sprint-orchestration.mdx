@@ -183,6 +183,12 @@ Higher-level **automation level** governs the master switch:
 
 Intervention deduplication is scoped to one provider revision, not only the waiting-state name. If Code UX is offline while a provider resumes and then asks for feedback again, the newer remote revision creates a fresh action-required episode and can receive a new automated answer. A restart while the same revision is still waiting continues to reuse the durable prior checkpoint.
 
+When the current Jules session resumes after briefly reaching a terminal state, Code UX reopens its existing provider and execution invocation lifecycle alongside the task and dispatch. A terminal remote session also settles stale running invocation rows even when the task run was already terminal. An older hosted session is not reactivated after a newer task retry exists; Code UX closes only the superseded local audit rows and leaves the remote session untouched. This keeps provider capacity and Live status accurate during later QA, CI, or merge work without duplicate running projections or repeated full-transcript downloads.
+
+Completed and merged task cards retain successful QA evidence, but do not show an older running, failed, cancelled, or changes-requested review as current state. That review remains available in execution history for auditing.
+
+Local coding agents do not have authority to create an unexplained human block from a reasoning marker. A blocker or explicit `request_clarification` creates a durable attention item, records the exact execution invocation, and routes the question to the configured Project manager. The manager's automatic answer turn is read-only. The answer continues in the exact same workspace, branch, and provider-native conversation across Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity; Code UX will not substitute a newer workspace or fresh session. Ordinary coding retries stay deferred while the answer is pending, and pausing the sprint prevents automatic generation or continuation. If the Project manager, guardrail, or native resume path cannot complete safely, the task remains blocked with that attention item visibly owned by a human. A provider turn that completes without file changes still follows the normal completion path, where enabled QA can confirm that no change was required.
+
 ## Finalisation
 
 When every subtask reaches a terminal merged state, the watch loop runs the **finalisation step**:

@@ -25,6 +25,7 @@ interface NormalizedClarificationScope {
   dispatchId: string | null;
   taskRunId: string | null;
   sessionId: string | null;
+  executionInvocationId: string | null;
 }
 
 function requiredText(value: string, label: string, maxChars: number): string {
@@ -42,6 +43,8 @@ function optionalIdentifier(value: string | null | undefined, label: string): st
 }
 
 export class WorkerClarificationService {
+  private readonly createdListeners = new Set<(clarification: WorkerClarificationRecord) => void>();
+
   constructor(
     private readonly clarificationRepository: WorkerClarificationRepository,
     private readonly projectRepository: ProjectManagementRepository,
@@ -66,7 +69,37 @@ export class WorkerClarificationService {
       requestedAt: this.now(),
     });
     this.appendTaskRunEvent(clarification, "worker_clarification_requested", requesterAgentId);
+    for (const listener of this.createdListeners) {
+      try {
+        listener(clarification);
+      } catch {
+        // Creation is durable and must not fail because a background coordinator
+        // could not be notified. Startup recovery will reschedule pending items.
+      }
+    }
     return clarification;
+  }
+
+  onCreated(listener: (clarification: WorkerClarificationRecord) => void): () => void {
+    this.createdListeners.add(listener);
+    return () => this.createdListeners.delete(listener);
+  }
+
+  findPendingForTaskRun(projectId: string, taskRunId: string): WorkerClarificationRecord | null {
+    return this.list(projectId, { statuses: ["pending"], limit: 200 })
+      .find((record) => record.taskRunId === taskRunId) ?? null;
+  }
+
+  findPendingForTask(
+    projectId: string,
+    taskId: string,
+    sprintRunId?: string | null,
+  ): WorkerClarificationRecord | null {
+    return this.list(projectId, { statuses: ["pending"], limit: 200 })
+      .find((record) => (
+        record.taskId === taskId
+        && (sprintRunId === undefined || record.sprintRunId === sprintRunId)
+      )) ?? null;
   }
 
   list(projectId: string, options?: ListWorkerClarificationsOptions): WorkerClarificationRecord[] {
@@ -174,8 +207,27 @@ export class WorkerClarificationService {
     let sprintId = optionalIdentifier(input.sprintId, "Sprint id");
     let sprintRunId = optionalIdentifier(input.sprintRunId, "Sprint run id");
     let dispatchId = optionalIdentifier(input.dispatchId, "Dispatch id");
-    const taskRunId = optionalIdentifier(input.taskRunId, "Task run id");
+    let taskRunId = optionalIdentifier(input.taskRunId, "Task run id");
     let sessionId = optionalIdentifier(input.sessionId, "Session id");
+    const executionInvocationId = optionalIdentifier(
+      input.executionInvocationId,
+      "Execution invocation id",
+    );
+
+    const executionInvocation = executionInvocationId
+      ? this.executionRepository.getExecutionInvocation(executionInvocationId)
+      : null;
+    if (executionInvocationId && !executionInvocation) {
+      throw new EntityNotFoundError(`Execution invocation not found: ${executionInvocationId}`);
+    }
+    if (executionInvocation) {
+      this.assertProject("Execution invocation", executionInvocation.id, executionInvocation.projectId, projectId);
+      taskId = this.mergeReference("task", taskId, executionInvocation.taskId);
+      sprintId = this.mergeReference("sprint", sprintId, executionInvocation.sprintId);
+      sprintRunId = this.mergeReference("sprint run", sprintRunId, executionInvocation.sprintRunId);
+      dispatchId = this.mergeReference("dispatch", dispatchId, executionInvocation.dispatchId);
+      taskRunId = this.mergeReference("task run", taskRunId, executionInvocation.taskRunId);
+    }
 
     const taskRun = taskRunId ? this.executionRepository.getTaskRun(taskRunId) : null;
     if (taskRunId && !taskRun) throw new EntityNotFoundError(`Task run not found: ${taskRunId}`);
@@ -215,7 +267,16 @@ export class WorkerClarificationService {
       this.assertProject("Sprint", sprint.id, sprint.projectId, projectId);
     }
 
-    return { projectId, taskId, sprintId, sprintRunId, dispatchId, taskRunId, sessionId };
+    return {
+      projectId,
+      taskId,
+      sprintId,
+      sprintRunId,
+      dispatchId,
+      taskRunId,
+      sessionId,
+      executionInvocationId,
+    };
   }
 
   private requireProject(projectId: string): void {
@@ -250,6 +311,7 @@ export class WorkerClarificationService {
       dispatchId: record.dispatchId,
       taskRunId: record.taskRunId,
       sessionId: record.sessionId,
+      executionInvocationId: record.executionInvocationId,
       requesterAgentId: record.requesterAgentId,
       status: record.status,
     };
@@ -273,6 +335,7 @@ export class WorkerClarificationService {
       dispatchId: clarification.dispatchId,
       taskRunId: clarification.taskRunId,
       sessionId: clarification.sessionId,
+      executionInvocationId: clarification.executionInvocationId,
       requesterAgentId: clarification.requesterAgentId,
       repliedByAgentId,
       answerMarkdown,

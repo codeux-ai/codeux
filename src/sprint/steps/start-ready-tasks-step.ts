@@ -189,6 +189,14 @@ export const runStartReadyTasksStep = async (
     } catch (error: unknown) {
       const deferral = getTaskDispatchDeferral(error);
       if (deferral) {
+        if (deferral.reason === "worker_clarification_pending") {
+          task.status = "BLOCKED";
+          options.logger.info("Task dispatch deferred while a worker clarification is pending", {
+            taskId: task.id,
+            clarificationId: deferral.clarificationId,
+          });
+          continue;
+        }
         const deferredProvider = deferral.provider || provider || undefined;
         const providerSettings = deferredProvider ? options.getProviderSettings(deferredProvider) : {};
         const runningCount = deferredProvider ? currentRunningCounts[deferredProvider] : undefined;
