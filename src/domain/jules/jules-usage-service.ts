@@ -4,6 +4,7 @@ import type { ExecutionRepository } from "../../repositories/execution-repositor
 import type { Logger } from "../../shared/logging/logger.js";
 import type {
   CreateProviderInvocationUsageInput,
+  ProviderInvocationUsageRecord,
   UpdateProviderInvocationUsageInput,
 } from "../../contracts/execution-types.js";
 import type { AppendExecutionInvocationMessageInput } from "../../contracts/invocation-types.js";
@@ -113,6 +114,7 @@ export class JulesUsageService {
         && existingRecord.status === "completed"
         && existingRecord.rawUsageJson?.estimator === JULES_ESTIMATOR_VERSION
       ) {
+        this.reconcileCompletedExecutionInvocations(existingRecord, taskId);
         this.logger.info("Jules usage telemetry already calculated and saved for session", { sessionId });
         return;
       }
@@ -257,6 +259,30 @@ export class JulesUsageService {
     const pending = this.usageSyncTail.then(work, work);
     this.usageSyncTail = pending.catch(() => undefined);
     return pending;
+  }
+
+  private reconcileCompletedExecutionInvocations(
+    record: ProviderInvocationUsageRecord,
+    fallbackTaskId: string,
+  ): void {
+    const finishedAt = record.finishedAt || record.updatedAt || new Date().toISOString();
+    const execInvocations = this.executionRepository.listExecutionInvocationsByProviderInvocationId(record.id);
+    for (const invocation of execInvocations) {
+      if (invocation.status !== "running" && invocation.status !== "paused") {
+        continue;
+      }
+      this.executionRepository.updateExecutionInvocation(invocation.id, {
+        status: "completed",
+        sprintId: invocation.sprintId || record.sprintId,
+        taskId: invocation.taskId || record.taskId || fallbackTaskId,
+        sprintRunId: invocation.sprintRunId || record.sprintRunId,
+        dispatchId: invocation.dispatchId || record.dispatchId,
+        taskRunId: invocation.taskRunId || record.taskRunId,
+        attentionItemId: invocation.attentionItemId || record.attentionItemId,
+        finishedAt,
+        errorMessage: null,
+      });
+    }
   }
 
   private async fetchUsageConversation(sessionId: string): Promise<JulesUsageConversation> {

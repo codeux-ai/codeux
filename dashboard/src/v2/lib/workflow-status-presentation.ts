@@ -70,6 +70,23 @@ function normalizeStatus(value: string): string {
   return value.trim().toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
 }
 
+export function isTaskReviewSupersededByCompletion(
+  scope: WorkflowStatusPresentationInput["scope"],
+  status: string,
+  review: SprintReviewSummary | null | undefined,
+): boolean {
+  if (scope !== "task" || normalizeStatus(status) !== "completed" || !review) {
+    return false;
+  }
+  const reviewStatus = normalizeStatus(review.status);
+  const outcome = normalizeStatus(review.outcome ?? "");
+  if (["running", "in_progress", "pending"].includes(reviewStatus)) {
+    return false;
+  }
+  return ["failed", "errored", "cancelled"].includes(reviewStatus)
+    || ["changes_requested", "failed", "rejected"].includes(outcome);
+}
+
 const ACTIVE_ATTENTION_STATUSES = new Set(["open", "claimed"]);
 const HUMAN_ATTENTION_OWNERS = new Set(["human", "user"]);
 
@@ -293,7 +310,10 @@ export function deriveWorkflowStatusPresentation(
   const suppressRunningSprintTaskGates = input.scope === "sprint"
     && ((status === "running" && input.completion !== 100) || planningOwnsWorkflow);
   const ciPresentation = suppressRunningSprintTaskGates ? null : input.ciPresentation;
-  const stageReview = suppressRunningSprintTaskGates ? null : input.review;
+  const stageReview = suppressRunningSprintTaskGates
+    || isTaskReviewSupersededByCompletion(input.scope, status, input.review)
+    ? null
+    : input.review;
   const pullRequest = resolveCiStep("pull_request", ciPresentation?.steps[0], workflowCompleted);
   const checks = resolveCiStep("checks", ciPresentation?.steps[1], workflowCompleted);
   const merge = resolveCiStep("merge", ciPresentation?.steps[2], workflowCompleted);

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { CiStatusPresentation } from "../../../../dashboard/src/v2/lib/ci-status-presentation.js";
-import { deriveWorkflowStatusPresentation } from "../../../../dashboard/src/v2/lib/workflow-status-presentation.js";
+import {
+  deriveWorkflowStatusPresentation,
+  isTaskReviewSupersededByCompletion,
+} from "../../../../dashboard/src/v2/lib/workflow-status-presentation.js";
 import type { ExecutionAttentionItemSummary } from "../../../../dashboard/src/types.js";
 
 const attention = (
@@ -188,6 +191,45 @@ describe("deriveWorkflowStatusPresentation", () => {
     expect(presentation.label).toBe("Completed");
     expect(presentation.state).toBe("successful");
     expect(presentation.stages.every((stage) => stage.state === "successful")).toBe(true);
+  });
+
+  it("does not let historical requested edits override authoritative task completion", () => {
+    const presentation = deriveWorkflowStatusPresentation({
+      scope: "task",
+      status: "completed",
+      ciPresentation: successfulCi,
+      review: {
+        status: "completed",
+        outcome: "changes_requested",
+        summary: "Historical edits were superseded by the merged task.",
+        findings: [],
+        reviewer: "QA Reviewer",
+        finishedAt: "2026-07-14T08:00:00.000Z",
+      },
+    });
+
+    expect(presentation).toMatchObject({
+      state: "successful",
+      tone: "successful",
+      label: "Completed",
+    });
+    expect(presentation.stages[2]).toMatchObject({
+      id: "qa",
+      state: "successful",
+      statusLabel: "QA cleared",
+    });
+    expect(presentation.stages.every((stage) => stage.state === "successful")).toBe(true);
+  });
+
+  it("keeps an active review visible even when it still carries an older outcome", () => {
+    expect(isTaskReviewSupersededByCompletion("task", "completed", {
+      status: "running",
+      outcome: "changes_requested",
+      summary: "Rechecking the requested edits.",
+      findings: [],
+      reviewer: "QA Reviewer",
+      finishedAt: null,
+    })).toBe(false);
   });
 
   it("settles PR, CI, and merge fallbacks for a completed sprint without gate history", () => {

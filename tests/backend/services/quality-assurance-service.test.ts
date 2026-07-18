@@ -135,6 +135,110 @@ describe("QualityAssuranceService", () => {
     expect(releaseSnapshotReservation).toHaveBeenCalledOnce();
   });
 
+  it("fails a pre-dispatch QA invocation when snapshot preparation fails", async () => {
+    const invocation = {
+      id: "qa-invocation-1",
+      status: "running",
+      providerInvocationId: null,
+    };
+    const updateExecutionInvocation = vi.fn((
+      _id: string,
+      update: Record<string, unknown>,
+    ) => Object.assign(invocation, update));
+    const qaRun = {
+      id: "qa-run-1",
+      payload: {},
+    };
+    const updateRun = vi.fn((
+      _id: string,
+      update: { payload?: Record<string, unknown> },
+    ) => {
+      if (update.payload) {
+        qaRun.payload = update.payload;
+      }
+      return qaRun;
+    });
+    const updateSession = vi.fn();
+    const executeRequest = vi.fn();
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue(invocation),
+        getExecutionInvocation: vi.fn().mockReturnValue(invocation),
+        updateExecutionInvocation,
+      } as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {
+        createSession: vi.fn(),
+        updateSession,
+      } as any,
+      qaReviewRepository: {
+        getRun: vi.fn().mockReturnValue(qaRun),
+        updateRun,
+      } as any,
+      taskService: {
+        resolveInvocationProvider: () => ({
+          provider: "codex",
+          providerConfigId: "codex",
+          providers: { codex: { model: "gpt-5.3-codex", apiKey: "key", thinkingMode: "HIGH" } },
+        }),
+      } as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      structuredAgentRequestService: { executeRequest } as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    const releaseSnapshotReservation = vi.fn();
+    vi.spyOn((service as any).workspaceManager, "reserveWorkspaceHelper")
+      .mockReturnValue(releaseSnapshotReservation);
+    vi.spyOn((service as any).invocationWorkspacePreparer, "createSnapshotWorkspace")
+      .mockRejectedValue(new Error("Docker API socket unavailable"));
+
+    await expect((service as any).runReview({
+      triggerType: "task_completion",
+      scope: { projectId: "project-1", sprintId: "sprint-1" },
+      projectName: "QA Project",
+      sprintGoal: "Ship safely",
+      repoPath: "/repo/project",
+      agentInstructions: "Review carefully.",
+      subtasks: [],
+      currentTask: {
+        id: "T1",
+        record_id: "task-1",
+        title: "Task",
+        prompt: "Prompt",
+        depends_on: [],
+        status: "COMPLETED",
+        is_independent: true,
+      },
+      taskRun: { id: "task-run-1", taskId: "task-1" },
+      sprintRunId: "sprint-run-1",
+      agentPresetId: null,
+      qaRun,
+      reviewBranch: "task/feature-task-1",
+      baseBranch: "feature/sprint-1",
+    })).rejects.toThrow("Docker API socket unavailable");
+
+    expect(executeRequest).not.toHaveBeenCalled();
+    expect(updateExecutionInvocation).toHaveBeenCalledWith(
+      "qa-invocation-1",
+      expect.objectContaining({
+        status: "failed",
+        finishedAt: expect.any(String),
+        errorMessage: "Docker API socket unavailable",
+      }),
+    );
+    expect(invocation.status).toBe("failed");
+    expect(updateSession).toHaveBeenCalledTimes(2);
+    expect(updateSession).toHaveBeenCalledWith(
+      expect.any(String),
+      { state: "FAILED" },
+    );
+    expect(releaseSnapshotReservation).toHaveBeenCalledOnce();
+  });
+
   it("runs HOST-mode QA against a detached review-branch snapshot", async () => {
     const settings = structuredClone(DEFAULT_DASHBOARD_SETTINGS);
     settings.cliWorkflow.executionMode = "HOST";

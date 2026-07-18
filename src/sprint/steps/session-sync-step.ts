@@ -95,12 +95,20 @@ const resolveProviderActionProjection = (
   });
   const latestStateEvent = events.find((event) => event.eventType === "session_state_synced");
   const latestState = latestStateEvent?.payload || {};
+  const latestEpoch = typeof latestState.actionRequiredEpoch === "string"
+    && latestState.actionRequiredEpoch.trim().length > 0
+    ? latestState.actionRequiredEpoch.trim()
+    : null;
+  const observedEpoch = typeof session.updateTime === "string"
+    && session.updateTime.trim().length > 0
+    ? `${session.state || "ACTION_REQUIRED"}:${session.updateTime.trim()}`
+    : null;
   const sameActionEpisode = latestState.sessionState === session.state
-    && typeof latestState.actionRequiredEpoch === "string"
-    && latestState.actionRequiredEpoch.trim().length > 0;
+    && latestEpoch !== null
+    && (observedEpoch === null || latestEpoch === observedEpoch);
   const epoch = sameActionEpisode
-    ? String(latestState.actionRequiredEpoch)
-    : `${session.state || "ACTION_REQUIRED"}:${session.updateTime || new Date().toISOString()}`;
+    ? latestEpoch
+    : observedEpoch || `${session.state || "ACTION_REQUIRED"}:${new Date().toISOString()}`;
 
   const matchingEvents = events.filter((event) => event.payload?.actionRequiredEpoch === epoch);
   const latestResolution = matchingEvents.find((event) => (

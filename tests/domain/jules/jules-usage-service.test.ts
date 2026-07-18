@@ -153,6 +153,49 @@ describe("JulesUsageService", () => {
       );
     });
 
+    it("closes a linked execution invocation when completed usage is already cached", async () => {
+      getLatestMock.mockReturnValue({
+        id: "existing",
+        createdAt: "2026-05-21T07:29:52.209Z",
+        updatedAt: "2026-05-21T07:35:00.000Z",
+        finishedAt: "2026-05-21T07:34:59.000Z",
+        status: "completed",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: "sprint-run-1",
+        dispatchId: "dispatch-1",
+        taskRunId: "task-run-1",
+        attentionItemId: null,
+        rawUsageJson: { estimator: "activity-snapshot-v2" },
+      });
+      listExecMock.mockReturnValue([{
+        id: "exec-1",
+        status: "running",
+        sprintId: null,
+        taskId: null,
+        sprintRunId: null,
+        dispatchId: null,
+        taskRunId: null,
+        attentionItemId: null,
+      }]);
+
+      await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
+
+      expect(getFullConversationMock).not.toHaveBeenCalled();
+      expect(updateUsageMock).not.toHaveBeenCalled();
+      expect(updateExecMock).toHaveBeenCalledWith("exec-1", {
+        status: "completed",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: "sprint-run-1",
+        dispatchId: "dispatch-1",
+        taskRunId: "task-run-1",
+        attentionItemId: null,
+        finishedAt: "2026-05-21T07:34:59.000Z",
+        errorMessage: null,
+      });
+    });
+
     it("recalculates legacy completed estimates with snapshot-aware parsing", async () => {
       getLatestMock.mockReturnValue({
         id: "existing",

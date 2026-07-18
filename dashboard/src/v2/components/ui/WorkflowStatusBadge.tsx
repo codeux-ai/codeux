@@ -21,6 +21,7 @@ import type { SprintReviewSummary } from "../../types.js";
 import { localizeCiStatusPresentation, type CiStatusPresentation, type CiWorkflowState } from "../../lib/ci-status-presentation.js";
 import {
   deriveWorkflowStatusPresentation,
+  isTaskReviewSupersededByCompletion,
   type WorkflowHumanInterventionEvidence,
   type WorkflowStage,
   type WorkflowStageId,
@@ -330,7 +331,10 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   )
     ? null
     : ciPresentation;
-  const effectiveReview = planningOwnsWorkflow ? null : review;
+  const effectiveReview = planningOwnsWorkflow
+    || isTaskReviewSupersededByCompletion(scope, normalizedStatus, review)
+    ? null
+    : review;
   const localizedCiPresentation = useMemo(
     () => effectiveCiPresentation ? localizeCiStatusPresentation(effectiveCiPresentation, locale) : null,
     [effectiveCiPresentation, locale],
