@@ -20,6 +20,7 @@ describe("git-status-mappers", () => {
         state: "OPEN",
         isDraft: false,
         headRefName: "head",
+        headRefOid: "head-sha",
         baseRefName: "base",
         mergeStateStatus: "CLEAN",
         reviewDecision: "APPROVED",
@@ -39,6 +40,7 @@ describe("git-status-mappers", () => {
       const res = parseOpenPrs(json);
       expect(res.data).toHaveLength(2);
       expect(res.data[0].number).toBe(1);
+      expect(res.data[0].headSha).toBe("head-sha");
       expect(res.data[0].comments).toBe(2);
       expect(res.data[0].checks).toHaveLength(1);
       expect(res.data[0].checks[0].name).toBe("lint");

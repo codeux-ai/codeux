@@ -51,7 +51,7 @@ The `ciIntelligence` block (Settings → CI & Merge) controls how Code UX intera
 
 | Field | Default | Notes |
 | --- | --- | --- |
-| `waitForJulesCiAutofix` | `false` | If true, dispatch a `VirtualWorkerService` doing `ci_fix` tasks on failing CI. |
+| `waitForJulesCiAutofix` | `false` | If true, continue a Jules-managed task in its hosted session; other tasks use a `ci_fix` virtual worker. |
 | `julesCiAutofixMaxRetries` | `5` (max `20`) | Legacy mirror of the CI-fix guardrail; max attempts before human handoff. |
 
 ### Auto-merge modes
@@ -80,10 +80,10 @@ Per cycle, for every task in `CODING_COMPLETED`:
 2. **If already merged** → mark `COMPLETED`, set `is_merged: true`, `merge_indicator = MERGED` or `AUTOMERGE`.
 3. **If no PR found** → revert to `RUNNING`, set `merge_indicator = CI` (waiting for the worker to push).
 4. **If PR has merge conflict** → set `merge_indicator = MERGE_CONFLICT`. If `resolveMergeConflicts: true`, dispatch a worker; else create an attention item.
-5. **If CI failing** → if `waitForJulesCiAutofix: true` and retry budget remains, dispatch a `VirtualWorkerService` doing `ci_fix` tasks; else create an attention item.
+5. **If CI failing** → if `waitForJulesCiAutofix: true` and retry budget remains, continue a Jules-managed task in its hosted session or dispatch a `ci_fix` virtual worker; else create an attention item.
 6. **If CI green** → check comment-resolution gate; if pass, run `featurePrAutoMergeMode` policy.
 
-Each CI-repair attempt corresponds to one provider invocation. Restart recovery, workspace preparation, and Git publication reconciliation reuse the same attempt without spending the budget again. A no-change provider result must run a real provider continuation on the next attempt. When the cap is reached, Code UX opens one deduplicated human handoff; resolving it resets the exact task or final-merge CI-repair budget.
+Each CI-repair attempt corresponds to one provider invocation or one delivered Jules repair message. Restart recovery, workspace preparation, and Git publication reconciliation reuse the same attempt without spending the budget again. Jules repair is single-flight: repeated polling of the same failure cannot send again, and the lease is released only after the PR head commit changes and the resumed Jules session finishes. If Jules asks for clarification during the fix, the normal clarification responder answers inside the same leased attempt; it does not trigger or permit another CI-fix message. CI fallback runs are matched to the current PR head SHA, so an old failed run cannot trigger the next attempt while a new commit is waiting for checks. A no-change virtual-worker result must run a real provider continuation on the next attempt. When the cap is reached, Code UX opens one deduplicated human handoff; resolving it resets the exact task or final-merge CI-repair budget.
 
 The same flow drives the *main branch* merge during finalisation, using `mainBranchAutoMergeMode` and the `resolveMainMergeConflicts` / `resolveAllCommentsBeforeMainMerge` toggles.
 

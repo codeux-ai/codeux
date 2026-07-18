@@ -559,11 +559,13 @@ export async function collectProviderUsageTelemetry(args: {
       rawUsageJson = dbResult.rawUsageJson;
     }
 
-    const transcriptText = conversation
-      .filter((t) => t.kind === "assistant")
-      .map((t) => t.text)
-      .filter(Boolean)
-      .join("\n")
+    // Antigravity emits one PLANNER_RESPONSE before and after many tool events.
+    // Text-mode consumers need the final answer, not a concatenation of every
+    // intermediate narration turn.
+    const transcriptText = [...conversation]
+      .reverse()
+      .find((turn) => turn.kind === "assistant" && turn.text.trim())
+      ?.text
       .trim() || fallbackOutput;
 
     const fullConversation = withLeadingUserTurn(conversation, args.prompt);

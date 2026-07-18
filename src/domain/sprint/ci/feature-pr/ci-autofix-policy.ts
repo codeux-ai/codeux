@@ -2,6 +2,13 @@ import { getFailedJobLabels, getFailedLogSnippets, summarizeFailedRuns } from ".
 import { isJulesManagedTask, resolveTaskSessionId } from "../../../../sprint/action-required-automation.js";
 import type { AutomationLevel, GitCiRunStatus, Subtask } from "../../../../contracts/app-types.js";
 import type { GuardrailScope, GuardrailService } from "../../../../services/guardrail-service.js";
+import {
+  appendJulesCiFixDispatchEvent,
+  buildJulesCiFixAttemptIdentity,
+  claimJulesCiFixAttempt,
+  hasActiveJulesCiFixAttempt,
+  type JulesCiFixExecutionRepository,
+} from "./jules-ci-fix-single-flight.js";
 
 export function getCiAutofixRetryKey(task: Subtask, prNumber: number): string {
   const sessionId = resolveTaskSessionId(task) || task.id;
@@ -128,6 +135,9 @@ export interface CiAutofixEscalationArgs {
   repoPath: string;
   featureBranch: string;
   defaultBranch: string;
+  executionRepository?: JulesCiFixExecutionRepository;
+  taskRunId?: string | null;
+  prHeadSha?: string | null;
   allowJulesSessionNotification?: boolean;
   hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
   onGuardrailExhausted?: (handoff: CiFixGuardrailHandoff) => void;
@@ -155,15 +165,39 @@ export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): 
   const currentRetries = evaluation.count;
   const cap = evaluation.cap;
   const capLabel = cap > 0 ? String(cap) : "∞";
-  const recordCiFix = () => {
+  const recordCiFix = (sourceKey: string) => {
     if (taskRef) {
-      args.guardrailService.record(taskRef.scope, taskRef.taskId, "ci_fix");
+      if (typeof args.guardrailService.recordOnce === "function") {
+        args.guardrailService.recordOnce(
+          taskRef.scope,
+          taskRef.taskId,
+          "ci_fix",
+          sourceKey,
+          "Jules CI repair message delivered",
+        );
+      } else {
+        args.guardrailService.record(taskRef.scope, taskRef.taskId, "ci_fix");
+      }
     }
   };
   const activeWorkerCiFixAttempt = args.hasActiveWorkerCiFixAttempt?.(args.task, args.prNumber) || false;
+  const activeJulesCiFixAttempt = isJulesManagedTask(args.task)
+    && hasActiveJulesCiFixAttempt({
+      executionRepository: args.executionRepository,
+      taskRunId: args.taskRunId,
+      prNumber: args.prNumber,
+      prHeadSha: args.prHeadSha,
+      failedChecks: args.failedChecks,
+      failedRuns: args.failedRuns,
+      sessionState: args.task.session_state,
+    });
 
-  if (activeWorkerCiFixAttempt) {
-    reportTextAddition += `   - Worker CI fix already running (attempt ${Math.max(1, currentRetries)}/${capLabel}). Waiting for completion.\n`;
+  if (activeWorkerCiFixAttempt || activeJulesCiFixAttempt) {
+    const actor = activeJulesCiFixAttempt ? "Jules CI fix" : "Worker CI fix";
+    const waitCondition = activeJulesCiFixAttempt
+      ? "session completion and a pushed commit"
+      : "completion";
+    reportTextAddition += `   - ${actor} already running (attempt ${Math.max(1, currentRetries)}/${capLabel}). Waiting for ${waitCondition} before retrying.\n`;
     return { reportTextAddition, workerCiFixRequired: false, workerCiFixPayload: null };
   }
 
@@ -204,21 +238,75 @@ export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): 
   }
 
   if (args.allowJulesSessionNotification !== false) {
-    const notifyResult = await notifyJulesAboutFailedCi({
-      task: args.task,
-      prNumber: args.prNumber,
-      prUrl: args.prUrl,
-      branchName: args.branchName,
-      failedChecks: args.failedChecks,
-      failedRuns: args.failedRuns,
-      attempt: currentRetries + 1,
-      maxRetries: cap,
-      isJulesApiConfigured: args.isJulesApiConfigured,
-      sendSessionMessage: args.sendSessionMessage,
-    });
+    const identity = buildJulesCiFixAttemptIdentity(args);
+    let attemptId = `${identity.baseAttemptKey}:legacy`;
+    if (
+      isJulesManagedTask(args.task)
+      && args.isJulesApiConfigured()
+      && resolveTaskSessionId(args.task)
+      && args.executionRepository
+      && args.taskRunId
+      && typeof args.executionRepository.listTaskRunEvents === "function"
+      && typeof args.executionRepository.appendTaskRunEvent === "function"
+    ) {
+      const claim = claimJulesCiFixAttempt({
+        executionRepository: args.executionRepository,
+        taskRunId: args.taskRunId,
+        task: args.task,
+        prNumber: args.prNumber,
+        prHeadSha: args.prHeadSha,
+        failedChecks: args.failedChecks,
+        failedRuns: args.failedRuns,
+        attempt: currentRetries + 1,
+      });
+      attemptId = claim.attemptId;
+      if (!claim.claimed) {
+        reportTextAddition += `   - Jules CI fix dispatch is already claimed. Waiting for session completion and a pushed commit before retrying.\n`;
+        return { reportTextAddition, workerCiFixRequired: false, workerCiFixPayload: null };
+      }
+    }
+
+    let notifyResult: Awaited<ReturnType<typeof notifyJulesAboutFailedCi>>;
+    try {
+      notifyResult = await notifyJulesAboutFailedCi({
+        task: args.task,
+        prNumber: args.prNumber,
+        prUrl: args.prUrl,
+        branchName: args.branchName,
+        failedChecks: args.failedChecks,
+        failedRuns: args.failedRuns,
+        attempt: currentRetries + 1,
+        maxRetries: cap,
+        isJulesApiConfigured: args.isJulesApiConfigured,
+        sendSessionMessage: args.sendSessionMessage,
+      });
+    } catch (error) {
+      appendJulesCiFixDispatchEvent({
+        executionRepository: args.executionRepository,
+        taskRunId: args.taskRunId,
+        eventType: "jules_ci_fix_dispatch_failed",
+        attemptId,
+        identity,
+        prNumber: args.prNumber,
+        error,
+      });
+      throw error;
+    }
 
     if (notifyResult.sent) {
-      recordCiFix();
+      appendJulesCiFixDispatchEvent({
+        executionRepository: args.executionRepository,
+        taskRunId: args.taskRunId,
+        eventType: "jules_ci_fix_message_sent",
+        attemptId,
+        identity,
+        prNumber: args.prNumber,
+      });
+      // A successful message resumes a completed Jules session. Mark the local
+      // projection non-terminal immediately so a fast intermediate push cannot
+      // release the single-flight lease before session sync observes the resume.
+      args.task.session_state = "RUNNING";
+      recordCiFix(attemptId);
       reportTextAddition += `   - Jules session notified to fix CI and continue work (attempt ${
         currentRetries + 1
       }/${capLabel}).\n`;

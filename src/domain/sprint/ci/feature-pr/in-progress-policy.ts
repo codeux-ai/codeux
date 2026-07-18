@@ -2,6 +2,7 @@ import type { GitTrackingStatus, Subtask, CiIntelligenceSettings, AutomationLeve
 import { isCiFailure, selectFailedCiRuns, getFailedJobLabels } from "../../../../sprint/ci-status-utils.js";
 import { handleCiAutofixEscalation } from "./ci-autofix-policy.js";
 import type { GuardrailService } from "../../../../services/guardrail-service.js";
+import type { ExecutionRepository } from "../../../../repositories/execution-repository.js";
 import type { CiFixGuardrailHandoff, WorkerCiFixPayload } from "./ci-autofix-policy.js";
 import { buildInProgressText, buildFailedChecksText, buildReviewBlockersText } from "./ci-notification-builder.js";
 
@@ -28,6 +29,8 @@ export async function evaluateInProgressState(args: {
   sendSessionMessage: (sessionId: string, message: string) => Promise<void>;
   repoPath: string;
   defaultBranch: string;
+  executionRepository?: Pick<ExecutionRepository, "appendTaskRunEvent" | "listTaskRunEvents">;
+  taskRunId?: string | null;
   hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
   onCiFixGuardrailExhausted?: (handoff: CiFixGuardrailHandoff) => void;
 }): Promise<InProgressResult> {
@@ -48,7 +51,7 @@ export async function evaluateInProgressState(args: {
     const failedChecks = args.checks
       .filter((check: GitStatusCheck) => isCiFailure(check.status ?? "", check.conclusion ?? ""))
       .map((check: GitStatusCheck) => check.name);
-    const failedRuns = selectFailedCiRuns(args.gitStatus, branchName);
+    const failedRuns = selectFailedCiRuns(args.gitStatus, branchName, args.pr.headSha);
     const failedJobLabels = getFailedJobLabels(failedRuns);
 
     reportText += buildFailedChecksText(branchName, failedChecks, failedRuns, failedJobLabels);
@@ -68,6 +71,9 @@ export async function evaluateInProgressState(args: {
       repoPath: args.repoPath,
       featureBranch: args.featureBranch,
       defaultBranch: args.defaultBranch,
+      executionRepository: args.executionRepository,
+      taskRunId: args.taskRunId,
+      prHeadSha: args.pr.headSha,
       allowJulesSessionNotification: args.ciIntelligence.waitForJulesCiAutofix,
       hasActiveWorkerCiFixAttempt: args.hasActiveWorkerCiFixAttempt,
       onGuardrailExhausted: args.onCiFixGuardrailExhausted,

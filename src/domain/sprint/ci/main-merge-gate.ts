@@ -159,7 +159,7 @@ export class MainMergeGateService {
     const prChecks = Array.isArray(mainMergePr.checks) ? mainMergePr.checks : [];
     const checks = prChecks.length > 0
       ? prChecks
-      : deriveChecksFromCiRuns(gitStatus, mainMergePr.headRefName || featureBranch);
+      : deriveChecksFromCiRuns(gitStatus, mainMergePr.headRefName || featureBranch, mainMergePr.headSha);
     const failedChecks = checks
       .filter((check) => isCiFailure(check.status, check.conclusion))
       .map((check) => check.name);
@@ -177,7 +177,7 @@ export class MainMergeGateService {
     const hasReviewBlockers = resolveAllCommentsBeforeMainMerge
       && (mainMergePr.reviewDecision === "CHANGES_REQUESTED" || mainMergePr.comments > 0);
     const failedRuns = hasFailedChecks
-      ? selectFailedCiRuns(gitStatus, mainMergePr.headRefName || featureBranch)
+      ? selectFailedCiRuns(gitStatus, mainMergePr.headRefName || featureBranch, mainMergePr.headSha)
       : [];
     const checkStatusLabel = hasMergeConflict
       ? "DIRTY"

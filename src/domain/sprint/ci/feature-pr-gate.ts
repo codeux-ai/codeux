@@ -681,7 +681,7 @@ export class FeaturePrGateService {
       // waiting forever on an empty check list.
       let checks = Array.isArray(pr.checks) && pr.checks.length > 0 ? pr.checks : [];
       if (checks.length === 0 && context.gitStatus) {
-        checks = deriveChecksFromCiRuns(context.gitStatus, pr.headRefName || workerBranch);
+        checks = deriveChecksFromCiRuns(context.gitStatus, pr.headRefName || workerBranch, pr.headSha);
       }
       const autoMergeMode = context.ciIntelligence.featurePrAutoMergeMode;
       const waitForFeatureCi = autoMergeMode === "WHEN_GREEN";
@@ -882,6 +882,8 @@ export class FeaturePrGateService {
         sendSessionMessage: context.sendSessionMessage,
         repoPath: context.repoPath,
         defaultBranch: context.defaultBranch,
+        executionRepository: context.executionRepository,
+        taskRunId: cachedTaskRun?.id,
         hasActiveWorkerCiFixAttempt: context.hasActiveWorkerCiFixAttempt,
         onCiFixGuardrailExhausted: context.openCiFixGuardrailHandoff,
       });

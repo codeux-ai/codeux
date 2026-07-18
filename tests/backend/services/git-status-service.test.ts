@@ -479,7 +479,7 @@ describe("GitStatusService", () => {
       const fullCmd = `${command} ${args.join(" ")}`;
       const responses: Record<string, any> = {
         "gh pr merge 123 --merge --delete-branch": { ok: true, stdout: "merged", stderr: "" },
-        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": { ok: true, stdout: "[]" },
+        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": { ok: true, stdout: "[]" },
         "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": {
           ok: true,
           stdout: JSON.stringify([{ number: 123, title: "PR", url: "https://example/pr/123", headRefName: "feat", baseRefName: "feature", mergedAt: "2026-03-15T08:00:00.000Z", mergedBy: { login: "octocat" } }]),
@@ -505,7 +505,7 @@ describe("GitStatusService", () => {
       const fullCmd = `${command} ${args.join(" ")}`;
       const responses: Record<string, any> = {
         "gh pr merge 123 --merge --delete-branch": { ok: true, stdout: "auto-merge enabled", stderr: "" },
-        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": {
+        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": {
           ok: true,
           stdout: JSON.stringify([{ number: 123, title: "PR", url: "https://example/pr/123", state: "OPEN", headRefName: "feat", baseRefName: "feature" }]),
         },
@@ -572,7 +572,7 @@ describe("GitStatusService", () => {
       if (fullCmd === "gh pr list --state open --base main --head feature/sprint1 --limit 1 --json number,url") {
         return { ok: true, stdout: "[]", stderr: "" };
       }
-      if (fullCmd === "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup") {
+      if (fullCmd === "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup") {
         return {
           ok: true,
           stdout: JSON.stringify([
@@ -756,7 +756,7 @@ describe("GitStatusService", () => {
         "git status --porcelain": { ok: true, stdout: "" },
         "gh --version": { ok: true, stdout: "gh version" },
         "gh auth status": { ok: true, stdout: "ok" },
-        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": { ok: true, stdout: "[]" },
+        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": { ok: true, stdout: "[]" },
         "gh run list --limit 50 --json databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt": { ok: true, stdout: "[]" },
         "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": { ok: true, stdout: "[]" },
       };
@@ -788,7 +788,7 @@ describe("GitStatusService", () => {
         "git status --porcelain": { ok: true, stdout: "" },
         "gh --version": { ok: true, stdout: "gh version" },
         "gh auth status": { ok: true, stdout: "ok" },
-        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": { ok: true, stdout: "[]" },
+        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": { ok: true, stdout: "[]" },
         "gh run list --limit 50 --json databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt": { ok: true, stdout: "[]" },
         "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": { ok: true, stdout: "[]" },
         "gh pr merge 1 --merge --delete-branch": { ok: true, stdout: "merged" }

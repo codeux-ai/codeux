@@ -31,6 +31,7 @@ export const isCiCheckPending = isCiPending;
 export const deriveChecksFromCiRuns = (
   gitStatus: GitTrackingStatus,
   branchName: string | null | undefined,
+  headSha?: string | null,
 ): Array<{ name: string; status: string; conclusion: string | null }> => {
   if (!branchName) {
     return [];
@@ -38,7 +39,7 @@ export const deriveChecksFromCiRuns = (
   const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
   const newestPerWorkflow = new Map<string, GitCiRunStatus>();
   for (const run of runs) {
-    if (run.headBranch !== branchName) {
+    if (run.headBranch !== branchName || (headSha && run.headSha !== headSha)) {
       continue;
     }
     const workflowKey = run.workflowName || run.name;
@@ -54,9 +55,16 @@ export const deriveChecksFromCiRuns = (
   }));
 };
 
-export const selectFailedCiRuns = (gitStatus: GitTrackingStatus, branchName: string): GitCiRunStatus[] => {
+export const selectFailedCiRuns = (
+  gitStatus: GitTrackingStatus,
+  branchName: string,
+  headSha?: string | null,
+): GitCiRunStatus[] => {
   const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
-  const branchMatched = runs.filter((run) => run.headBranch === branchName);
+  const branchMatched = runs.filter((run) => (
+    run.headBranch === branchName
+    && (!headSha || run.headSha === headSha)
+  ));
   return selectNewestCiRun(branchMatched)
     .filter((run) => isCiFailure(run.status, run.conclusion));
 };

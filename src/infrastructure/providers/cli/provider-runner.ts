@@ -277,10 +277,22 @@ export class ProviderRunner implements IProviderRunner {
       const capturedText = outputPath
         ? await this.readProviderOutputPath(prepared.cwd, outputPath, input.workflowSettings.executionMode)
         : "";
+      const finalAntigravityAssistant = input.provider === "antigravity"
+        ? [...(result.usageTelemetry.conversation ?? [])]
+          .reverse()
+          .find((turn) => turn.kind === "assistant" && turn.text.trim())
+          ?.text
+        : "";
 
       return {
         ...result,
-        text: sanitizeInvocationOutputText(capturedText || result.usageTelemetry.transcriptText || result.stdout || result.stderr),
+        text: sanitizeInvocationOutputText(
+          capturedText
+          || finalAntigravityAssistant
+          || result.usageTelemetry.transcriptText
+          || result.stdout
+          || result.stderr,
+        ),
       };
     });
   }

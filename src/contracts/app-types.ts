@@ -1422,6 +1422,8 @@ export interface GitPullRequestStatus {
   state: string;
   isDraft: boolean;
   headRefName: string | null;
+  /** Exact commit currently at the PR head. CI decisions must never reuse runs from an older SHA. */
+  headSha?: string | null;
   baseRefName: string | null;
   mergeStateStatus: string | null;
   reviewDecision: string | null;

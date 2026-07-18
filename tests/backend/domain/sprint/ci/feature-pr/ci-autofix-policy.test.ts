@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { handleCiAutofixEscalation, buildWorkerCiFixPayload } from "../../../../../../src/domain/sprint/ci/feature-pr/ci-autofix-policy.js";
+import type { TaskRunEventRecord } from "../../../../../../src/contracts/execution-types.js";
 import type { Subtask } from "../../../../../../src/contracts/app-types.js";
 import type { GuardrailEvaluation, GuardrailService } from "../../../../../../src/services/guardrail-service.js";
 
@@ -90,7 +91,7 @@ describe("handleCiAutofixEscalation", () => {
   });
 
   it("notifies Jules and records the ci_fix invocation when under the cap", async () => {
-    const task = makeTask({ session_id: "s1" });
+    const task = makeTask({ session_id: "s1", session_state: "COMPLETED" });
     const { service, record } = makeGuardrail(allow(1, 3));
     const sendSessionMessage = vi.fn().mockResolvedValue(undefined);
 
@@ -205,6 +206,121 @@ describe("handleCiAutofixEscalation", () => {
     expect(task.intervention_owner).toBeUndefined();
     expect(result.workerCiFixRequired).toBe(false);
     expect(result.reportTextAddition).toContain("Worker CI fix already running");
+  });
+
+  it("leases one Jules repair until a different PR head commit is observed", async () => {
+    const task = makeTask({ session_id: "s1" });
+    const { service } = makeGuardrail(allow(0, 5));
+    const recordOnce = vi.fn().mockReturnValue(1);
+    (service as unknown as { recordOnce: typeof recordOnce }).recordOnce = recordOnce;
+    const sendSessionMessage = vi.fn().mockResolvedValue(undefined);
+    const events: TaskRunEventRecord[] = [];
+    let sequence = 0;
+    const executionRepository = {
+      listTaskRunEvents: vi.fn(() => [...events].reverse()),
+      appendTaskRunEvent: vi.fn((
+        taskRunId: string,
+        eventType: string,
+        originator: string,
+        payload: Record<string, unknown>,
+        options?: { sourceEventKey?: string | null },
+      ) => {
+        if (events.some((event) => event.sourceEventKey === options?.sourceEventKey)) {
+          return false;
+        }
+        events.push({
+          id: `event-${sequence += 1}`,
+          taskRunId,
+          eventType,
+          originator,
+          payload,
+          sourceEventKey: options?.sourceEventKey ?? null,
+          createdAt: new Date().toISOString(),
+        });
+        return true;
+      }),
+    };
+    const failedRun = {
+      id: 10,
+      name: "CI",
+      workflowName: "CI",
+      status: "completed",
+      conclusion: "failure",
+      event: "pull_request",
+      headBranch: "branch",
+      headSha: "sha-1",
+      url: "run",
+      updatedAt: "2026-07-18T00:00:00Z",
+    };
+
+    const first = await handleCiAutofixEscalation({
+      ...baseArgs,
+      task,
+      failedRuns: [failedRun],
+      guardrailService: service,
+      sendSessionMessage,
+      executionRepository: executionRepository as any,
+      taskRunId: "task-run-1",
+      prHeadSha: "sha-1",
+    });
+    const repeated = await handleCiAutofixEscalation({
+      ...baseArgs,
+      task,
+      failedRuns: [failedRun],
+      guardrailService: service,
+      sendSessionMessage,
+      executionRepository: executionRepository as any,
+      taskRunId: "task-run-1",
+      prHeadSha: "sha-1",
+    });
+
+    expect(first.reportTextAddition).toContain("Jules session notified");
+    expect(repeated.reportTextAddition).toContain("Waiting for session completion and a pushed commit");
+    expect(sendSessionMessage).toHaveBeenCalledTimes(1);
+    expect(recordOnce).toHaveBeenCalledTimes(1);
+
+    const disabledWhileRunning = await handleCiAutofixEscalation({
+      ...baseArgs,
+      task,
+      failedRuns: [failedRun],
+      guardrailService: service,
+      sendSessionMessage,
+      executionRepository: executionRepository as any,
+      taskRunId: "task-run-1",
+      prHeadSha: "sha-1",
+      allowJulesSessionNotification: false,
+    });
+    expect(disabledWhileRunning.workerCiFixRequired).toBe(false);
+    expect(sendSessionMessage).toHaveBeenCalledTimes(1);
+
+    task.session_state = "AWAITING_USER_FEEDBACK";
+    const clarificationPending = await handleCiAutofixEscalation({
+      ...baseArgs,
+      task,
+      failedRuns: [{ ...failedRun, id: 11, headSha: "sha-2" }],
+      guardrailService: service,
+      sendSessionMessage,
+      executionRepository: executionRepository as any,
+      taskRunId: "task-run-1",
+      prHeadSha: "sha-2",
+    });
+    expect(clarificationPending.reportTextAddition).toContain("Waiting for session completion and a pushed commit");
+    expect(sendSessionMessage).toHaveBeenCalledTimes(1);
+
+    task.session_state = "COMPLETED";
+    await handleCiAutofixEscalation({
+      ...baseArgs,
+      task,
+      failedRuns: [{ ...failedRun, id: 11, headSha: "sha-2" }],
+      guardrailService: service,
+      sendSessionMessage,
+      executionRepository: executionRepository as any,
+      taskRunId: "task-run-1",
+      prHeadSha: "sha-2",
+    });
+
+    expect(sendSessionMessage).toHaveBeenCalledTimes(2);
+    expect(recordOnce).toHaveBeenCalledTimes(2);
   });
 });
 

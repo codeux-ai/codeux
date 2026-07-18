@@ -28,6 +28,27 @@ describe("collectProviderUsageTelemetry", () => {
     codexTokenEstimationCacheTestHooks.reset();
   });
 
+  it("uses only Antigravity's final assistant response as text output", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "antigravity",
+      model: "default",
+      prompt: "Inspect and fix the task.",
+      cwd: "/workspace/repo",
+      stdout: "",
+      stderr: "",
+      antigravityTranscriptJsonl: [
+        JSON.stringify({ type: "PLANNER_RESPONSE", source: "MODEL", content: "I will inspect the files." }),
+        JSON.stringify({ type: "GENERIC", source: "MODEL", content: "Your current permission grants are: command(*): allowed" }),
+        JSON.stringify({ type: "VIEW_FILE", source: "MODEL", content: "File Path: file:///workspace/CLAUDE.md" }),
+        JSON.stringify({ type: "PLANNER_RESPONSE", source: "MODEL", content: "Implemented and validated the fix." }),
+      ].join("\n"),
+    });
+
+    expect(result.transcriptText).toBe("Implemented and validated the fix.");
+    expect(result.transcriptText).not.toContain("permission grants");
+    expect(result.conversation.filter((turn) => turn.kind === "tool_result")).toHaveLength(2);
+  });
+
   it("parses provider-reported Gemini token usage", async () => {
     const result = await collectProviderUsageTelemetry({
       provider: "gemini",

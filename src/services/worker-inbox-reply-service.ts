@@ -14,6 +14,11 @@ import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workfl
 import type { IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
 import { buildProviderInvocationWorkspaceOptions } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
 import { buildChatReplayPrompt, normalizeProviderReply } from "./chat-reply-prompt.js";
+import { sanitizeInvocationOutputText } from "./invocation-output-sanitizer.js";
+import {
+  MAX_MESSAGE_CONTENT_CHARS,
+  truncateForStorage,
+} from "./invocation-message-limits.js";
 
 import { getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import type { TaskService } from "./task-service.js";
@@ -81,6 +86,13 @@ interface WorkerInboxReplyServiceDependencies {
 
 export class WorkerInboxReplyService {
   constructor(private readonly deps: WorkerInboxReplyServiceDependencies) {}
+
+  private normalizeBoundedProviderReply(output: string): string {
+    return truncateForStorage(
+      normalizeProviderReply(sanitizeInvocationOutputText(output)),
+      MAX_MESSAGE_CONTENT_CHARS,
+    );
+  }
 
   private async syncRemoteBranchesIfNeeded(
     repoPath: string,
@@ -253,7 +265,7 @@ export class WorkerInboxReplyService {
       throw err;
     }
 
-    const bodyMarkdown = normalizeProviderReply(output);
+    const bodyMarkdown = this.normalizeBoundedProviderReply(output);
 
     this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
       role: "assistant",
@@ -467,7 +479,7 @@ export class WorkerInboxReplyService {
           googleDriveMount,
           signal: controller.signal,
         });
-        const reply = normalizeProviderReply(providerResult.text);
+        const reply = this.normalizeBoundedProviderReply(providerResult.text);
         if (!reply) {
           throw new Error(`Provider ${route.provider} returned an empty clarification reply.`);
         }
