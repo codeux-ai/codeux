@@ -5,7 +5,11 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { ListToolsRequestSchema, ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { bootMcpHttpTransport, type McpHttpTransportHandle } from "../../../../src/app/lifecycle/mcp-lifecycle-service.js";
-import { getCurrentMcpAgentId, getCurrentMcpThreadId } from "../../../../src/server/mcp-agent-context.js";
+import {
+  getCurrentMcpAgentId,
+  getCurrentMcpExecutionInvocationId,
+  getCurrentMcpThreadId,
+} from "../../../../src/server/mcp-agent-context.js";
 
 const handles: McpHttpTransportHandle[] = [];
 const STRONG_TOKEN = "cux_test_abcdefghijklmnopqrstuvwxyz123456";
@@ -553,7 +557,11 @@ describe("bootMcpHttpTransport", () => {
       authToken: null,
       logger: createLogger(),
       createServer: () => createTestServer(() => {
-        observedContext(getCurrentMcpAgentId(), getCurrentMcpThreadId());
+        observedContext(
+          getCurrentMcpAgentId(),
+          getCurrentMcpThreadId(),
+          getCurrentMcpExecutionInvocationId(),
+        );
       }),
       recoveryService: { recover: async () => ({ resumedSprintRunIds: [] }) } as any,
     });
@@ -562,11 +570,12 @@ describe("bootMcpHttpTransport", () => {
     const { client, transport } = createAuthClient(handle!, undefined, {
       "X-Code-Ux-Agent": "agent-9",
       "X-Code-Ux-Thread": "thread-7",
+      "X-Code-Ux-Invocation": "xi_123",
     });
     await client.connect(transport);
     await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
 
-    expect(observedContext).toHaveBeenCalledWith("agent-9", "thread-7");
+    expect(observedContext).toHaveBeenCalledWith("agent-9", "thread-7", "xi_123");
     await transport.close();
   });
 

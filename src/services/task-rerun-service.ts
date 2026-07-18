@@ -39,6 +39,7 @@ export interface TaskRerunOptions {
 }
 
 export interface TaskClarificationContinuationInput {
+  clarificationId: string;
   answerMarkdown: string;
   provider: ProviderId;
   model?: string;
@@ -87,6 +88,8 @@ export interface TaskRerunServiceDependencies {
     resumeWorkspaceSessionId?: string;
     resumeWorkerBranch?: string;
     forceFreshWorkspace?: boolean;
+    requireProviderSessionResume?: boolean;
+    clarificationContinuationId?: string;
   }) => Promise<StartSprintDispatchResult>;
   resolveSessionName: (session: { id?: string; name?: string }) => string | undefined;
   extractSessionId: (session: { id?: string; name?: string }) => string | undefined;
@@ -191,7 +194,18 @@ export class TaskRerunService {
       resumeWorkspaceSessionId: input.resumeWorkspaceSessionId,
       resumeWorkerBranch: input.resumeWorkerBranch,
       forceFreshWorkspace: false,
+      requireProviderSessionResume: true,
+      clarificationContinuationId: input.clarificationId,
     });
+    if (
+      session.startedNew !== true
+      || !session.dispatchId
+      || !session.taskRunId
+    ) {
+      throw new Error(
+        `Cannot continue clarification ${input.clarificationId}: no new task dispatch was started for the manager answer.`,
+      );
+    }
     const continuedTask: Subtask = {
       ...continuationTask,
       status: "RUNNING",

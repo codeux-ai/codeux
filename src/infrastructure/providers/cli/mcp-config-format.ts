@@ -156,6 +156,7 @@ export const GEMINI_MCP_SETTINGS_MOUNT = "/opt/provider-config/gemini-settings.j
 export const CODEX_MCP_CONFIG_MOUNT = "/opt/provider-config/codex-config.toml";
 export const QWEN_CODE_SETTINGS_MOUNT = "/opt/provider-config/qwen-settings.json";
 export const ANTIGRAVITY_MCP_CONFIG_MOUNT = "/opt/provider-config/antigravity-mcp.json";
+export const MCP_STREAMABLE_HTTP_ACCEPT = "application/json, text/event-stream";
 
 export function buildProviderMcpConfigArtifact(
   provider: CliProviderId,
@@ -176,6 +177,9 @@ export function buildProviderMcpConfigArtifact(
   const headers: Record<string, string> = {};
   if (processedConn?.authToken) headers["Authorization"] = `Bearer ${processedConn.authToken}`;
   if (processedConn?.agentId) headers["X-Code-Ux-Agent"] = processedConn.agentId;
+  if (processedConn?.executionInvocationId) {
+    headers["X-Code-Ux-Invocation"] = processedConn.executionInvocationId;
+  }
   if (processedConn?.threadId) headers["X-Code-Ux-Thread"] = processedConn.threadId;
 
   if (provider === "claude-code") {
@@ -284,7 +288,10 @@ export function buildProviderMcpConfigArtifact(
     if (processedConn) {
       mcpServers.code_ux = {
         serverUrl: processedConn.url,
-        ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        headers: {
+          ...headers,
+          Accept: MCP_STREAMABLE_HTTP_ACCEPT,
+        },
       };
     }
     for (const server of processedServers) {
@@ -323,6 +330,9 @@ export function buildProviderMcpConfigArtifact(
       }
       if (processedConn.agentId) {
         codexHeaderParts.push(`"X-Code-Ux-Agent" = "${escapeTomlString(processedConn.agentId)}"`);
+      }
+      if (processedConn.executionInvocationId) {
+        codexHeaderParts.push(`"X-Code-Ux-Invocation" = "${escapeTomlString(processedConn.executionInvocationId)}"`);
       }
       if (processedConn.threadId) {
         codexHeaderParts.push(`"X-Code-Ux-Thread" = "${escapeTomlString(processedConn.threadId)}"`);

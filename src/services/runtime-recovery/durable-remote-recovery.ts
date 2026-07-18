@@ -1,6 +1,7 @@
 import type { JulesSession } from "../../contracts/app-types.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
+import { cancelStaleProviderInvocation } from "../../domain/runtime/provider-invocation-recovery.js";
 import type { SprintRunLifecycleService } from "../sprint-run-lifecycle-service.js";
 
 const ACTIVE_JULES_SESSION_STATES = new Set([
@@ -21,6 +22,7 @@ interface DurableRemoteRecoveryDeps {
 export interface DurableRemoteRecoveryResult {
   reactivatedTaskRunIds: string[];
   reactivatedSprintRunIds: string[];
+  supersededTaskRunIds: string[];
 }
 
 export interface DurableRemoteRecoveryOptions {
@@ -44,6 +46,7 @@ export class DurableRemoteRecoveryService {
     const evidence = options.evidence ?? "remote_snapshot";
     const reactivatedTaskRunIds = new Set<string>();
     const reactivatedSprintRunIds = new Set<string>();
+    const supersededTaskRunIds = new Set<string>();
 
     for (const session of sessions) {
       if (!ACTIVE_JULES_SESSION_STATES.has(String(session.state || "").toUpperCase())) {
@@ -59,6 +62,13 @@ export class DurableRemoteRecoveryService {
       }
       const task = this.deps.projectManagementRepository.getTask(taskRun.taskId);
       if (!task || task.isMerged || task.status === "QA_REVIEW_FAILED") {
+        continue;
+      }
+      const latestTaskRun = this.deps.executionRepository.getLatestTaskRun(taskRun.taskId);
+      if (latestTaskRun && latestTaskRun.id !== taskRun.id) {
+        if (this.settleSupersededTaskRun(taskRun, latestTaskRun.id, sessionId, now)) {
+          supersededTaskRunIds.add(taskRun.id);
+        }
         continue;
       }
       const rawSprintStatus = this.deps.projectManagementRepository.getRawSprintStatus(taskRun.sprintId);
@@ -183,7 +193,135 @@ export class DurableRemoteRecoveryService {
     return {
       reactivatedTaskRunIds: [...reactivatedTaskRunIds],
       reactivatedSprintRunIds: [...reactivatedSprintRunIds],
+      supersededTaskRunIds: [...supersededTaskRunIds],
     };
+  }
+
+  /**
+   * A newer task run is the durable ownership boundary for a retry. The hosted
+   * provider may still report the older session as active, but reopening that
+   * local attempt would create two schedulable projections for one task.
+   *
+   * This deliberately does not cancel the remote session. It only closes stale
+   * local audit/runtime rows so the newest attempt remains authoritative.
+   */
+  private settleSupersededTaskRun(
+    taskRun: NonNullable<ReturnType<ExecutionRepository["getLatestTaskRunBySessionId"]>>,
+    latestTaskRunId: string,
+    sessionId: string,
+    now: string,
+  ): boolean {
+    const message = "Startup recovery ignored an active hosted session because a newer task run superseded this attempt.";
+    const dispatch = taskRun.dispatchId
+      ? this.deps.executionRepository.getTaskDispatch(taskRun.dispatchId)
+      : null;
+    let changed = false;
+
+    if (taskRun.state === "PENDING" || taskRun.state === "RUNNING" || taskRun.state === "PAUSED") {
+      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+        connectionId: null,
+        state: "FAILED",
+        finishedAt: now,
+        durationMs: this.calculateTaskRunDurationMs(taskRun.startedAt, taskRun.durationMs, now),
+      });
+      changed = true;
+    }
+
+    if (
+      dispatch
+      && (
+        dispatch.status === "queued"
+        || dispatch.status === "claimed"
+        || dispatch.status === "running"
+        || dispatch.status === "cancel_requested"
+        || dispatch.status === "paused"
+      )
+    ) {
+      this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        connectionId: null,
+        status: "cancelled",
+        finishedAt: now,
+        lastHeartbeatAt: now,
+        errorMessage: null,
+      });
+      changed = true;
+    }
+
+    const usage = this.deps.executionRepository.getLatestProviderInvocationUsageBySession(
+      sessionId,
+      "task_coding",
+    );
+    if (usage?.provider === "jules") {
+      const linkedInvocations = this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(usage.id);
+      if (usage.status === "running") {
+        cancelStaleProviderInvocation(
+          this.deps.executionRepository,
+          usage,
+          linkedInvocations,
+          {
+            reconciledAt: now,
+            recoveryReason: "startup_durable_remote_session_superseded",
+            systemMessage: message,
+          },
+        );
+        changed = true;
+      } else {
+        for (const invocation of linkedInvocations) {
+          if (invocation.status !== "running" && invocation.status !== "paused") {
+            continue;
+          }
+          this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
+            status: "cancelled",
+            finishedAt: now,
+            errorMessage: null,
+          });
+          this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
+            role: "system",
+            contentMarkdown: message,
+            metadata: {
+              recovery: "startup_durable_remote_session_superseded",
+              provider: "jules",
+              providerInvocationId: usage.id,
+              sessionId,
+            },
+            createdAt: now,
+          });
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "task_run_superseded", "system", {
+        reason: "durable_remote_session_superseded_by_newer_task_run",
+        provider: "jules",
+        sessionId,
+        latestTaskRunId,
+        previousTaskRunState: taskRun.state,
+        previousDispatchStatus: dispatch?.status || null,
+      }, {
+        sourceEventKey: `startup-recovery:durable-remote-superseded:${taskRun.id}:${latestTaskRunId}`,
+      });
+    }
+
+    return changed;
+  }
+
+  private calculateTaskRunDurationMs(
+    startedAt: string | null,
+    existingDurationMs: number | null,
+    finishedAt: string,
+  ): number | null {
+    if (!startedAt) {
+      return existingDurationMs;
+    }
+    const startedAtMs = Date.parse(startedAt);
+    const finishedAtMs = Date.parse(finishedAt);
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs)) {
+      return existingDurationMs;
+    }
+    return Math.max(0, finishedAtMs - startedAtMs);
   }
 
   private resolveSessionId(session: JulesSession): string | null {

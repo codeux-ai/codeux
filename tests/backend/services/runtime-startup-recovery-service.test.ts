@@ -2371,6 +2371,203 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({ status: "running", finishedAt: null, errorMessage: null });
   });
 
+  it("does not reactivate an older hosted session after a newer task run supersedes it", async () => {
+    const listDurableRemoteSessions = vi.fn().mockResolvedValue([
+      {
+        id: "superseded-hosted-session",
+        name: "sessions/superseded-hosted-session",
+        state: "IN_PROGRESS",
+        prompt: "Older hosted attempt.",
+      },
+      {
+        id: "current-hosted-session",
+        name: "sessions/current-hosted-session",
+        state: "IN_PROGRESS",
+        prompt: "Current hosted attempt.",
+      },
+    ]);
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture({ listDurableRemoteSessions });
+
+    const project = projectRepository.createProject({
+      name: "Superseded Durable Remote Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/superseded-durable-remote-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Superseded Durable Remote Recovery Sprint",
+      number: 21,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Keep only the newest hosted attempt active",
+      executorType: "jules",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "jules",
+      status: "running",
+    });
+
+    const olderDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+    });
+    const olderTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: olderDispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "superseded-hosted-session",
+      sessionName: "sessions/superseded-hosted-session",
+      state: "RUNNING",
+      startedAt: "2026-07-18T10:00:00.000Z",
+    });
+    const olderUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: olderDispatch.id,
+      taskRunId: olderTaskRun.id,
+      sessionId: "superseded-hosted-session",
+      nativeSessionId: "superseded-hosted-session",
+      provider: "jules",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-07-18T10:00:00.000Z",
+      invocationSource: "EXTERNAL_API",
+    });
+    const olderInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: olderDispatch.id,
+      taskRunId: olderTaskRun.id,
+      providerInvocationId: olderUsage.id,
+      type: "task_coding",
+      provider: "jules",
+      status: "running",
+      startedAt: "2026-07-18T10:00:00.000Z",
+      invocationSource: "EXTERNAL_API",
+    });
+
+    const newerDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+    });
+    const newerTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: newerDispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "current-hosted-session",
+      sessionName: "sessions/current-hosted-session",
+      state: "RUNNING",
+      startedAt: "2026-07-18T10:05:00.000Z",
+    });
+    const newerUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: newerDispatch.id,
+      taskRunId: newerTaskRun.id,
+      sessionId: "current-hosted-session",
+      nativeSessionId: "current-hosted-session",
+      provider: "jules",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-07-18T10:05:00.000Z",
+      invocationSource: "EXTERNAL_API",
+    });
+    const newerInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: newerDispatch.id,
+      taskRunId: newerTaskRun.id,
+      providerInvocationId: newerUsage.id,
+      type: "task_coding",
+      provider: "jules",
+      status: "running",
+      startedAt: "2026-07-18T10:05:00.000Z",
+      invocationSource: "EXTERNAL_API",
+    });
+
+    const result = await service.recover();
+
+    expect(result.supersededDurableRemoteTaskRunIds).toEqual([olderTaskRun.id]);
+    expect(result.reactivatedDurableRemoteTaskRunIds).toEqual([]);
+    expect(executionRepository.getTaskRun(olderTaskRun.id)).toMatchObject({
+      state: "FAILED",
+      connectionId: null,
+    });
+    expect(executionRepository.getTaskDispatch(olderDispatch.id)).toMatchObject({
+      status: "cancelled",
+      connectionId: null,
+      errorMessage: null,
+    });
+    expect(executionRepository.getProviderInvocationUsage(olderUsage.id)).toMatchObject({
+      status: "cancelled",
+    });
+    expect(executionRepository.getExecutionInvocation(olderInvocation.id)).toMatchObject({
+      status: "cancelled",
+      errorMessage: null,
+    });
+    expect(executionRepository.listTaskRunEvents(olderTaskRun.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "task_run_superseded",
+          payload: expect.objectContaining({
+            reason: "durable_remote_session_superseded_by_newer_task_run",
+            latestTaskRunId: newerTaskRun.id,
+          }),
+        }),
+      ]),
+    );
+
+    expect(projectRepository.getTask(task.id)).toMatchObject({ status: "in_progress" });
+    expect(executionRepository.getTaskRun(newerTaskRun.id)).toMatchObject({
+      state: "RUNNING",
+      finishedAt: null,
+    });
+    expect(executionRepository.getTaskDispatch(newerDispatch.id)).toMatchObject({
+      status: "running",
+      finishedAt: null,
+    });
+    expect(executionRepository.getProviderInvocationUsage(newerUsage.id)).toMatchObject({
+      status: "running",
+      finishedAt: null,
+    });
+    expect(executionRepository.getExecutionInvocation(newerInvocation.id)).toMatchObject({
+      status: "running",
+      finishedAt: null,
+    });
+  });
+
   it("bounds durable remote reconciliation so provider latency cannot block readiness", async () => {
     vi.useFakeTimers();
     try {
@@ -4220,7 +4417,7 @@ describe("RuntimeStartupRecoveryService", () => {
       connectionId: null,
     });
     expect(executionRepository.getTaskRun(olderTaskRun.id)).toMatchObject({
-      state: "BLOCKED",
+      state: "FAILED",
       connectionId: null,
     });
     expect(executionRepository.getProviderInvocationUsage(olderInvocation.id)).toMatchObject({

@@ -217,6 +217,105 @@ describe("QA review summary query", () => {
     });
   });
 
+  it("does not project superseded negative QA state onto completed or merged tasks", async () => {
+    const { storage, repository } = await createFixture();
+    const project = repository.createProject({
+      name: "Superseded task QA",
+      sourceType: "local",
+      sourceRef: "/workspace/superseded-task-qa",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Completed task reviews" });
+    const changesTask = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Merged after changes",
+    });
+    const runningTask = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T02",
+      title: "Merged while stale review remained running",
+    });
+    const passingTask = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T03",
+      title: "Completed after passing QA",
+    });
+    const db = storage.getDatabase();
+    const insert = db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, task_id, trigger_type, status, outcome, run_index,
+        summary_markdown, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'task_completion', ?, ?, 1, ?, 'QA reviewer', ?, ?, ?, ?)
+    `);
+    insert.run(
+      "superseded-changes",
+      project.id,
+      sprint.id,
+      changesTask.id,
+      "completed",
+      "changes_requested",
+      "Changes were requested before the successful follow-up.",
+      "2026-07-18T09:00:00.000Z",
+      "2026-07-18T09:01:00.000Z",
+      "2026-07-18T09:00:00.000Z",
+      "2026-07-18T09:01:00.000Z",
+    );
+    insert.run(
+      "superseded-running",
+      project.id,
+      sprint.id,
+      runningTask.id,
+      "running",
+      null,
+      "This review owner no longer exists.",
+      "2026-07-18T09:02:00.000Z",
+      null,
+      "2026-07-18T09:02:00.000Z",
+      "2026-07-18T09:02:00.000Z",
+    );
+    insert.run(
+      "completed-pass",
+      project.id,
+      sprint.id,
+      passingTask.id,
+      "completed",
+      "pass",
+      "The completed task passed QA.",
+      "2026-07-18T09:03:00.000Z",
+      "2026-07-18T09:04:00.000Z",
+      "2026-07-18T09:03:00.000Z",
+      "2026-07-18T09:04:00.000Z",
+    );
+    repository.updateTask(changesTask.id, {
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+    repository.updateTask(runningTask.id, {
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+    repository.updateTask(passingTask.id, {
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+
+    const summaries = loadLatestTaskReviewSummaryMap(
+      storage,
+      [changesTask.id, runningTask.id, passingTask.id],
+    );
+
+    expect(summaries.has(changesTask.id)).toBe(false);
+    expect(summaries.has(runningTask.id)).toBe(false);
+    expect(summaries.get(passingTask.id)).toMatchObject({
+      status: "completed",
+      outcome: "pass",
+      summary: "The completed task passed QA.",
+    });
+  });
+
   it("projects a cancelled task reviewer ahead of a passing reviewer in the latest cycle", async () => {
     const { storage, repository } = await createFixture();
     const project = repository.createProject({ name: "Cancelled task QA", sourceType: "local", sourceRef: "/workspace/cancelled-task-qa" });

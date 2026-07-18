@@ -34,11 +34,12 @@ import type { SkillService, PersistentSkillStorageRuntime } from "./skill-servic
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import { resolvePersistentSkillContext } from "./persistent-skill-context.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { WorkerClarificationRecord } from "../contracts/worker-clarification-types.js";
 import type { AgentMcpAccessConfig } from "../contracts/agent-preset-types.js";
 import {
+  automaticClarificationReplyAgentMcpAccess,
   dashboardReplyAgentMcpAccess,
   isSchedulerOnlyAgentMcpAccess,
-  projectManagerClarificationAgentMcpAccess,
   resolveAgentMcpRuntime,
 } from "./agent-mcp-access.js";
 import {
@@ -59,6 +60,20 @@ export interface GenerateDashboardReplyResult {
   bodyMarkdown: string;
   provider: Exclude<ProviderId, "jules">;
   model: string;
+}
+
+export interface GenerateWorkerClarificationReplyInput {
+  projectId: string;
+  sprintGoal: string;
+  subtasks: Subtask[];
+  task: Subtask;
+  clarification: WorkerClarificationRecord;
+}
+
+export interface GenerateWorkerClarificationReplyResult {
+  answerMarkdown: string;
+  agentPresetId: string;
+  executionInvocationId: string;
 }
 
 interface WorkerInboxReplyServiceDependencies {
@@ -82,6 +97,13 @@ interface WorkerInboxReplyServiceDependencies {
    */
   fetchSessionActivities?: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
   logger?: Logger;
+}
+
+class ClarificationReplyNoLongerActiveError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ClarificationReplyNoLongerActiveError";
+  }
 }
 
 export class WorkerInboxReplyService {
@@ -303,6 +325,22 @@ export class WorkerInboxReplyService {
     subtasks: Subtask[];
     task: Subtask;
   }): Promise<string> {
+    return (await this.generateClarificationReplyResult(args)).answerMarkdown;
+  }
+
+  async generateWorkerClarificationReply(
+    args: GenerateWorkerClarificationReplyInput,
+  ): Promise<GenerateWorkerClarificationReplyResult> {
+    return await this.generateClarificationReplyResult(args);
+  }
+
+  private async generateClarificationReplyResult(args: {
+    projectId: string;
+    sprintGoal: string;
+    subtasks: Subtask[];
+    task: Subtask;
+    clarification?: WorkerClarificationRecord;
+  }): Promise<GenerateWorkerClarificationReplyResult> {
     const project = this.deps.projectManagementRepository.getProject(args.projectId);
     if (!project) {
       throw new Error(`Project not found: ${args.projectId}`);
@@ -341,14 +379,17 @@ export class WorkerInboxReplyService {
       .trim();
     const knowledgeManifest = this.deps.knowledgeService?.buildManifestMarkdownForAgent(clarificationAgent.id) ?? null;
 
-    const clarificationActivities = await this.resolveClarificationActivities(args.task, args.subtasks);
-    const clarificationRequest = this.getLatestClarificationRequest(clarificationActivities);
+    const clarificationRequest = args.clarification?.questionMarkdown
+      ?? this.getLatestClarificationRequest(
+        await this.resolveClarificationActivities(args.task, args.subtasks),
+      );
+    const requesterLabel = args.clarification ? "coding agent" : "Jules";
 
     const fullContextPrompt = [
       projectManagerInstructions ? `## PROJECT MANAGER INSTRUCTIONS\n\n${projectManagerInstructions}` : "",
       knowledgeManifest ? `## KNOWLEDGE BASE\n\n${knowledgeManifest}` : "",
       "## CLARIFICATION TASK",
-      "Answer Jules' clarification request for the current task using the sprint context below.",
+      `Answer the ${requesterLabel}'s clarification request for the current task using the sprint context below.`,
       "",
       "## SPRINT CONTEXT",
       `Project: ${project.name}`,
@@ -362,11 +403,14 @@ export class WorkerInboxReplyService {
       `Title: ${args.task.title}`,
       `Original Prompt: ${args.task.prompt}`,
       "",
-      "## JULES CLARIFICATION REQUEST",
+      `## ${args.clarification ? "CODING AGENT" : "JULES"} CLARIFICATION REQUEST`,
       clarificationRequest,
       "",
       "## REQUIRED OUTPUT",
       "Return only the answer body in markdown. No JSON. No code fences unless the reply truly needs them.",
+      args.clarification
+        ? "Do not call reply_to_clarification from this automated turn; the runtime will validate and deliver your returned answer."
+        : "",
       "Answer the agent so they can continue implementation immediately.",
     ].filter(Boolean).join("\n");
 
@@ -391,7 +435,7 @@ export class WorkerInboxReplyService {
     const startedAt = new Date().toISOString();
 
     const providerInvocationId = randomUUID();
-    const sessionId = "worker-reply-" + providerInvocationId;
+    const sessionId = `${args.clarification ? "clarification-reply" : "worker-reply"}-${providerInvocationId}`;
     const timeoutSeconds = Math.max(30, Math.floor(settings.workers?.timeoutSeconds || 300));
     const timeoutMs = timeoutSeconds * 1000;
     const controller = new AbortController();
@@ -409,6 +453,11 @@ export class WorkerInboxReplyService {
         {
           projectId: args.projectId,
           taskId: invocationTaskId,
+          sprintId: invocationSprintId,
+          sprintRunId: args.clarification?.sprintRunId ?? null,
+          dispatchId: args.clarification?.dispatchId ?? null,
+          taskRunId: args.clarification?.taskRunId ?? null,
+          attentionItemId: args.clarification?.id ?? null,
           sessionId,
           provider: route.provider,
           purpose: "clarification_reply",
@@ -430,13 +479,14 @@ export class WorkerInboxReplyService {
           provider: route.provider,
           model: providerSettings.model,
           startedAt,
-          attentionItemId: null,
-          dispatchId: null,
+          attentionItemId: args.clarification?.id ?? null,
+          dispatchId: args.clarification?.dispatchId ?? null,
           providerInvocationId: usageRecord.id,
           sprintId: invocationSprintId,
-          sprintRunId: null,
+          sprintRunId: args.clarification?.sprintRunId ?? null,
           taskId: invocationTaskId,
-          taskRunId: null,
+          taskRunId: args.clarification?.taskRunId ?? null,
+          agentPresetId: clarificationAgent.id,
         });
         executionInvocationId = execInvocation.id;
         this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
@@ -473,8 +523,9 @@ export class WorkerInboxReplyService {
           githubToken: this.deps.getGithubToken(),
           projectId: args.projectId,
           sprintId: invocationSprintId,
-          agentMcpAccess: projectManagerClarificationAgentMcpAccess(clarificationAgent.mcpAccess),
+          agentMcpAccess: automaticClarificationReplyAgentMcpAccess(),
           mcpAgentId: clarificationAgent.id,
+          executionInvocationId: execInvocation.id,
           persistentSkillRuntime: persistentSkillContext.runtime,
           googleDriveMount,
           signal: controller.signal,
@@ -485,6 +536,11 @@ export class WorkerInboxReplyService {
         }
 
         const finishedAt = new Date().toISOString();
+        this.assertClarificationReplyRuntimeActive({
+          sprintRunId: args.clarification?.sprintRunId ?? null,
+          executionInvocationId: execInvocation.id,
+          providerInvocationId: usageRecord.id,
+        });
         this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
           role: "assistant",
           contentMarkdown: reply,
@@ -499,24 +555,93 @@ export class WorkerInboxReplyService {
           durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
           ...providerResult.usageTelemetry,
         });
-        return reply;
+        return {
+          answerMarkdown: reply,
+          agentPresetId: clarificationAgent.id,
+          executionInvocationId: execInvocation.id,
+        };
       } catch (error) {
         const finishedAt = new Date().toISOString();
-        if (executionInvocationId) {
+        const canInspectExecutionInvocation =
+          typeof this.deps.executionRepository.getExecutionInvocation === "function";
+        const canInspectProviderInvocation =
+          typeof this.deps.executionRepository.getProviderInvocationUsage === "function";
+        const currentExecutionInvocation = executionInvocationId && canInspectExecutionInvocation
+          ? this.deps.executionRepository.getExecutionInvocation(executionInvocationId)
+          : null;
+        const currentUsage = canInspectProviderInvocation
+          ? this.deps.executionRepository.getProviderInvocationUsage(usageRecord.id)
+          : null;
+        const runtimeWasSettledExternally = (
+          currentExecutionInvocation !== null
+          && currentExecutionInvocation.status !== "running"
+        ) || (
+          currentUsage !== null
+          && currentUsage.status !== "running"
+        );
+        const cancelledByLifecycle = error instanceof ClarificationReplyNoLongerActiveError;
+        if (executionInvocationId && !runtimeWasSettledExternally) {
           this.deps.executionRepository.updateExecutionInvocation(executionInvocationId, {
-            status: "failed",
+            status: cancelledByLifecycle ? "cancelled" : "failed",
             finishedAt,
+            errorMessage: cancelledByLifecycle
+              ? null
+              : error instanceof Error
+                ? error.message
+                : String(error),
           });
         }
-        this.deps.executionRepository.updateProviderInvocationUsage(usageRecord.id, {
-          status: "failed",
-          finishedAt,
-          durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
-        });
+        if (!runtimeWasSettledExternally) {
+          this.deps.executionRepository.updateProviderInvocationUsage(usageRecord.id, {
+            status: cancelledByLifecycle ? "cancelled" : "failed",
+            finishedAt,
+            durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
+          });
+        }
         throw error;
       }
     } finally {
       clearTimeout(timeout);
+    }
+  }
+
+  private assertClarificationReplyRuntimeActive(args: {
+    sprintRunId: string | null;
+    executionInvocationId: string;
+    providerInvocationId: string;
+  }): void {
+    const repository = this.deps.executionRepository;
+    if (
+      typeof repository.getExecutionInvocation !== "function"
+      || typeof repository.getProviderInvocationUsage !== "function"
+    ) {
+      return;
+    }
+
+    if (args.sprintRunId && typeof repository.getSprintRun === "function") {
+      const sprintRun = repository.getSprintRun(args.sprintRunId);
+      if (!sprintRun || (sprintRun.status !== "queued" && sprintRun.status !== "running")) {
+        throw new ClarificationReplyNoLongerActiveError(
+          `Clarification reply delivery stopped because sprint run ${args.sprintRunId} is no longer active.`,
+        );
+      }
+    }
+
+    const executionInvocation = repository.getExecutionInvocation(
+      args.executionInvocationId,
+    );
+    const providerInvocation = repository.getProviderInvocationUsage(
+      args.providerInvocationId,
+    );
+    if (
+      !executionInvocation
+      || executionInvocation.status !== "running"
+      || !providerInvocation
+      || providerInvocation.status !== "running"
+    ) {
+      throw new ClarificationReplyNoLongerActiveError(
+        "Clarification reply delivery stopped because its invocation was cancelled or settled.",
+      );
     }
   }
 
@@ -687,6 +812,7 @@ export class WorkerInboxReplyService {
     sprintId?: string | null;
     agentMcpAccess?: AgentMcpAccessConfig | null;
     mcpAgentId?: string | null;
+    executionInvocationId?: string | null;
     persistentSkillRuntime?: PersistentSkillStorageRuntime | null;
     googleDriveMount?: GoogleDriveRuntimeMount | null;
     signal?: AbortSignal;
@@ -707,6 +833,7 @@ export class WorkerInboxReplyService {
     const resolvedMcp = resolveAgentMcpRuntime({
       access: input.agentMcpAccess,
       agentId: input.mcpAgentId,
+      executionInvocationId: input.executionInvocationId,
       customMcpServers: dashboardSettings.customMcpServers ?? [],
       mcpConnection,
       persistentSkillRetrievalEnabled: Boolean(persistentSkillRuntime),

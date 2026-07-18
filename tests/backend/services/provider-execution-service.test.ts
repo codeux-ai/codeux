@@ -314,6 +314,41 @@ describe("ProviderExecutionService", () => {
     }));
   });
 
+  it("advertises the durable execution invocation with an agent-scoped MCP connection", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getGithubToken: vi.fn(),
+      getMcpConnectionInfo: vi.fn().mockReturnValue({
+        url: "http://127.0.0.1:4444/mcp",
+        authToken: "token",
+      }),
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      invocationId: "exec-inv-1",
+      finalizeExecutionInvocation: false,
+      agentMcpAccess: {
+        codeUxEnabled: true,
+        codeUxToolToggles: [],
+        linkedServerIds: [],
+      },
+      mcpAgentId: "agent-1",
+    });
+
+    expect(providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      mcpConnection: {
+        url: "http://127.0.0.1:4444/mcp",
+        authToken: "token",
+        agentId: "agent-1",
+        executionInvocationId: "exec-inv-1",
+      },
+    }));
+  });
+
   it("appends persistent skill guidance, versioned mounts, and retrieval MCP for enabled attached agents", async () => {
     providerRunner.runProvider.mockResolvedValue(mockResult);
     const skillRuntime = {

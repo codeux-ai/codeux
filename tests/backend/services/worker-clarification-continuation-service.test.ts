@@ -6,6 +6,7 @@ describe("WorkerClarificationContinuationService", () => {
   const sendJulesSessionMessage = vi.fn();
   const continueTaskFromClarification = vi.fn();
   const getTaskRun = vi.fn();
+  const getSprintRun = vi.fn();
   const getLatestTaskWorkspaceResumeTarget = vi.fn();
   const getLatestProviderInvocationUsageBySession = vi.fn();
   const updateTaskRun = vi.fn();
@@ -32,6 +33,7 @@ describe("WorkerClarificationContinuationService", () => {
       dispatchId: "dispatch-1",
       taskRunId: "task-run-1",
       sessionId: "session-1",
+      executionInvocationId: "execution-invocation-1",
       requesterAgentId: "worker-1",
       deduplicationKey: "question-1",
       status: "pending",
@@ -63,6 +65,7 @@ describe("WorkerClarificationContinuationService", () => {
       dispatchId: clarification.dispatchId,
       taskRunId: clarification.taskRunId,
       sessionId: clarification.sessionId,
+      executionInvocationId: clarification.executionInvocationId,
       requesterAgentId: clarification.requesterAgentId,
       repliedByAgentId: input.repliedByAgentId,
       answerMarkdown: input.answerMarkdown,
@@ -81,9 +84,16 @@ describe("WorkerClarificationContinuationService", () => {
       id: "task-run-1",
       projectId: "project-1",
       taskId: "task-1",
+      sprintRunId: "sprint-run-1",
       provider: "jules",
       sessionId: "session-1",
       workerBranch: null,
+    });
+    getSprintRun.mockReturnValue({
+      id: "sprint-run-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      status: "running",
     });
     getTask.mockReturnValue({
       id: "task-1",
@@ -96,6 +106,7 @@ describe("WorkerClarificationContinuationService", () => {
       taskRerunService: { continueTaskFromClarification } as any,
       executionRepository: {
         getTaskRun,
+        getSprintRun,
         getLatestTaskWorkspaceResumeTarget,
         getLatestProviderInvocationUsageBySession,
         updateTaskRun,
@@ -140,13 +151,14 @@ describe("WorkerClarificationContinuationService", () => {
       id: "task-run-1",
       projectId: "project-1",
       taskId: "task-1",
+      sprintRunId: "sprint-run-1",
       provider: "codex",
       sessionId: "session-1",
       workerBranch: "worker/task-1",
     });
     getLatestTaskWorkspaceResumeTarget.mockReturnValue({
       provider: "codex",
-      sessionId: "workspace-session-1",
+      sessionId: "session-1",
       workerBranch: "worker/task-1",
     });
     getLatestProviderInvocationUsageBySession.mockReturnValue({ model: "gpt-5.1-codex" });
@@ -155,15 +167,56 @@ describe("WorkerClarificationContinuationService", () => {
     const result = await reply();
 
     expect(continueTaskFromClarification).toHaveBeenCalledWith("task-1", {
+      clarificationId: "clarification-1",
       answerMarkdown: "Yes, preserve them.",
       provider: "codex",
       model: "gpt-5.1-codex",
       providerConfigId: "provider-config-1",
-      resumeWorkspaceSessionId: "workspace-session-1",
+      resumeWorkspaceSessionId: "session-1",
       resumeWorkerBranch: "worker/task-1",
     });
     expect(completeReply).toHaveBeenCalledTimes(1);
     expect(result.deliveryMode).toBe("cli_workspace");
+  });
+
+  it.each([
+    "gemini",
+    "claude-code",
+    "qwen-code",
+    "opencode",
+    "antigravity",
+    "mockup-cli",
+  ] as const)("accepts clarification continuation for the %s CLI provider", async (provider) => {
+    getTaskRun.mockReturnValue({
+      id: "task-run-1",
+      projectId: "project-1",
+      taskId: "task-1",
+      sprintRunId: "sprint-run-1",
+      provider,
+      sessionId: "session-1",
+      workerBranch: "worker/task-1",
+    });
+    getLatestTaskWorkspaceResumeTarget.mockReturnValue({
+      provider,
+      sessionId: "session-1",
+      workerBranch: "worker/task-1",
+    });
+    getLatestProviderInvocationUsageBySession.mockReturnValue({
+      model: "provider-model",
+      nativeSessionId: `${provider}-native-session`,
+    });
+    continueTaskFromClarification.mockResolvedValue({ session_id: "next-session" });
+
+    await reply();
+
+    expect(continueTaskFromClarification).toHaveBeenCalledWith(
+      "task-1",
+      expect.objectContaining({
+        provider,
+        resumeWorkspaceSessionId: "session-1",
+        resumeWorkerBranch: "worker/task-1",
+      }),
+    );
   });
 
   it("leaves the clarification pending when a task-backed provider session is missing", async () => {
@@ -171,6 +224,7 @@ describe("WorkerClarificationContinuationService", () => {
       id: "task-run-1",
       projectId: "project-1",
       taskId: "task-1",
+      sprintRunId: "sprint-run-1",
       provider: "jules",
       sessionId: null,
     });
@@ -180,6 +234,67 @@ describe("WorkerClarificationContinuationService", () => {
     expect(sendJulesSessionMessage).not.toHaveBeenCalled();
     expect(completeReply).not.toHaveBeenCalled();
     expect(clarification.status).toBe("pending");
+  });
+
+  it("leaves the clarification pending when the preserved CLI provider invocation cannot be resumed", async () => {
+    getTaskRun.mockReturnValue({
+      id: "task-run-1",
+      projectId: "project-1",
+      taskId: "task-1",
+      sprintRunId: "sprint-run-1",
+      provider: "claude-code",
+      sessionId: "session-1",
+      workerBranch: "worker/task-1",
+    });
+    getLatestTaskWorkspaceResumeTarget.mockReturnValue({
+      provider: "claude-code",
+      sessionId: "session-1",
+      workerBranch: "worker/task-1",
+    });
+    getLatestProviderInvocationUsageBySession.mockReturnValue({
+      model: "claude-model",
+      nativeSessionId: null,
+    });
+
+    await expect(reply()).rejects.toThrow(/no captured Claude Code session id/i);
+    expect(continueTaskFromClarification).not.toHaveBeenCalled();
+    expect(completeReply).not.toHaveBeenCalled();
+    expect(clarification.status).toBe("pending");
+  });
+
+  it("leaves the clarification pending when the sprint run is paused", async () => {
+    getSprintRun.mockReturnValue({
+      id: "sprint-run-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      status: "paused",
+    });
+
+    await expect(reply()).rejects.toThrow(/cannot continue.*paused/i);
+    expect(sendJulesSessionMessage).not.toHaveBeenCalled();
+    expect(continueTaskFromClarification).not.toHaveBeenCalled();
+    expect(completeReply).not.toHaveBeenCalled();
+  });
+
+  it("rejects a newer CLI workspace instead of resuming outside the source session lineage", async () => {
+    getTaskRun.mockReturnValue({
+      id: "task-run-1",
+      projectId: "project-1",
+      taskId: "task-1",
+      provider: "codex",
+      sessionId: "session-1",
+      workerBranch: "worker/task-1",
+      sprintRunId: "sprint-run-1",
+    });
+    getLatestTaskWorkspaceResumeTarget.mockReturnValue({
+      provider: "codex",
+      sessionId: "newer-session",
+      workerBranch: "worker/task-1",
+    });
+
+    await expect(reply()).rejects.toThrow(/workspace session does not match its source task run/i);
+    expect(continueTaskFromClarification).not.toHaveBeenCalled();
+    expect(completeReply).not.toHaveBeenCalled();
   });
 
   it("returns an already-settled reply without delivering or dispatching twice", async () => {

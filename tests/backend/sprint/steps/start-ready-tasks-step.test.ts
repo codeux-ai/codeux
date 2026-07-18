@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { runStartReadyTasksStep } from "../../../../src/sprint/steps/start-ready-tasks-step.js";
 import { Subtask } from "../../../../src/contracts/app-types.js";
-import { ProviderCapReachedError } from "../../../../src/services/sprint-task-dispatch-service.js";
+import {
+  ProviderCapReachedError,
+  WorkerClarificationPendingError,
+} from "../../../../src/services/sprint-task-dispatch-service.js";
 
 describe("start-ready-tasks-step", () => {
   it("does not start tasks if action is not orchestrate", async () => {
@@ -145,6 +148,39 @@ describe("start-ready-tasks-step", () => {
     expect(fails).toBe(0);
     expect(setConsecutiveFailures).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("projects a pending worker clarification as BLOCKED without consuming the failure budget", async () => {
+    const subtasks: Subtask[] = [
+      { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "PENDING" },
+    ];
+    const startTask = vi.fn().mockRejectedValue(new WorkerClarificationPendingError("clarification-1"));
+    const setConsecutiveFailures = vi.fn();
+    const info = vi.fn();
+    const error = vi.fn();
+
+    const result = await runStartReadyTasksStep(subtasks, {
+      action: "orchestrate",
+      getConsecutiveFailures: () => 0,
+      setConsecutiveFailures,
+      maxFailures: 3,
+      startTask,
+      resolveSessionName: (session) => session.id,
+      extractSessionId: (session) => session.id,
+      logger: { info, error } as any,
+      getProviderForTask: () => null,
+      getProviderSettings: () => ({}),
+      getRunningCounts: () => ({}),
+    });
+
+    expect(startTask).toHaveBeenCalledOnce();
+    expect(result.subtasks[0].status).toBe("BLOCKED");
+    expect(setConsecutiveFailures).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledWith(
+      "Task dispatch deferred while a worker clarification is pending",
+      { taskId: "1", clarificationId: "clarification-1" },
+    );
   });
 
   it("does not trigger emergency stop when multiple tasks are deferred for provider capacity", async () => {

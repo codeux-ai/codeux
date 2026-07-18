@@ -7,6 +7,12 @@ export interface McpConnectionInfo {
    */
   agentId?: string;
   /**
+   * Durable execution invocation advertised via X-Code-Ux-Invocation. The
+   * gateway uses it to authorize the exact coding run even when the selected
+   * agent is a fallback that is not statically assigned to the task.
+   */
+  executionInvocationId?: string;
+  /**
    * Dashboard chat thread id advertised only for the active reply turn (via the
    * X-Code-Ux-Thread header) so MCP handlers can recover the originating thread.
    */

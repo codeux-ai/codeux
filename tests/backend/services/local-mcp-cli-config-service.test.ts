@@ -96,4 +96,21 @@ describe("LocalMcpCliConfigService", () => {
       headers: { Authorization: "Bearer secret-token" },
     });
   });
+
+  it("installs Antigravity with the Streamable HTTP accept contract", async () => {
+    const service = new LocalMcpCliConfigService();
+
+    const result = await service.installProvider("antigravity", conn);
+    const parsed = JSON.parse(await fs.readFile(result.configPath, "utf-8")) as {
+      mcpServers: Record<string, { serverUrl: string; headers: Record<string, string> }>;
+    };
+
+    expect(parsed.mcpServers.code_ux).toEqual({
+      serverUrl: "http://127.0.0.1:4445/mcp",
+      headers: {
+        Authorization: "Bearer secret-token",
+        Accept: "application/json, text/event-stream",
+      },
+    });
+  });
 });

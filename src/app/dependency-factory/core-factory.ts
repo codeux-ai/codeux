@@ -20,7 +20,9 @@ import { ProjectWorkerAssignmentRepository } from "../../repositories/project-wo
 import { QaReviewRepository } from "../../repositories/qa-review-repository.js";
 import { ProjectWorkerAssignmentService } from "../../domain/workers/project-worker-assignment-service.js";
 import { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
+import { WorkerClarificationRepository } from "../../repositories/worker-clarification-repository.js";
 import { ProjectAttentionService } from "../../domain/workers/project-attention-service.js";
+import { WorkerClarificationService } from "../../services/worker-clarification-service.js";
 import { WorkerAttentionOutcomeService } from "../../domain/workers/worker-attention-outcome-service.js";
 import { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
 import { ActivitySummaryService } from "../../domain/sessions/activity-summary.js";
@@ -109,6 +111,7 @@ export interface CoreDependencies {
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
   projectAttentionService: ProjectAttentionService;
+  workerClarificationService: WorkerClarificationService;
   workerAttentionOutcomeService: WorkerAttentionOutcomeService;
   agentPresetRepository: AgentPresetRepository;
   agentPresetSyncService: AgentPresetSyncService;
@@ -287,6 +290,11 @@ export function createCoreDependencies(
   );
   const agentPresetRepository = new AgentPresetRepository(appDbStorage);
   const executionRepository = new ExecutionRepository(appDbStorage, dashboardRealtimeService, undefined, settingsRepository);
+  const workerClarificationService = new WorkerClarificationService(
+    new WorkerClarificationRepository(projectAttentionRepository),
+    projectManagementRepository,
+    executionRepository,
+  );
   const sprintRunLifecycleService = new SprintRunLifecycleService({
     executionRepository,
     projectManagementRepository,
@@ -450,6 +458,7 @@ export function createCoreDependencies(
     projectWorkerAssignmentService,
     projectAttentionRepository,
     projectAttentionService,
+    workerClarificationService,
     workerAttentionOutcomeService,
     agentPresetRepository,
     agentPresetSyncService,

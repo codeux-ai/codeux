@@ -511,6 +511,41 @@ describe("executeProviderStage", () => {
     }));
   });
 
+  it("requires a real preserved provider conversation for clarification continuation", async () => {
+    const ctx = createMockContext();
+    ctx.provider = "claude-code";
+    ctx.workspaceSessionId = "source-workspace-session";
+    ctx.requireProviderSessionResume = true;
+    ctx.deps.executionRepository!.getLatestProviderInvocationUsageBySession = vi.fn().mockReturnValue({
+      id: "provider-source",
+      nativeSessionId: "claude-native-session",
+      model: "claude-model",
+    });
+    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({
+      ok: true,
+      stdout: "continued",
+      stderr: "",
+      usageTelemetry: { transcriptText: "continued transcript" } as any,
+    });
+
+    await executeProviderStage(ctx, "continue with the manager answer");
+
+    expect(ctx.providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      continueSessionId: "claude-native-session",
+      allowFreshSessionFallback: false,
+    }));
+  });
+
+  it("rejects clarification continuation when no prior provider invocation exists", async () => {
+    const ctx = createMockContext();
+    ctx.requireProviderSessionResume = true;
+    ctx.workspaceSessionId = "missing-workspace-session";
+    ctx.deps.executionRepository!.getLatestProviderInvocationUsageBySession = vi.fn().mockReturnValue(null);
+
+    await expect(executeProviderStage(ctx, "continue")).rejects.toThrow(/no prior gemini invocation/i);
+    expect(ctx.providerRunner.runProvider).not.toHaveBeenCalled();
+  });
+
   it("throws an error if provider run fails without retry conditions", async () => {
     const ctx = createMockContext();
     ctx.workflowSettings.retryOnReadFileNotFound = false;
@@ -1057,5 +1092,17 @@ describe("executeCleanupStage", () => {
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
       description: expect.stringContaining("Preserving worktree")
     }));
+  });
+
+  it("preserves a successful no-change worktree while manager clarification is pending", async () => {
+    const ctx = createMockContext();
+    ctx.workflowSucceeded = true;
+    ctx.workflowSettings.cleanupWorktreeOnSuccess = true;
+    ctx.preserveWorkspaceForClarification = true;
+
+    await executeCleanupStage(ctx);
+
+    expect(ctx.workspaceManager.removeWorktree).not.toHaveBeenCalled();
+    expect(ctx.workspaceManager.releaseWorkspaceHelper).toHaveBeenCalledWith("/repo/worktree");
   });
 });

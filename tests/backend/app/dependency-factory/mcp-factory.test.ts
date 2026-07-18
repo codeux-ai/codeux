@@ -5,6 +5,7 @@ import { CoreDependencies } from "../../../../src/app/dependency-factory/core-fa
 import { SprintDependencies } from "../../../../src/app/dependency-factory/sprint-factory.js";
 import { ManagementToolHandler } from "../../../../src/mcp/management-tool-handler.js";
 import { WorkerClarificationContinuationService } from "../../../../src/services/worker-clarification-continuation-service.js";
+import { WorkerClarificationCoordinatorService } from "../../../../src/services/worker-clarification-coordinator-service.js";
 
 vi.mock("../../../../src/mcp/management-tool-handler.js", () => {
   const ManagementToolHandler = vi.fn();
@@ -14,6 +15,17 @@ vi.mock("../../../../src/mcp/management-tool-handler.js", () => {
 vi.mock("../../../../src/services/worker-clarification-continuation-service.js", () => {
   const WorkerClarificationContinuationService = vi.fn();
   return { WorkerClarificationContinuationService };
+});
+
+vi.mock("../../../../src/services/worker-clarification-coordinator-service.js", () => {
+  const start = vi.fn();
+  const WorkerClarificationCoordinatorService = vi.fn(function (
+    this: { start: typeof start; stop: ReturnType<typeof vi.fn> },
+  ) {
+    this.start = start;
+    this.stop = vi.fn();
+  });
+  return { WorkerClarificationCoordinatorService };
 });
 
 vi.mock("../../../../src/domain/sprint/branch-name-generator.js", async (importOriginal) => {
@@ -56,6 +68,7 @@ describe("MCP Factory", () => {
       executionRepository: {},
       projectManagementRepository: { getProject: vi.fn() },
       projectAttentionRepository: {},
+      workerClarificationService: { onCreated: vi.fn() },
       agentPresetRepository: { getAgentPreset: vi.fn() },
       julesApi: { sendSessionMessage: vi.fn() },
       agentPresetSyncService: {},
@@ -98,6 +111,7 @@ describe("MCP Factory", () => {
     );
 
     expect(result.managementToolHandler).toBeDefined();
+    expect(result.workerClarificationCoordinatorService).toBeDefined();
     expect(ManagementToolHandler).toHaveBeenCalledTimes(1);
 
     const managementArgs = vi.mocked(ManagementToolHandler).mock.calls[0][0];
@@ -121,6 +135,11 @@ describe("MCP Factory", () => {
     expect(typeof continuationArgs.sendJulesSessionMessage).toBe("function");
     expect(typeof continuationArgs.isAuthorizedProjectManager).toBe("function");
     expect(typeof continuationArgs.resolveProviderConfigId).toBe("function");
+    expect(WorkerClarificationCoordinatorService).toHaveBeenCalledWith(expect.objectContaining({
+      clarificationService: mockCoreDeps.workerClarificationService,
+      continuationService: managementArgs.workerClarificationContinuationService,
+      workerInboxReplyService: mockSprintDeps.workerInboxReplyService,
+    }));
   });
 
   it("no longer exposes the removed listening handlers", () => {

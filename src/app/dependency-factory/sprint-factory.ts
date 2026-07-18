@@ -80,6 +80,8 @@ export function createSprintDependencies(
     taskSelfReflectionRatingRepository: coreDeps.taskSelfReflectionRatingRepository,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     sprintRunLifecycleService: coreDeps.sprintRunLifecycleService,
+    workerClarificationService: coreDeps.workerClarificationService,
+    projectAttentionService: coreDeps.projectAttentionService,
     getDashboardSettings: resolveDashboardSettings,
     agentPresetSyncService,
     getGithubToken: () => context.getEffectiveGithubToken(),
@@ -246,6 +248,7 @@ export function createSprintDependencies(
     resolveDashboardSettings,
     logger.child({ component: "sprint-task-dispatch-service" }),
     () => julesApi.getSessionsForCapacityCheck(),
+    coreDeps.workerClarificationService,
   );
 
   projectAttentionService.setWorkerAttentionOpenedCallback((projectId) => {

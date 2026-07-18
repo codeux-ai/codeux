@@ -6,6 +6,7 @@ import { ProjectManagementRepository } from "../repositories/project-management-
 import { TaskService } from "./task-service.js";
 import type { GuardrailService } from "./guardrail-service.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
+import type { WorkerClarificationService } from "./worker-clarification-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import {
   isJulesSessionCapacityError,
@@ -44,12 +45,27 @@ export class ProviderCapacityCheckUnavailableError extends Error {
   }
 }
 
-export interface TaskDispatchDeferral {
-  reason: "provider_concurrency_cap";
-  provider?: string;
-  limit?: number;
-  currentCount?: number;
+export class WorkerClarificationPendingError extends Error {
+  readonly retryableDispatchDeferral = true;
+  readonly deferralReason = "worker_clarification_pending" as const;
+
+  constructor(public readonly clarificationId: string) {
+    super(`Worker clarification ${clarificationId} is pending; ordinary task dispatch is deferred.`);
+    this.name = "WorkerClarificationPendingError";
+  }
 }
+
+export type TaskDispatchDeferral =
+  | {
+    reason: "provider_concurrency_cap";
+    provider?: string;
+    limit?: number;
+    currentCount?: number;
+  }
+  | {
+    reason: "worker_clarification_pending";
+    clarificationId: string;
+  };
 
 export function getTaskDispatchDeferral(error: unknown): TaskDispatchDeferral | null {
   if (error instanceof ProviderCapReachedError) {
@@ -58,6 +74,12 @@ export function getTaskDispatchDeferral(error: unknown): TaskDispatchDeferral | 
       provider: error.provider,
       limit: error.limit,
       currentCount: error.currentCount,
+    };
+  }
+  if (error instanceof WorkerClarificationPendingError) {
+    return {
+      reason: error.deferralReason,
+      clarificationId: error.clarificationId,
     };
   }
 
@@ -71,10 +93,21 @@ export function getTaskDispatchDeferral(error: unknown): TaskDispatchDeferral | 
     provider?: unknown;
     limit?: unknown;
     currentCount?: unknown;
+    clarificationId?: unknown;
   };
-  if (candidate.retryableDispatchDeferral !== true || candidate.deferralReason !== "provider_concurrency_cap") {
+  if (candidate.retryableDispatchDeferral !== true) {
     return null;
   }
+  if (
+    candidate.deferralReason === "worker_clarification_pending"
+    && typeof candidate.clarificationId === "string"
+  ) {
+    return {
+      reason: "worker_clarification_pending",
+      clarificationId: candidate.clarificationId,
+    };
+  }
+  if (candidate.deferralReason !== "provider_concurrency_cap") return null;
 
   return {
     reason: "provider_concurrency_cap",
@@ -98,6 +131,8 @@ export interface StartSprintDispatchArgs {
   resumeWorkspaceSessionId?: string;
   resumeWorkerBranch?: string;
   forceFreshWorkspace?: boolean;
+  requireProviderSessionResume?: boolean;
+  clarificationContinuationId?: string;
 }
 
 export interface StartSprintDispatchResult {
@@ -105,6 +140,9 @@ export interface StartSprintDispatchResult {
   name?: string;
   provider?: string;
   runtimeLabel?: string;
+  dispatchId?: string;
+  taskRunId?: string;
+  startedNew?: boolean;
 }
 
 const DUPLICATE_BLOCKING_TASK_DISPATCH_STATUSES = new Set<TaskDispatchRecord["status"]>([
@@ -132,6 +170,7 @@ export class SprintTaskDispatchService {
     private readonly getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings,
     private readonly logger?: Logger,
     private readonly listJulesSessionsForCapacity?: () => Promise<JulesSession[]>,
+    private readonly workerClarificationService?: WorkerClarificationService,
   ) {}
 
   async startTask(args: StartSprintDispatchArgs): Promise<StartSprintDispatchResult> {
@@ -141,10 +180,29 @@ export class SprintTaskDispatchService {
       throw new Error(`Task record not found: ${taskRecordId}`);
     }
 
+    const pendingClarification = this.workerClarificationService?.findPendingForTask(
+      args.projectId,
+      taskRecordId,
+      args.sprintRunId,
+    ) ?? null;
+    if (pendingClarification && args.clarificationContinuationId !== pendingClarification.id) {
+      throw new WorkerClarificationPendingError(pendingClarification.id);
+    }
+    if (args.clarificationContinuationId && !pendingClarification) {
+      throw new Error(
+        `Cannot continue clarification ${args.clarificationContinuationId}: it is no longer pending for this task run.`,
+      );
+    }
+
     const activeDispatch = this.findDuplicateBlockingDispatchForTask(args.projectId, args.sprintRunId, taskRecordId);
     if (activeDispatch) {
       const taskRun = this.executionRepository.getTaskRunByDispatchId(activeDispatch.id)
         || this.executionRepository.getLatestTaskRun(taskRecordId, args.sprintRunId);
+      if (args.clarificationContinuationId) {
+        throw new Error(
+          `Cannot continue clarification ${args.clarificationContinuationId}: task already has active dispatch ${activeDispatch.id}.`,
+        );
+      }
       this.logger?.warn("Skipped duplicate sprint task dispatch because an active dispatch already exists", {
         projectId: args.projectId,
         sprintId: args.sprintId,
@@ -160,6 +218,9 @@ export class SprintTaskDispatchService {
         name: taskRun?.sessionName || taskRun?.sessionId || activeDispatch.id,
         provider: taskRun?.provider || undefined,
         runtimeLabel: taskRun?.provider ? String(taskRun.provider).toUpperCase() : "EXISTING",
+        dispatchId: activeDispatch.id,
+        taskRunId: taskRun?.id,
+        startedNew: false,
       };
     }
 
@@ -212,7 +273,7 @@ export class SprintTaskDispatchService {
         : null;
     } catch (error) {
       const deferral = getTaskDispatchDeferral(error);
-      if (deferral) {
+      if (deferral?.reason === "provider_concurrency_cap") {
         const pStr = provider || "jules";
         const counts = this.providerConcurrencyService.getGlobalRunningCounts([pStr]);
         const currentCount = counts[pStr] || 0;
@@ -329,6 +390,7 @@ export class SprintTaskDispatchService {
           resumeWorkspaceSessionId: args.resumeWorkspaceSessionId,
           resumeWorkerBranch: args.resumeWorkerBranch,
           forceFreshWorkspace: args.forceFreshWorkspace,
+          requireProviderSessionResume: args.requireProviderSessionResume,
           providerConfigId: args.providerConfigId,
         },
       );
@@ -353,6 +415,9 @@ export class SprintTaskDispatchService {
           id: session.id,
           name: session.name,
           provider: nextProvider || undefined,
+          dispatchId: dispatch.id,
+          taskRunId: taskRun.id,
+          startedNew: false,
         };
       }
 
@@ -385,6 +450,9 @@ export class SprintTaskDispatchService {
         id: session.id,
         name: session.name,
         provider: nextProvider || undefined,
+        dispatchId: dispatch.id,
+        taskRunId: taskRun.id,
+        startedNew: true,
       };
     } catch (error) {
       let deferral = getTaskDispatchDeferral(error);
@@ -445,7 +513,7 @@ export class SprintTaskDispatchService {
           capacitySnapshotConfirmed: confirmedCapacity !== null,
         });
       }
-      if (deferral) {
+      if (deferral?.reason === "provider_concurrency_cap") {
         const deferredProvider = deferral.provider || provider || executorType;
         this.releaseJulesClaimForDeferral(julesClaim, julesExecutionInvocation?.id || null, error);
         throw this.deferForProviderCapacity(
@@ -674,7 +742,7 @@ export class SprintTaskDispatchService {
       return null;
     } catch (error) {
       const deferral = getTaskDispatchDeferral(error);
-      if (!deferral) {
+      if (!deferral || deferral.reason !== "provider_concurrency_cap") {
         throw error;
       }
       return { currentCount: deferral.currentCount ?? limit };

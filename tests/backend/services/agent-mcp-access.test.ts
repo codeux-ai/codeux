@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  automaticClarificationReplyAgentMcpAccess,
   defaultAgentMcpAccess,
   defaultCodingAgentMcpAccess,
   codeUxAgentMcpAccess,
   codeUxAgentMcpAccessWithoutScheduler,
   dashboardReplyAgentMcpAccess,
+  isAutomaticClarificationReplyInvocation,
+  isInvocationScopedWorkerClarificationAgent,
   isWorkerClarificationAgent,
   schedulerOnlyAgentMcpAccess,
   sanitizeAgentMcpAccess,
@@ -104,6 +107,34 @@ describe("agent MCP defaults", () => {
     expect(eligible("unrelated-agent")).toBe(false);
   });
 
+  it("authorizes only matching live coding invocations and derives omitted request scope", () => {
+    const invocation = {
+      agentPresetId: "coding-agent",
+      projectId: "project-1",
+      status: "running" as const,
+      taskId: "task-1",
+      taskRunId: "task-run-1",
+      type: "cli_task_coding",
+    };
+    const eligible = (overrides: Partial<Parameters<typeof isInvocationScopedWorkerClarificationAgent>[0]> = {}) =>
+      isInvocationScopedWorkerClarificationAgent({
+        agentId: "coding-agent",
+        projectId: "project-1",
+        invocation,
+        ...overrides,
+      });
+
+    expect(eligible()).toBe(true);
+    expect(eligible({ requestedTaskId: "task-1", requestedTaskRunId: "task-run-1" })).toBe(true);
+    expect(eligible({ requestedTaskId: "other-task" })).toBe(false);
+    expect(eligible({ requestedTaskRunId: "other-run" })).toBe(false);
+    expect(eligible({ agentId: "other-agent" })).toBe(false);
+    expect(eligible({ projectId: "other-project" })).toBe(false);
+    expect(eligible({ invocation: { ...invocation, status: "completed" } })).toBe(false);
+    expect(eligible({ invocation: { ...invocation, status: "paused" } })).toBe(false);
+    expect(eligible({ invocation: { ...invocation, type: "qa_review" } })).toBe(false);
+  });
+
   it("injects only the narrow clarification gateway tool when broad Code UX access is off", () => {
     const worker = workerClarificationAgentMcpAccess(defaultCodingAgentMcpAccess());
     const manager = projectManagerClarificationAgentMcpAccess(undefined);
@@ -114,6 +145,49 @@ describe("agent MCP defaults", () => {
     expect(manager.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name))
       .toEqual(["reply_to_clarification"]);
     expect(manager.linkedServerIds).toEqual([]);
+  });
+
+  it("limits automated clarification generation to read-only knowledge tools", () => {
+    const access = automaticClarificationReplyAgentMcpAccess();
+    expect(access.codeUxToolToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.name))
+      .toEqual(["search_knowledge", "search_skills"]);
+    expect(access.linkedServerIds).toEqual([]);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "manage_projects")?.enabled).toBe(false);
+    expect(access.codeUxToolToggles.find((toggle) => toggle.name === "reply_to_clarification")?.enabled).toBe(false);
+  });
+
+  it("recognizes only a running clarification-reply provider turn as automatic manager generation", () => {
+    const invocation = {
+      agentPresetId: "manager-1",
+      projectId: "project-1",
+      providerInvocationId: "usage-1",
+      status: "running" as const,
+      type: "worker_reply",
+    };
+    const providerUsage = {
+      id: "usage-1",
+      projectId: "project-1",
+      purpose: "clarification_reply" as const,
+      status: "running" as const,
+    };
+    const eligible = (
+      overrides: Partial<Parameters<typeof isAutomaticClarificationReplyInvocation>[0]> = {},
+    ) => isAutomaticClarificationReplyInvocation({
+      agentId: "manager-1",
+      projectId: "project-1",
+      invocation,
+      providerUsage,
+      ...overrides,
+    });
+
+    expect(eligible()).toBe(true);
+    expect(eligible({ agentId: "other-manager" })).toBe(false);
+    expect(eligible({ projectId: "other-project" })).toBe(false);
+    expect(eligible({ invocation: { ...invocation, status: "completed" } })).toBe(false);
+    expect(eligible({ invocation: { ...invocation, type: "dashboard_reply" } })).toBe(false);
+    expect(eligible({ invocation: { ...invocation, providerInvocationId: "usage-2" } })).toBe(false);
+    expect(eligible({ providerUsage: { ...providerUsage, purpose: "dashboard_reply" } })).toBe(false);
+    expect(eligible({ providerUsage: { ...providerUsage, status: "completed" } })).toBe(false);
   });
 
   it("preserves explicit coding-agent restrictions and linked servers when Code UX is already enabled", () => {
@@ -230,11 +304,16 @@ describe("resolveAgentMcpRuntime", () => {
     const result = resolveAgentMcpRuntime({
       access: { codeUxEnabled: true, codeUxToolToggles: [], linkedServerIds: ["2"] },
       agentId: "agent-7",
+      executionInvocationId: "xi_123",
       customMcpServers: servers,
       mcpConnection: conn,
     });
     expect(result.customMcpServers.map((s) => s.id)).toEqual(["2"]);
-    expect(result.mcpConnection).toEqual({ ...conn, agentId: "agent-7" });
+    expect(result.mcpConnection).toEqual({
+      ...conn,
+      agentId: "agent-7",
+      executionInvocationId: "xi_123",
+    });
   });
 
   it("includes Playwright custom MCP for dashboard reply access even without saved links", () => {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildProviderMcpConfigArtifact, escapeTomlString } from "../../../../../src/infrastructure/providers/cli/mcp-config-format.js";
+import {
+  buildClaudeMcpServerEntry,
+  buildCodexMcpServerTomlLines,
+  buildProviderMcpConfigArtifact,
+  escapeTomlString,
+  MCP_STREAMABLE_HTTP_ACCEPT,
+} from "../../../../../src/infrastructure/providers/cli/mcp-config-format.js";
 import { DEFAULT_PLAYWRIGHT_MCP_SERVER } from "../../../../../src/repositories/settings-defaults.js";
 
 describe("mcp-config-format injection prevention", () => {
@@ -60,6 +66,7 @@ describe("mcp-config-format injection prevention", () => {
       url: "http://127.0.0.1:3000/mcp",
       authToken: "token",
       agentId: "agent-9",
+      executionInvocationId: "xi_123",
       threadId: "thread-7",
     }, [{
       id: "docs",
@@ -72,8 +79,22 @@ describe("mcp-config-format injection prevention", () => {
     const config = JSON.parse(artifact?.content || "{}");
 
     expect(config.mcpServers[builtInName].headers["X-Code-Ux-Agent"]).toBe("agent-9");
+    expect(config.mcpServers[builtInName].headers["X-Code-Ux-Invocation"]).toBe("xi_123");
     expect(config.mcpServers[builtInName].headers["X-Code-Ux-Thread"]).toBe("thread-7");
     expect(config.mcpServers.docs.headers).toEqual({ "X-Custom": "value" });
+  });
+
+  it("adds the required Streamable HTTP accept header to Antigravity", () => {
+    const artifact = buildProviderMcpConfigArtifact("antigravity", {
+      url: "http://127.0.0.1:3000/mcp",
+      authToken: "token",
+    }, []);
+    const config = JSON.parse(artifact?.content || "{}");
+
+    expect(config.mcpServers.code_ux.headers).toEqual({
+      Authorization: "Bearer token",
+      Accept: MCP_STREAMABLE_HTTP_ACCEPT,
+    });
   });
 
   it("adds an escaped thread header to the Codex built-in MCP connection only", () => {
@@ -81,6 +102,7 @@ describe("mcp-config-format injection prevention", () => {
       url: "http://127.0.0.1:3000/mcp",
       authToken: null,
       agentId: "agent-9",
+      executionInvocationId: "xi_123",
       threadId: 'thread-7"quoted',
     }, [{
       id: "docs",
@@ -92,6 +114,7 @@ describe("mcp-config-format injection prevention", () => {
     }]);
 
     expect(artifact?.content).toContain('"X-Code-Ux-Agent" = "agent-9"');
+    expect(artifact?.content).toContain('"X-Code-Ux-Invocation" = "xi_123"');
     expect(artifact?.content).toContain('"X-Code-Ux-Thread" = "thread-7\\"quoted"');
     expect(artifact?.content).toContain('http_headers = { "X-Custom" = "value" }');
   });

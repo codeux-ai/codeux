@@ -73,12 +73,25 @@ describe("WorkerInboxReplyService", () => {
       } as any,
       executionRepository: {
         createExecutionInvocation: vi.fn().mockReturnValue({ id: options.executionId }),
+        getExecutionInvocation: vi.fn().mockReturnValue({
+          id: options.executionId,
+          status: "running",
+        }),
+        getProviderInvocationUsage: vi.fn().mockReturnValue({
+          id: "inv-drive",
+          status: "running",
+        }),
+        getSprintRun: vi.fn().mockReturnValue({
+          id: "sprint-run-1",
+          status: "running",
+        }),
         appendExecutionInvocationMessage: appendMessage,
         updateExecutionInvocation: vi.fn(),
         updateProviderInvocationUsage: vi.fn(),
       } as any,
       getDashboardSettings: () => options.scopedSettings,
       getGithubToken: () => undefined,
+      getMcpConnectionInfo: () => ({ url: "http://127.0.0.1:4445/mcp", authToken: "test-token" }),
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
       providerConcurrencyService: {
         waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-drive" })),
@@ -127,6 +140,158 @@ describe("WorkerInboxReplyService", () => {
       role: "assistant",
       contentMarkdown: result.bodyMarkdown,
     }));
+  });
+
+  it("generates an invocation-linked project-manager answer for a local worker clarification", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "Read the existing file first, then apply the requested edit." });
+    const { service, appendMessage } = createDirectReplyService({
+      repoPath: "/repo",
+      scopedSettings: settings,
+      executionId: "exec-worker-clarification",
+    });
+    const task = {
+      record_id: "task-1",
+      sprint_id: "sprint-1",
+      id: "T1",
+      title: "Apply the smoke-test change",
+      prompt: "Create the requested smoke-test file.",
+      depends_on: [],
+      is_independent: true,
+      status: "BLOCKED",
+    } as any;
+
+    const result = await service.generateWorkerClarificationReply({
+      projectId: "project-1",
+      sprintGoal: "Verify local continuation",
+      subtasks: [task],
+      task,
+      clarification: {
+        id: "attention-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        sprintRunId: "sprint-run-1",
+        taskId: "task-1",
+        dispatchId: "dispatch-1",
+        taskRunId: "task-run-1",
+        sessionId: "session-1",
+        executionInvocationId: "coding-invocation-1",
+        requesterAgentId: "coding-agent-1",
+        deduplicationKey: "task-1:write-precondition",
+        questionMarkdown: "The Write tool requires reading the file first. How should I proceed?",
+        status: "pending",
+        answerMarkdown: null,
+        requestedAt: "2026-07-18T16:00:00.000Z",
+        repliedAt: null,
+        expiredAt: null,
+        cancelledAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-07-18T16:00:00.000Z",
+        repliedByAgentId: null,
+        resolvedByAgentId: null,
+        resolutionReason: null,
+      },
+    });
+
+    expect(result).toEqual({
+      answerMarkdown: "Read the existing file first, then apply the requested edit.",
+      agentPresetId: "project-manager",
+      executionInvocationId: "exec-worker-clarification",
+    });
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("The Write tool requires reading the file first."),
+    }));
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("Do not call reply_to_clarification"),
+      mcpConnection: expect.objectContaining({
+        agentId: "project-manager",
+        executionInvocationId: "exec-worker-clarification",
+      }),
+      customMcpServers: [],
+    }));
+    expect((service as any).deps.executionRepository.createExecutionInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attentionItemId: "attention-1",
+        dispatchId: "dispatch-1",
+        sprintRunId: "sprint-run-1",
+        taskRunId: "task-run-1",
+        agentPresetId: "project-manager",
+      }),
+    );
+    expect(appendMessage).toHaveBeenLastCalledWith("exec-worker-clarification", {
+      role: "assistant",
+      contentMarkdown: result.answerMarkdown,
+    });
+  });
+
+  it("does not resurrect a project-manager reply invocation cancelled while the provider was finishing", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "This late answer must not be delivered." });
+    const { service, appendMessage } = createDirectReplyService({
+      repoPath: "/repo",
+      scopedSettings: settings,
+      executionId: "exec-cancelled-clarification",
+    });
+    const repository = (service as any).deps.executionRepository;
+    repository.getSprintRun.mockReturnValue({
+      id: "sprint-run-1",
+      status: "paused",
+    });
+    repository.getExecutionInvocation.mockReturnValue({
+      id: "exec-cancelled-clarification",
+      status: "cancelled",
+    });
+    repository.getProviderInvocationUsage.mockReturnValue({
+      id: "inv-drive",
+      status: "cancelled",
+    });
+    const task = {
+      record_id: "task-1",
+      sprint_id: "sprint-1",
+      id: "T1",
+      title: "Apply the smoke-test change",
+      prompt: "Create the requested smoke-test file.",
+      depends_on: [],
+      is_independent: true,
+      status: "BLOCKED",
+    } as any;
+
+    await expect(service.generateWorkerClarificationReply({
+      projectId: "project-1",
+      sprintGoal: "Verify local continuation",
+      subtasks: [task],
+      task,
+      clarification: {
+        id: "attention-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        sprintRunId: "sprint-run-1",
+        taskId: "task-1",
+        dispatchId: "dispatch-1",
+        taskRunId: "task-run-1",
+        sessionId: "session-1",
+        executionInvocationId: "coding-invocation-1",
+        requesterAgentId: "coding-agent-1",
+        deduplicationKey: "task-1:write-precondition",
+        questionMarkdown: "How should I proceed?",
+        status: "pending",
+        answerMarkdown: null,
+        requestedAt: "2026-07-18T16:00:00.000Z",
+        repliedAt: null,
+        expiredAt: null,
+        cancelledAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-07-18T16:00:00.000Z",
+        repliedByAgentId: null,
+        resolvedByAgentId: null,
+        resolutionReason: null,
+      },
+    })).rejects.toThrow("is no longer active");
+
+    expect(appendMessage).not.toHaveBeenCalledWith(
+      "exec-cancelled-clarification",
+      expect.objectContaining({ role: "assistant" }),
+    );
+    expect(repository.updateExecutionInvocation).not.toHaveBeenCalled();
+    expect(repository.updateProviderInvocationUsage).not.toHaveBeenCalled();
   });
 
   it("generates a markdown reply with worker agent context", async () => {
@@ -1147,6 +1312,7 @@ describe("WorkerInboxReplyService", () => {
         url: "http://127.0.0.1:3000/mcp",
         authToken: "token",
         agentId: "project-manager",
+        executionInvocationId: "exec-inv-no-scheduler",
       },
       customMcpServers: [],
     }));
