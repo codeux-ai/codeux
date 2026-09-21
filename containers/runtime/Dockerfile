@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573 AS base
+FROM node:25-trixie-slim@sha256:aabbe39553d15ede8a97cc60c9e1a97034ff772afcf696ea42b94e7f5f2ec71b AS base
 
 LABEL org.opencontainers.image.source="https://github.com/codeux-ai/codeux"
 LABEL org.opencontainers.image.title="Code UX managed runtime"
