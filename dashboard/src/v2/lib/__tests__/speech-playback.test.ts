@@ -7,6 +7,10 @@ import {
 } from "../speech-playback.js";
 
 describe("speechTextFromMarkdown", () => {
+  it("preserves Supertonic expression tags while removing Markdown decoration", () => {
+    expect(speechTextFromMarkdown("> **نعم.** <breath> خلينا نجرب. <sigh> <laugh>"))
+      .toBe("نعم. <breath> خلينا نجرب. <sigh> <laugh>");
+  });
   it("normalizes readable Markdown without speaking decoration, code, or widgets", () => {
     const markdown = [
       "## **Release ready.**",
@@ -34,6 +38,10 @@ describe("speechTextFromMarkdown", () => {
 });
 
 describe("splitSpeechPlaybackText", () => {
+  it("recognizes an Arabic question as the first sentence and keeps the rest together", () => {
+    expect(splitSpeechPlaybackText("كيفك اليوم؟ خلينا نجرب API. <breath> تمام!"))
+      .toEqual(["كيفك اليوم؟", "خلينا نجرب API. <breath> تمام!"]);
+  });
   it("makes the first complete sentence available before grouping the remainder", () => {
     const text = "The plan is ready. The implementation can now proceed. All checks will follow.";
 

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SpeechSettings } from "../../../src/contracts/speech-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { resolvePiperSpeakerId, SpeechSynthesisService } from "../../../src/services/speech-synthesis-service.js";
-import { resolveCompatibleSynthesisVoice } from "../../../src/services/speech-model-catalog.js";
+import { resolveCompatibleSynthesisVoice, resolveSpeechModelEntry, SPEECH_MODEL_CATALOG } from "../../../src/services/speech-model-catalog.js";
 
 function settings(overrides: Partial<SpeechSettings["synthesis"]> = {}): SpeechSettings {
   return {
@@ -31,6 +31,21 @@ describe("SpeechSynthesisService", () => {
   it("falls back to the selected model default for a stale scoped voice", () => {
     expect(resolveCompatibleSynthesisVoice("piper-de-de-mls-medium", "am_michael"))
       .toBe("mls-de-default");
+  });
+
+  it("exposes the pinned FP32 Supertonic catalog entry with all voice styles", () => {
+    const model = resolveSpeechModelEntry("supertonic-3-multilingual");
+
+    expect(SPEECH_MODEL_CATALOG["supertonic-3-multilingual-int8"]).toBeUndefined();
+    expect(model.adapter).toBe("supertonic");
+    expect(model.revision).toBe("3cadd1ee6394adea1bd021217a0e650ede09a323");
+    expect(model.voices.map((voice) => voice.id)).toEqual(["M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5"]);
+    expect(model.voices.every((voice) => voice.description)).toBe(true);
+  });
+
+  it("defaults local synthesis speed to 1.15 while allowing overrides", () => {
+    expect(DEFAULT_DASHBOARD_SETTINGS.speech.synthesis.speed).toBe(1.15);
+    expect(settings({ speed: 1.4 }).synthesis.speed).toBe(1.4);
   });
 
   it("sends OpenAI-compatible external synthesis requests and returns audio", async () => {

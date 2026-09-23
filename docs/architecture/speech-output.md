@@ -12,6 +12,10 @@ Model and voice are resolved as one compatible local selection. Because project 
 
 ## Built-In Local Models
 
+Supertonic 3 Multilingual uses the pinned FP32 ONNX bundle and ten preset voice JSON files (`F1`–`F5`, `M1`–`M5`). It performs eight denoising steps at a default speed of 1.15; configured speed scales duration as `duration / speed`. Each backend request remains one utterance, with no sentence-level synthesis or inserted silence. Language detection counts Arabic and Latin letters across that utterance, excluding expression tags, punctuation, digits, and Arabic elongation marks. Arabic wins ties. The model receives one language tag, so mixed-language technical names and very long passages can still be pronounced imperfectly.
+
+Text preparation preserves Arabic question marks, diacritics, and existing `<breath>`, `<sigh>`, and `<laugh>` tags. It normalizes arrows, emoji, invisible formatting, and unsupported Arabic semicolons before tokenization. Missing or negative character IDs fail before ONNX sessions are created rather than becoming invalid model input. The dashboard preserves expression tags through Markdown cleanup and recognizes Arabic question marks in its existing first-sentence playback path. Sessions are released after each request; model weights and voice embeddings are unchanged.
+
 | Family | Default bundle | Runtime behavior |
 | --- | --- | --- |
 | Kokoro | `kokoro-82m-v1.0-q8` | Apache-2.0 quantized ONNX model, tokenizer, five lightweight English voice embeddings, pinned upstream CC BY training-data attribution, and an integrity-pinned phonemizer runtime. The adapter sends IPA token ids, the selected 256-value style vector, and speed to ONNX Runtime and returns 24 kHz mono WAV. |
