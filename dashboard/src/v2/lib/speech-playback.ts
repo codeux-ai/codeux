@@ -1,6 +1,6 @@
 const CODEUX_WIDGET_FENCE = /```[ \t]*codeux:[a-z][a-z0-9_-]*[^\r\n]*(?:\r?\n)?[\s\S]*?(?:```|$)/gi;
 const MARKDOWN_FENCE_OPEN = /^[ \t]{0,3}(`{3,}|~{3,})/;
-const SENTENCE_TERMINATORS = new Set([".", "!", "?", "\u2026", "\u3002", "\uff01", "\uff1f"]);
+const SENTENCE_TERMINATORS = new Set([".", "!", "?", "؟", "\u2026", "\u3002", "\uff01", "\uff1f"]);
 const SENTENCE_CLOSERS = new Set(["\"", "'", "\u2019", "\u201d", "\u00bb", ")", "]", "}"]);
 export const MAX_SPEECH_PLAYBACK_CHARS = 8_000;
 
@@ -51,7 +51,7 @@ export function speechTextFromMarkdown(markdown: string): string {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/^#{1,6}\s+/gm, "")
-    .replace(/[*_~>|]/g, " ")
+    .replace(/<(?:breath|sigh|laugh)>|[*_~>|]/g, (match) => match.startsWith("<") ? match : " ")
     .replace(/\s+/g, " ")
     .trim();
 }

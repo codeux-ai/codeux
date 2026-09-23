@@ -16,6 +16,7 @@ import {
   resolveSpeechModelEntry,
 } from "./speech-model-catalog.js";
 import { phonemizeKokoro, phonemizeWithLocalRuntime } from "./local-phonemizer-service.js";
+import { synthesizeSupertonic } from "./supertonic-onnx-runtime.js";
 
 type FetchLike = typeof fetch;
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -145,9 +146,15 @@ export class SpeechSynthesisService {
     const voice = explicitVoice || resolveCompatibleSynthesisVoice(model.id, configuredVoice);
 
     try {
-      const audio = model.adapter === "kokoro"
-        ? await this.synthesizeKokoro(text, voice, settings.synthesis.speed, model.id)
-        : await this.synthesizePiper(text, voice, settings.synthesis.speed, model.id);
+      let audio: Buffer;
+      if (model.adapter === "supertonic") {
+        const generated = await synthesizeSupertonic(getSpeechModelPaths(model.id, this.deps.dataDir), text, voice, settings.synthesis.speed);
+        audio = encodeWave(generated.samples, generated.sampleRateHz);
+      } else if (model.adapter === "kokoro") {
+        audio = await this.synthesizeKokoro(text, voice, settings.synthesis.speed, model.id);
+      } else {
+        audio = await this.synthesizePiper(text, voice, settings.synthesis.speed, model.id);
+      }
       return { ok: true, audio, contentType: "audio/wav", provider: "local_onnx", model: model.id, voice };
     } catch (error) {
       const message = redactText(error instanceof Error ? error.message : String(error));

@@ -48,7 +48,7 @@ export interface SpeechSettings {
 }
 
 export type SpeechModelKind = "transcription" | "synthesis";
-export type SpeechModelAdapter = "whisper" | "kokoro" | "piper";
+export type SpeechModelAdapter = "whisper" | "kokoro" | "piper" | "supertonic";
 
 export interface SpeechModelFile {
   sourcePath: string;
@@ -61,6 +61,7 @@ export interface SpeechModelVoice {
   id: string;
   label: string;
   language: string;
+  description?: string;
   /** BCP-47 language tag used to match a voice to the user's speech language. */
   languageCode?: string;
   /** Piper speaker index for multi-speaker ONNX checkpoints. */

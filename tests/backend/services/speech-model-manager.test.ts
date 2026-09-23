@@ -86,8 +86,8 @@ describe("SpeechModelManager", () => {
     }
   });
 
-  it("includes the embedded eSpeak GPL notice in every local synthesis bundle", () => {
-    const synthesisModels = Object.values(SPEECH_MODEL_CATALOG).filter((model) => model.kind === "synthesis");
+  it("includes the embedded eSpeak GPL notice in every phonemizer-backed synthesis bundle", () => {
+    const synthesisModels = Object.values(SPEECH_MODEL_CATALOG).filter((model) => model.adapter === "kokoro" || model.adapter === "piper");
 
     for (const model of synthesisModels) {
       expect(model.license.name).toContain("GPL-3.0");
@@ -97,6 +97,13 @@ describe("SpeechModelManager", () => {
         && artifact.sha256 === "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
       ))).toBe(true);
     }
+  });
+
+  it("uses Supertonic's model license without an eSpeak runtime", () => {
+    const model = SPEECH_MODEL_CATALOG["supertonic-3-multilingual"]!;
+    expect(model.license.name).toBe("OpenRAIL-M");
+    expect(model.files).toContainEqual(expect.objectContaining({ localName: "licenses/SUPERTONIC_LICENSE.txt" }));
+    expect(model.files.some((artifact) => artifact.localName.startsWith("runtime/"))).toBe(false);
   });
 
   it("includes Kokoro training-data attribution in the accepted and downloaded bundle", () => {
