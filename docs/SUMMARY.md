@@ -43,6 +43,7 @@
 - [Node Flows](./architecture/node-flows.md)
 - [Node Flow Durable Execution](./architecture/node-flow-durable-execution.md)
 - [Node Flow Built-ins and External-Effect Security](./architecture/node-flow-builtins-and-security.md)
+- [GitHub Issue Intake](./architecture/github-issue-intake.md)
 - [Custom Node Architecture and Security](./architecture/custom-nodes.md)
 - [Custom Dashboard Foundation](./architecture/custom-dashboard-foundation.md)
 - [Memory Claims and Evidence](./architecture/memory-claims.md)

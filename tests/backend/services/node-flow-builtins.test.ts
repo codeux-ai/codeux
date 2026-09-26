@@ -63,4 +63,18 @@ describe("governed built-in executors", () => {
       .resolves.toMatchObject({ output: { one: 1, two: 2 } });
     await expect(executors.execute("execute_subflow", { ...base, config: { flowId: "f" } })).rejects.toThrow(/cannot directly execute itself/i);
   });
+
+  it("delegates GitHub intake to the injected bounded adapter", async () => {
+    const intake = async (input: any) => ({ admitted: 1, repository: input.config.repository });
+    const executors = new BuiltinExecutors({ githubIssueIntake: intake });
+    await expect(executors.execute("github_issue_intake", {
+      ...base,
+      config: { repository: "acme/widgets", maxActiveLanes: 1, policyVersion: "v1" },
+    })).resolves.toEqual({ output: { admitted: 1, repository: "acme/widgets" } });
+  });
+
+  it("fails closed when GitHub intake is not configured", async () => {
+    await expect(new BuiltinExecutors().execute("github_issue_intake", { ...base, config: {} }))
+      .rejects.toThrow(/GitHub issue intake is not configured/i);
+  });
 });

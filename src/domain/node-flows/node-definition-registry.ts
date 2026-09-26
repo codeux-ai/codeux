@@ -28,6 +28,7 @@ const field = (
 
 const builtin = (input: {
   type: string; label: string; description: string; category: string;
+  required?: string[];
   properties?: Record<string, NodeFlowValueSchema>; fields?: NodeWidgetField[];
   ports?: NodeFlowPort[]; sideEffect?: NodeDefinitionManifest["sideEffect"];
   capabilities?: string[];
@@ -37,7 +38,7 @@ const builtin = (input: {
   version: 1,
   executable: true,
   executionKind: "local",
-  configurationSchema: objectSchema([], input.properties),
+  configurationSchema: objectSchema(input.required ?? [], input.properties),
   ui: { label: input.label, description: input.description, category: input.category, widgetSchema: { fields: input.fields ?? [] } },
   ports: input.ports ?? [dataPort("input", "input"), dataPort("output", "output")],
   credentials: input.credentials,
@@ -133,6 +134,16 @@ const manifests: NodeDefinitionManifest[] = [
   builtin({ type: "webhook_trigger", label: "Webhook Trigger", description: "Emits authenticated webhook input.", category: "trigger",
     credentials: [],
     ports: [dataPort("output", "output")], capabilities: ["webhook.receive"] }),
+  builtin({ type: "github_issue_intake", label: "GitHub Issue Intake", description: "Polls eligible GitHub issues and admits bounded work exactly once.", category: "integration",
+    credentials: [], sideEffect: "write", capabilities: ["github.intake"],
+    required: ["repository", "requiredLabels", "policyVersion"],
+    properties: {
+      repository: { type: "string" }, requiredLabels: { type: "array", items: { type: "string" } },
+      excludedLabels: { type: "array", items: { type: "string" } }, maxActiveLanes: { type: "number" },
+      limit: { type: "number" }, policyVersion: { type: "string" },
+    },
+    fields: [field("repository", "Repository", "text", true), field("requiredLabels", "Required labels", "json"), field("excludedLabels", "Excluded labels", "json"), field("maxActiveLanes", "Maximum active lanes", "number"), field("limit", "Poll limit", "number"), field("policyVersion", "Policy version", "text", true)],
+  }),
   {
     type: "output", version: 1, executable: true, executionKind: "local",
     configurationSchema: objectSchema(),

@@ -61,6 +61,7 @@ interface NodeFlowRuntimeDeps {
   outboxService?: OutboxService;
   customNodeRuntimeService?: CustomNodeRuntimeService;
   auditService?: AutomationAuditExportService;
+  githubIssueIntake?: (input: { projectId: string; config: NodeFlowJsonObject; upstream: NodeFlowJsonObject; flowInput: NodeFlowJsonObject; signal?: AbortSignal }) => Promise<NodeFlowJsonObject>;
 }
 
 interface RuntimeContext {
@@ -107,6 +108,7 @@ export class NodeFlowRuntimeService {
         }
         return summary.output ?? {};
       },
+      githubIssueIntake: deps.githubIssueIntake,
     });
   }
 

@@ -440,6 +440,8 @@ export interface ImprovePromptInput {
 export interface PlanSprintOptions {
   sprintRunId?: string;
   autoStart: boolean;
+  /** Optional hard upper bound enforced against the parsed plan before persistence. */
+  maxTasks?: number;
   replan?: boolean;
   clientRequestId?: string;
   planningAgentPresetId?: string;

@@ -6,7 +6,7 @@ describe("node definition registry", () => {
     expect(listNodeDefinitions().filter((definition) => definition.executable).map((definition) => definition.type)).toEqual([
       "input", "set_fields", "template", "provider_prompt", "http_request", "condition", "switch",
       "foreach", "merge", "delay", "approval", "email_draft", "email_send", "execute_subflow",
-      "webhook_trigger", "output",
+      "webhook_trigger", "github_issue_intake", "output",
     ]);
     expect(resolveNodeDefinition("condition", 1)).toMatchObject({
       executable: true,
@@ -17,6 +17,11 @@ describe("node definition registry", () => {
       sideEffect: "external",
       capabilities: ["network.http"],
       defaultPolicy: { timeout: { timeoutMs: 30_000 } },
+    });
+    expect(resolveNodeDefinition("github_issue_intake", 1)).toMatchObject({
+      sideEffect: "write",
+      capabilities: ["github.intake"],
+      executionKind: "local",
     });
   });
 });

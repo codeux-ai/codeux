@@ -72,6 +72,7 @@ Use this page as the main entrypoint.
 30. [Node Flows](./architecture/node-flows.md)
 31. [Node Flow Durable Execution](./architecture/node-flow-durable-execution.md)
 32. [Node Flow Built-ins and External-Effect Security](./architecture/node-flow-builtins-and-security.md)
+   - [GitHub Issue Intake](./architecture/github-issue-intake.md)
 33. [Custom Node Architecture and Security](./architecture/custom-nodes.md)
 31. [Custom Dashboard Foundation](./architecture/custom-dashboard-foundation.md)
 32. [Memory Claims and Evidence](./architecture/memory-claims.md)

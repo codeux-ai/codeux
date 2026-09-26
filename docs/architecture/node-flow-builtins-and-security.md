@@ -16,6 +16,7 @@ The governed built-in catalog extends publication-based node-flow execution with
 | `email_send` | Requires an approved decision, then dispatches through the idempotent outbox. |
 | `execute_subflow` | Executes a published flow owned by the same project, rejects direct self-reference, and caps nesting at eight. |
 | `webhook_trigger` | Emits input accepted by a secret-authenticated webhook configuration. |
+| `github_issue_intake` | Claims explicitly labelled GitHub issue observations once, creates bounded issue-scoped sprints, and skips unchanged observations without model work. |
 
 The existing `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output` nodes retain their previous contracts. Typed manifest ports identify branch handles, many-valued merge inputs, and trigger outputs. Branch routing only runs a node when at least one incoming edge is active, allowing merges to join a selected path without treating an unselected sibling as a failure.
 

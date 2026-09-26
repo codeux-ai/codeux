@@ -151,6 +151,7 @@ interface PlanningContinuationContext {
 interface PersistedPlanSprintRequest {
   kind: "plan_sprint";
   autoStart: boolean;
+  maxTasks?: number;
   replan: boolean;
   sprintRunId?: string;
   planningAgentPresetId?: string;
@@ -516,6 +517,9 @@ export class PlanningAgentService {
     continuation?: PlanningContinuationContext,
   ): Promise<PlanSprintResult> {
     const { project, sprint } = preconditions;
+    if (options.maxTasks !== undefined && (!Number.isInteger(options.maxTasks) || options.maxTasks < 1 || options.maxTasks > 100)) {
+      throw new Error("Planning task limit must be an integer from 1 through 100.");
+    }
     const runtime = this.resolvePlanningRuntime(projectId, options.overrides);
     const planningAgentPresetId = options.overrides?.planningAgentPresetId
       || options.planningAgentPresetId
@@ -545,7 +549,7 @@ export class PlanningAgentService {
     const allowedAgentPresetIds = codingAgentRoster.map((agent) => agent.id);
     const manualCodingAgent = await this.resolveManualCodingAgent(projectId, runtime.settings, options.overrides);
 
-    const fullPlanningPrompt = PlanningPromptBuilder.buildPlanPrompt({
+    const basePlanningPrompt = PlanningPromptBuilder.buildPlanPrompt({
       projectName: project.name,
       planningAgent,
       codingAgentRoster,
@@ -557,6 +561,9 @@ export class PlanningAgentService {
       memoryContext,
       learningsInstruction,
     });
+    const fullPlanningPrompt = options.maxTasks === undefined
+      ? basePlanningPrompt
+      : `${basePlanningPrompt}\n\nHard task-count bound: return no more than ${options.maxTasks} task${options.maxTasks === 1 ? "" : "s"}. If the goal cannot be completed within that limit, return a single appropriately scoped task rather than splitting the work.`;
     const prompt = continuation?.promptOverride
       ? this.buildPlanningContinuationPrompt(fullPlanningPrompt)
       : fullPlanningPrompt;
@@ -600,9 +607,13 @@ export class PlanningAgentService {
           "- Use the exact schema from the original instructions: {\"goal\":\"...\",\"tasks\":[...]}, with optional top-level \"title\" only when allowed by those instructions."
         ].join("\n"),
       });
-      payload = virtualResult.parsed;
       cleanupWorkspace = virtualResult.cleanupWorkspace;
+      signal?.throwIfAborted();
+      payload = virtualResult.parsed;
       planningSelfReflection = virtualResult.selfReflection;
+      if (options.maxTasks !== undefined && payload.tasks.length > options.maxTasks) {
+        throw new Error(`Planning exceeded the configured task limit of ${options.maxTasks}; no tasks were persisted or started.`);
+      }
 
       if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
         this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
@@ -630,6 +641,7 @@ export class PlanningAgentService {
         );
       }
 
+      await cleanupWorkspace?.().catch(() => undefined);
       finalizePlanningInvocationError(this.deps.executionRepository, invocation?.id, error);
       throw error;
     }
@@ -637,6 +649,12 @@ export class PlanningAgentService {
     if (options.replan) {
       this.deps.projectManagementRepository.deleteTasksBySprint(sprintId);
     }
+
+    if (signal?.aborted) {
+      await cleanupWorkspace?.().catch(() => undefined);
+      cleanupWorkspace = undefined;
+    }
+    signal?.throwIfAborted();
 
     const sprintUpdate: { name?: string; goal?: string } = {};
     const plannedTitle = payload.title?.trim();
@@ -688,6 +706,13 @@ export class PlanningAgentService {
 
     const shouldAutoStart = this.shouldAutoStartPlannedSprint(options.autoStart === true, planningSelfReflection);
     if (shouldAutoStart) {
+      // The abort signal governs planning through the execution handoff. Once
+      // orchestration accepts this durable start request, the sprint owns its run.
+      if (signal?.aborted) {
+        await cleanupWorkspace?.().catch(() => undefined);
+        cleanupWorkspace = undefined;
+      }
+      signal?.throwIfAborted();
       await this.deps.executionControlService.orchestrateSprint(projectId, sprintId);
     }
     await cleanupWorkspace?.().catch(() => undefined);
@@ -733,6 +758,7 @@ export class PlanningAgentService {
     return {
       kind: "plan_sprint",
       autoStart: options.autoStart === true,
+      ...(options.maxTasks === undefined ? {} : { maxTasks: options.maxTasks }),
       replan: options.replan === true,
       ...(options.sprintRunId ? { sprintRunId: options.sprintRunId } : {}),
       ...(options.planningAgentPresetId ? { planningAgentPresetId: options.planningAgentPresetId } : {}),
@@ -759,6 +785,7 @@ export class PlanningAgentService {
     }
     return {
       autoStart: raw.autoStart === true,
+      maxTasks: typeof raw.maxTasks === "number" && Number.isInteger(raw.maxTasks) && raw.maxTasks > 0 ? raw.maxTasks : undefined,
       replan: raw.replan === true || existingTasks.length > 0,
       sprintRunId: typeof raw.sprintRunId === "string" ? raw.sprintRunId : undefined,
       planningAgentPresetId: typeof raw.planningAgentPresetId === "string" ? raw.planningAgentPresetId : undefined,

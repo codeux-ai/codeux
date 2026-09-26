@@ -481,6 +481,69 @@ describe("PlanningAgentService Integration", () => {
     expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith(project.id, sprint.id);
   });
 
+  it("rejects a plan over the hard task limit before persistence or execution", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint,
+    } = await setupTestHarness();
+    const payload = planningProviderPayload("First bounded task");
+    const tasks = payload.tasks as Array<Record<string, unknown>>;
+    tasks.push({ ...tasks[0], key: "T02", title: "Second task" });
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner: createPlanningProviderRunner(payload),
+    });
+
+    await expect(service.planSprint(project.id, sprint.id, { autoStart: true, maxTasks: 1 }))
+      .rejects.toThrow(/task limit of 1/);
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(0);
+    expect(executionControlService.orchestrateSprint).not.toHaveBeenCalled();
+  });
+
+  it("honors cancellation after provider response before persisting or starting work", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint,
+    } = await setupTestHarness();
+    const controller = new AbortController();
+    const providerRunner = createPlanningProviderRunner(planningProviderPayload("Cancelled task"));
+    vi.mocked(providerRunner.runProviderForText).mockImplementationOnce(async () => {
+      controller.abort();
+      return providerTextResult(JSON.stringify(planningProviderPayload("Cancelled task")));
+    });
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner,
+    });
+
+    await expect(service.planSprint(project.id, sprint.id, { autoStart: true, maxTasks: 1 }, controller.signal))
+      .rejects.toThrow(/abort/i);
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(0);
+    expect(executionControlService.orchestrateSprint).not.toHaveBeenCalled();
+  });
+
   it("auto-starts after planning self-reflection passes", async () => {
     const {
       projectRepository,

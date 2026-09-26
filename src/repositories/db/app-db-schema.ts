@@ -1067,6 +1067,41 @@ CREATE TABLE IF NOT EXISTS scheduler_entries (
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
 
+CREATE TABLE IF NOT EXISTS github_intake_items (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT 'github',
+        host_domain TEXT NOT NULL,
+        repository TEXT NOT NULL,
+        external_kind TEXT NOT NULL,
+        external_number INTEGER NOT NULL,
+        observed_version TEXT NOT NULL,
+        action_class TEXT NOT NULL,
+        policy_version TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        disposition TEXT NOT NULL DEFAULT 'candidate',
+        status TEXT NOT NULL DEFAULT 'seen',
+        title TEXT NOT NULL,
+        url TEXT NOT NULL,
+        labels_json TEXT NOT NULL DEFAULT '[]',
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        sprint_id TEXT,
+        task_id TEXT,
+        dispatch_id TEXT,
+        claimed_at TEXT,
+        terminal_at TEXT,
+        next_wake_at TEXT,
+        last_error TEXT,
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE SET NULL,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+        FOREIGN KEY (dispatch_id) REFERENCES task_dispatches(id) ON DELETE SET NULL
+      );
+
 `;
 
 /**
@@ -1093,6 +1128,8 @@ CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_sprint_run_recency ON tas
 CREATE INDEX IF NOT EXISTS idx_task_runs_dispatch ON task_runs (dispatch_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_task_sprint_session ON task_runs (task_id, sprint_run_id, session_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_session_id_owner ON task_runs (session_id, project_id, sprint_id, task_id);
+CREATE INDEX IF NOT EXISTS idx_github_intake_project_status_wake ON github_intake_items (project_id, status, next_wake_at, updated_at);
+CREATE INDEX IF NOT EXISTS idx_github_intake_external ON github_intake_items (project_id, repository, external_kind, external_number, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_runs_session_name_owner ON task_runs (session_name, project_id, sprint_id, task_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_pr_url_owner ON task_runs (pr_url, project_id, sprint_id, task_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_lookup ON task_runs (project_id, sprint_id, sprint_run_id, id);

@@ -126,6 +126,7 @@ export type DocsSlug =
   | 'architecture-dashboard-internationalization'
   | 'architecture-high-concurrency-orchestration'
   | 'architecture-managed-container-runtime'
+  | 'architecture-github-issue-intake'
   | 'architecture-node-flow-builtins-and-security'
   | 'architecture-node-flow-durable-execution'
   | 'architecture-node-flow-foundation'
@@ -1005,6 +1006,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Managed Container Runtime",
     description: "The managed container runtime removes first-invocation Docker builds while keeping provider binaries local to each user's Docker host.",
   },
+  'architecture-github-issue-intake': {
+    id: 'architecture-github-issue-intake',
+    path: '/docs/architecture-github-issue-intake',
+    section: 'Architecture',
+    title: "GitHub Issue Intake",
+    description: "Deterministic, claim-once admission turns explicitly labelled GitHub issues into bounded Code UX sprints without model-based polling or duplicate dispatch.",
+  },
   'architecture-node-flow-builtins-and-security': {
     id: 'architecture-node-flow-builtins-and-security',
     path: '/docs/architecture-node-flow-builtins-and-security',
@@ -1187,6 +1195,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-dashboard-internationalization'],
   docsRegistry['architecture-high-concurrency-orchestration'],
   docsRegistry['architecture-managed-container-runtime'],
+  docsRegistry['architecture-github-issue-intake'],
   docsRegistry['architecture-node-flow-builtins-and-security'],
   docsRegistry['architecture-node-flow-durable-execution'],
   docsRegistry['architecture-node-flow-foundation'],

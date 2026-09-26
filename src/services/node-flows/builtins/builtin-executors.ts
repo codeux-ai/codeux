@@ -21,6 +21,7 @@ export interface BuiltinExecutorDependencies {
   approvalService?: ApprovalService;
   outboxService?: OutboxService;
   executeSubflow?: (input: { projectId: string; flowId: string; input: NodeFlowJsonObject; depth: number; signal?: AbortSignal }) => Promise<NodeFlowJsonObject>;
+  githubIssueIntake?: (input: { projectId: string; config: NodeFlowJsonObject; upstream: NodeFlowJsonObject; flowInput: NodeFlowJsonObject; signal?: AbortSignal }) => Promise<NodeFlowJsonObject>;
 }
 
 export class BuiltinExecutors {
@@ -38,8 +39,21 @@ export class BuiltinExecutors {
       case "email_send": return this.executeEmailSend(context);
       case "execute_subflow": return this.executeSubflow(context);
       case "webhook_trigger": return { output: { ...context.flowInput } };
+      case "github_issue_intake": return this.executeGithubIssueIntake(context);
       default: throw new ValidationError(`Unsupported built-in node type: ${type}.`);
     }
+  }
+
+  private async executeGithubIssueIntake(context: BuiltinExecutionContext): Promise<BuiltinExecutionResult> {
+    if (!this.deps.githubIssueIntake) throw new ValidationError("GitHub issue intake is not configured.");
+    const output = await this.deps.githubIssueIntake({
+      projectId: context.projectId,
+      config: context.config,
+      upstream: context.upstream,
+      flowInput: context.flowInput,
+      signal: context.signal,
+    });
+    return { output };
   }
 
   private executeApproval(context: BuiltinExecutionContext): BuiltinExecutionResult {

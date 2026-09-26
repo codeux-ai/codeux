@@ -47,6 +47,9 @@ import { CustomNodeProjectService } from "../../services/custom-nodes/custom-nod
 import { CustomNodeBuildService } from "../../services/custom-nodes/custom-node-build-service.js";
 import { customNodeDefinitionFromArtifact } from "../../contracts/custom-node-types.js";
 import { registerCustomNodeDefinition } from "../../domain/node-flows/node-definition-registry.js";
+import { GithubIssueIntakeService } from "../../services/github-issue-intake-service.js";
+import { GithubPrDispatchReconciliationService } from "../../services/github-pr-dispatch-reconciliation-service.js";
+import { GithubIntakeRepository } from "../../repositories/github-intake-repository.js";
 
 export interface DashboardDependencies {
   credentialBroker: CoreDependencies["credentialBroker"];
@@ -112,6 +115,7 @@ export function createDashboardDependencies(
   const { sprintTaskDispatchService, sprintOrchestrator, taskService, memoryRemediationService } = sprintDeps;
   const taskRerunServiceRef = createLateBoundDependency<TaskRerunService>("dashboard task rerun service");
   const planningAgentServiceRef = createLateBoundDependency<PlanningAgentService>("dashboard planning agent service");
+  const githubIssueIntakeServiceRef = createLateBoundDependency<GithubIssueIntakeService>("dashboard GitHub issue intake service");
   const quicksprintServiceRef = createLateBoundDependency<QuicksprintService>("dashboard quicksprint service");
   const projectSetupServiceRef = createLateBoundDependency<ProjectSetupService>("dashboard project setup service");
   const schedulerServiceRef = createLateBoundDependency<SchedulerService>("dashboard scheduler service");
@@ -309,6 +313,28 @@ export function createDashboardDependencies(
     outboxService: new OutboxService(outboxRepository, new MockSideEffectProvider(), coreDeps.automationAuditService),
     auditService: coreDeps.automationAuditService,
     getDashboardSettings: (projectId) => resolveDashboardSettings({ projectId }),
+    githubIssueIntake: async ({ projectId, config, signal }) => {
+      const repository = typeof config.repository === "string" ? config.repository.trim() : "";
+      if (!repository) throw new Error("GitHub issue intake requires a repository.");
+      const result = await githubIssueIntakeServiceRef.get().reconcile({
+        projectId,
+        repository,
+        requiredLabels: Array.isArray(config.requiredLabels) ? config.requiredLabels.filter((value): value is string => typeof value === "string") : ["codeux:ready"],
+        excludedLabels: Array.isArray(config.excludedLabels) ? config.excludedLabels.filter((value): value is string => typeof value === "string") : undefined,
+        maxActiveLanes: Math.max(1, Math.min(2, typeof config.maxActiveLanes === "number" ? Math.trunc(config.maxActiveLanes) : 2)),
+        limit: typeof config.limit === "number" ? config.limit : undefined,
+        policyVersion: typeof config.policyVersion === "string" && config.policyVersion.trim() ? config.policyVersion : "github-intake-v1",
+        signal,
+      });
+      return {
+        searched: result.searched,
+        admitted: result.admitted,
+        held: result.held,
+        skipped: result.skipped,
+        failed: result.failed,
+        dispatchedSprintIds: result.dispatchedSprintIds,
+      };
+    },
   });
   if (coreDeps.nodeFlowRepository) {
     const recoveryService = new NodeFlowRecoveryService(coreDeps.nodeFlowRepository, approvalService, nodeFlowRuntimeService);
@@ -591,6 +617,20 @@ export function createDashboardDependencies(
   });
 
   planningAgentServiceRef.set(planningAgentService);
+  const githubIntakeRepository = new GithubIntakeRepository(coreDeps.appDbStorage);
+  const githubPrDispatchReconciliationService = new GithubPrDispatchReconciliationService({
+    intakeRepository: githubIntakeRepository,
+    projectManagementRepository,
+    executionRepository,
+    getGithubToken: (projectId) => resolveDashboardSettings({ projectId }).git.githubToken,
+  });
+  githubIssueIntakeServiceRef.set(new GithubIssueIntakeService({
+    sprintIssueService: coreDeps.sprintIssueService,
+    intakeRepository: githubIntakeRepository,
+    projectManagementRepository,
+    planningAgentService,
+    reconcileDispatches: (input) => githubPrDispatchReconciliationService.reconcile(input),
+  }));
   sprintOrchestrator.setUnplannedSprintPlanner((projectId, sprintId) => (
     planningAgentService.startPlanSprint(projectId, sprintId, {
       autoStart: true,
