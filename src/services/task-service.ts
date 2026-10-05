@@ -15,6 +15,7 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { buildTaskRunTag } from "./task-run-key.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
+import { prepareBranchForOrchestration } from "../sprint/steps/branch-preflight-step.js";
 
 export interface TaskServiceDependencies {
   julesApi: JulesApiClient;
@@ -291,6 +292,24 @@ export class TaskService {
       required: provider !== "jules",
       provider,
     });
+
+    if (provider === "jules") {
+      const preparation = await prepareBranchForOrchestration(
+        repoPath,
+        baseBranch,
+        settings.git.defaultBranch?.trim() || "main",
+        {
+          githubToken: settings.git.githubToken,
+          gitlabToken: settings.git.gitlabToken,
+          strictRemote: true,
+        },
+      );
+      if (!preparation.hasRemoteOrigin || !preparation.existsRemote) {
+        throw new ProviderRoutingError(
+          `Cannot start Jules task from ${baseBranch}: Code UX could not verify or prepare that branch on the remote repository. No Jules session was created.`,
+        );
+      }
+    }
 
     if (provider !== "jules") {
 

@@ -63,6 +63,7 @@ export function areTaskRecordListsEqual(current: TaskRecord[], next: TaskRecord[
       left.promptMarkdown !== right.promptMarkdown ||
       left.description !== right.description ||
       left.status !== right.status ||
+      left.executionStatus !== right.executionStatus ||
       left.priority !== right.priority ||
       left.executorType !== right.executorType ||
       left.sortOrder !== right.sortOrder ||

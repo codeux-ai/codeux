@@ -1357,7 +1357,11 @@ export class ExecutionRepository {
     }
   }
 
-  listLatestTaskRuns(taskIds: string[], sprintRunId?: string): Map<string, TaskRunRecord> {
+  listLatestTaskRuns(
+    taskIds: string[],
+    sprintRunId?: string,
+    scope?: { projectId: string; sprintId: string },
+  ): Map<string, TaskRunRecord> {
     const uniqueTaskIds = [...new Set(taskIds.map((taskId) => taskId.trim()).filter(Boolean))];
     if (uniqueTaskIds.length === 0) {
       return new Map();
@@ -1385,6 +1389,8 @@ export class ExecutionRepository {
           WHERE non_status_sync_events.task_run_id = task_runs.id
             AND non_status_sync_events.event_type != 'status_sync'
         )`;
+    const scopeSql = scope ? "AND project_id = ? AND sprint_id = ?" : "";
+    const scopeParams = scope ? [scope.projectId, scope.sprintId] : [];
 
     if (sprintRunId) {
       const rows = this.storage.executeChunkedInQuery<TaskRunRow>({
@@ -1392,12 +1398,13 @@ export class ExecutionRepository {
         FROM task_runs
         WHERE task_id`,
         sqlSuffix: `AND (sprint_run_id = ? OR sprint_run_id IS NULL)
+        ${scopeSql}
         AND NOT (${syntheticBlockedStatusSyncPredicate})
         ORDER BY task_id ASC,
           CASE WHEN sprint_run_id = ? THEN 0 ELSE 1 END ASC,
           rowid DESC`,
         items: uniqueTaskIds,
-        bindParamsAfter: [sprintRunId, sprintRunId],
+        bindParamsAfter: [sprintRunId, ...scopeParams, sprintRunId],
       });
 
       const map = new Map<string, TaskRunRecord>();
@@ -1418,12 +1425,13 @@ export class ExecutionRepository {
         FROM task_runs
         WHERE task_id`,
       sqlSuffix: `AND NOT (${syntheticBlockedStatusSyncPredicate})
+        ${scopeSql}
         ${runClause}
         GROUP BY task_id
       ) latest ON latest.latest_rowid = tr.rowid
       ORDER BY tr.rowid DESC`,
       items: uniqueTaskIds,
-      bindParamsAfter: [],
+      bindParamsAfter: scopeParams,
     });
 
     const map = new Map<string, TaskRunRecord>();

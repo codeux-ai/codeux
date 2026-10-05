@@ -204,6 +204,22 @@ describe("runBranchPreflightStep (Async)", () => {
     expect(commandRunner.run).toHaveBeenCalledWith("git", ["show-ref", "--verify", "refs/remotes/origin/feature/sprint1"], { cwd: "/valid-repo" });
   });
 
+  it("does not trust a stale remote-tracking ref when strict remote verification is required", async () => {
+    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(commandRunner.run)
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "true\n", stderr: "" })
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: false, code: 128, stdout: "", stderr: "Remote unavailable" });
+
+    const result = await runBranchPreflightStep("/valid-repo", "feature/sprint1", {
+      authEnv: {},
+      strictRemote: true,
+    });
+
+    expect(result).toEqual({ existsLocal: true, existsRemote: false });
+    expect(commandRunner.run).toHaveBeenCalledTimes(3);
+  });
+
   it("uses refreshed tracking refs without another network probe", async () => {
     vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
     vi.mocked(commandRunner.run)

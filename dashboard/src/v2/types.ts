@@ -330,6 +330,7 @@ export interface Task {
   sprintId: string;
   title: string;
   status: TaskStatus;
+  executionStatus?: TaskRecord["executionStatus"];
   priority: TaskPriority;
   executorType: TaskExecutorType;
   agentPresetId?: string | null;

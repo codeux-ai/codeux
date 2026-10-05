@@ -721,6 +721,83 @@ describe("ExecutionRepository", () => {
     expect(latestRuns.get(taskWithScopedRun.id)?.workerBranch).toBe("worker/T2-scoped");
   });
 
+  it("returns only the latest run for the exact task project and sprint", async () => {
+    const { executionRepository, projectRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Execution Status Scope Project",
+      sourceType: "local",
+      sourceRef: "/workspace/execution-status-scope",
+    });
+    const otherProject = projectRepository.createProject({
+      name: "Other Execution Status Project",
+      sourceType: "local",
+      sourceRef: "/workspace/other-execution-status-scope",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const otherSprint = projectRepository.createSprint(project.id, { name: "Sprint 2", number: 2 });
+    const otherProjectSprint = projectRepository.createSprint(otherProject.id, { name: "Sprint 1", number: 1 });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Scoped execution status",
+      promptMarkdown: "Do work",
+      status: "in_progress",
+      isIndependent: true,
+    });
+    const unrelatedTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T2",
+      title: "Unrelated task",
+      promptMarkdown: "Do other work",
+      status: "pending",
+      isIndependent: true,
+    });
+
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      provider: "jules",
+      mode: "jules",
+      state: "FAILED",
+    });
+    const retriedRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      provider: "jules",
+      mode: "jules",
+      state: "COMPLETED",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: unrelatedTask.id,
+      provider: "jules",
+      mode: "jules",
+      state: "FAILED",
+    });
+
+    const rawDb = (executionRepository as any).db;
+    rawDb.prepare(`
+      INSERT INTO task_runs (id, project_id, sprint_id, task_id, state)
+      VALUES (?, ?, ?, ?, ?)
+    `).run("wrong-sprint-run", project.id, otherSprint.id, task.id, "FAILED");
+    rawDb.prepare(`
+      INSERT INTO task_runs (id, project_id, sprint_id, task_id, state)
+      VALUES (?, ?, ?, ?, ?)
+    `).run("wrong-project-run", otherProject.id, otherProjectSprint.id, task.id, "FAILED");
+
+    const latest = executionRepository.listLatestTaskRuns([task.id], undefined, {
+      projectId: project.id,
+      sprintId: sprint.id,
+    });
+
+    expect(latest.get(task.id)?.id).toBe(retriedRun.id);
+    expect(latest.get(task.id)?.state).toBe("COMPLETED");
+    expect(latest.has(unrelatedTask.id)).toBe(false);
+  });
+
   it("resolves the latest CLI workspace binding as the task resume target", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

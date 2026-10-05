@@ -40,6 +40,7 @@ export const KanbanTaskCard: FunctionComponent<{
   const pri = PRIORITY_CFG[task.priority];
   const { locale, translate, translatePlural, formatList, formatNumber } = useOptionalDashboardI18n();
   const statusLabel = getTaskStatusLabel(task.status, locale);
+  const executionStatusLabel = task.executionStatus ? `RUN ${task.executionStatus}` : null;
   const priorityLabel = getTaskPriorityLabel(task.priority, locale);
   const taskTimeLabel = formatTaskTimeState(task.time, locale);
   const interactionTokens = useInteractionTokens();
@@ -79,6 +80,7 @@ export const KanbanTaskCard: FunctionComponent<{
   const savingDescriptionId = task.isOptimistic ? `task-card-saving-${task.recordId}` : undefined;
   const cardStateAnnouncement = [
     translate(taskMessages, "taskStatusNow", { id: task.id, status: statusLabel }),
+    executionStatusLabel ? `Latest execution: ${task.executionStatus}` : null,
     dependencyIndicators.length > 0
       ? blockerCount === 0
         ? translate(taskMessages, "blockersResolvedForTask", { id: task.id })
@@ -168,6 +170,7 @@ export const KanbanTaskCard: FunctionComponent<{
             <StatusIcon className="w-3 h-3" aria-hidden="true" style={{ color: STATUS_CFG[task.status].hex }} />
             <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[9px] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300">
               {statusLabel}
+              {executionStatusLabel && <span className={`ml-1 rounded-full border px-2 py-0.5 text-[9px] ${task.executionStatus === "FAILED" ? "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400" : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03]"}`}>{executionStatusLabel}</span>}
             </span>
           </div>
           {selfReflectionRating && (

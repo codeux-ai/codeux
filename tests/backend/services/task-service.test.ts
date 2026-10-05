@@ -6,7 +6,12 @@ vi.mock("../../../src/services/git-branch-sync-service.js", () => ({
   syncRemoteBranchIfAvailable: vi.fn(),
 }));
 
+vi.mock("../../../src/sprint/steps/branch-preflight-step.js", () => ({
+  prepareBranchForOrchestration: vi.fn(),
+}));
+
 import { syncRemoteBranchIfAvailable } from "../../../src/services/git-branch-sync-service.js";
+import { prepareBranchForOrchestration } from "../../../src/sprint/steps/branch-preflight-step.js";
 
 describe("TaskService", () => {
   const createSession = vi.fn();
@@ -38,6 +43,15 @@ describe("TaskService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(syncRemoteBranchIfAvailable).mockResolvedValue(true);
+    vi.mocked(prepareBranchForOrchestration).mockResolvedValue({
+      existsLocal: true,
+      existsRemote: true,
+      hasRemoteOrigin: true,
+      createdLocal: false,
+      checkedOutLocal: true,
+      pushedRemote: false,
+      baseCommitSha: null,
+    });
     resolveJulesSourceId.mockImplementation(async ({ sourceId }: { sourceId?: string }) =>
       sourceId?.startsWith("sources/") ? sourceId : `sources/${sourceId || "auto"}`
     );
@@ -125,6 +139,40 @@ describe("TaskService", () => {
     expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/tmp/repo", "feature/sprint1", {
       githubToken: undefined,
     });
+    expect(prepareBranchForOrchestration).toHaveBeenCalledWith(
+      "/tmp/repo",
+      "feature/sprint1",
+      "main",
+      { githubToken: undefined, gitlabToken: undefined, strictRemote: true },
+    );
+  });
+
+  it("does not create a Jules session until its exact starting branch exists remotely", async () => {
+    vi.mocked(prepareBranchForOrchestration).mockResolvedValue({
+      existsLocal: true,
+      existsRemote: false,
+      hasRemoteOrigin: true,
+      createdLocal: true,
+      checkedOutLocal: true,
+      pushedRemote: false,
+      baseCommitSha: null,
+    });
+
+    await expect(service.startSprintTask(
+      {
+        id: "01-task",
+        title: "Do Thing",
+        prompt: "Implement",
+        depends_on: [],
+        is_independent: true,
+      },
+      "999",
+      "feature/sprint1",
+      "/tmp/repo",
+      1,
+    )).rejects.toThrow("No Jules session was created");
+
+    expect(createSession).not.toHaveBeenCalled();
   });
 
   it("uses matching provider settings when a persisted task provider overrides the resolved route", async () => {

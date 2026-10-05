@@ -1,5 +1,6 @@
 import type { AgentRoutingMode, CardCiStatus, VirtualWorkerProvider } from "./app-types.js";
 export type { CardCiStatus } from "./app-types.js";
+import type { TaskRunState } from "./execution-types.js";
 import type { ProjectSettingsOverride } from "./settings-scope-types.js";
 import type { TaskSelfReflectionRating } from "./task-self-reflection-types.js";
 import type { ProjectWorkerAssignmentRecord } from "./worker-types.js";
@@ -293,6 +294,8 @@ export interface TaskRecord {
   promptMarkdown: string;
   description: string;
   status: TaskStatus;
+  /** Latest execution outcome; kept separate from editable planning status. */
+  executionStatus?: TaskRunState | null;
   priority: TaskPriority;
   executorType: TaskExecutorType;
   agentPresetId: string | null;

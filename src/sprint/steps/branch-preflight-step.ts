@@ -34,6 +34,8 @@ export interface BranchPreflightOptions extends GitHttpAuthOptions {
   expectedFeatureCommitSha?: string | null;
   /** The caller already refreshed origin, so tracking refs are authoritative for this preflight. */
   remoteRefsFresh?: boolean;
+  /** Require a successful direct remote lookup; stale tracking refs are not sufficient evidence. */
+  strictRemote?: boolean;
 }
 
 const DEFAULT_GIT_NETWORK_TIMEOUT_MS = 30_000;
@@ -107,9 +109,12 @@ const hasRemoteBranch = async (
     if (result.ok) {
       return result.stdout.trim().length > 0;
     }
+    if (options?.strictRemote) {
+      return false;
+    }
     return await remoteTrackingRefExists(repoPath, branch);
   } catch {
-    return await remoteTrackingRefExists(repoPath, branch);
+    return options?.strictRemote ? false : await remoteTrackingRefExists(repoPath, branch);
   }
 };
 

@@ -302,6 +302,40 @@ describe("dashboard-lifecycle-service", () => {
   });
 
   describe("bootDashboard", () => {
+    it("keeps execution status scoped and separate from completed task planning state", async () => {
+      const activeTask = {
+        id: "task-1", projectId: "project-1", sprintId: "sprint-1", status: "in_progress", isMerged: false,
+      } as any;
+      const completedTask = {
+        id: "task-2", projectId: "project-1", sprintId: "sprint-1", status: "completed", isMerged: false,
+      } as any;
+      const mergedTask = {
+        id: "task-3", projectId: "project-1", sprintId: "sprint-2", status: "coding_completed", isMerged: true,
+      } as any;
+      mockDeps.projectManagementRepository.listTaskOverviews = vi.fn().mockReturnValue([
+        activeTask, completedTask, mergedTask,
+      ]);
+      mockDeps.executionRepository.listLatestTaskRuns = vi.fn((taskIds) => new Map(
+        taskIds.map((taskId) => [taskId, { state: "FAILED" }]),
+      ) as any);
+
+      await bootDashboard(mockDeps);
+
+      const dashboardDeps = vi.mocked(setupDashboardServer).mock.calls[0]?.[0] as any;
+      expect(dashboardDeps.listTaskOverviews("project-1")).toEqual([
+        { ...activeTask, executionStatus: "FAILED" },
+        { ...completedTask, executionStatus: null },
+        { ...mergedTask, executionStatus: null },
+      ]);
+      expect(mockDeps.executionRepository.listLatestTaskRuns).toHaveBeenNthCalledWith(
+        1, ["task-1", "task-2"], undefined, { projectId: "project-1", sprintId: "sprint-1" },
+      );
+      expect(mockDeps.executionRepository.listLatestTaskRuns).toHaveBeenNthCalledWith(
+        2, ["task-3"], undefined, { projectId: "project-1", sprintId: "sprint-2" },
+      );
+      expect(mockDeps.projectManagementRepository.updateTask).not.toHaveBeenCalled();
+    });
+
     it("sets dashboardRuntimePort and calls setupDashboardServer with correct arguments", async () => {
       await bootDashboard(mockDeps);
 

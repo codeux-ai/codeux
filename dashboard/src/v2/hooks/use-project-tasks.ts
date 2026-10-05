@@ -112,7 +112,10 @@ export function useProjectTasks(
         return;
       }
 
-      if (message.type === "event" && message.event.eventType === "project.structure.updated") {
+      if (
+        message.type === "event"
+        && (message.event.eventType === "project.structure.updated" || message.event.eventType === "project.execution.updated")
+      ) {
         void refreshInternal({ silent: true });
       }
     });

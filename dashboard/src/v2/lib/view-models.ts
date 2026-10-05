@@ -50,6 +50,7 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
     prevTask.sprintId === task.sprintId &&
     prevTask.title === task.title &&
     prevTask.status === task.status &&
+    prevTask.executionStatus === task.executionStatus &&
     prevTask.priority === task.priority &&
     prevTask.executorType === task.executorType &&
     prevTask.assignee === assignee &&
@@ -77,6 +78,7 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
     sprintId: task.sprintId,
     title: task.title,
     status: task.status,
+    executionStatus: task.executionStatus,
     priority: task.priority,
     executorType: task.executorType,
     agentPresetId: task.agentPresetId,

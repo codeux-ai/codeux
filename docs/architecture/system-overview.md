@@ -116,6 +116,7 @@ flowchart TD
 3. Handler invokes the DB-backed dispatch engine, inbox system, and provider execution layer.
 4. Orchestrator runs atomic steps and updates `lastStatus`.
 5. Dashboard polls `/api/live` for one combined runtime snapshot, while websocket updates and the execution event log keep task feeds fresh between polls.
+Task cards expose execution outcomes separately from editable planning status. The dashboard selects the latest run only from rows matching the task project and sprint; a newer retry supersedes older failures, while completed or merged tasks suppress stale failure badges. This projection is read-only and does not requeue tasks. Task cards refresh the derived status on `project.execution.updated` events as well as `project.structure.updated` events.
 6. UI renders task pipeline, protocol instructions, and git/CI state.
 7. Custom dashboard drafts and revisions are persisted in SQLite; validation materializes an immutable revision in a project runtime directory, starts a detached Docker preview, records the validation report/log metadata, and leaves publication as a separate gated repository operation.
 

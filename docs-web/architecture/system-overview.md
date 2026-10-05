@@ -95,6 +95,7 @@ Detail: [MCP server](./mcp-server.md).
 - 100+ REST routes.
 - WebSocket server at `/api/realtime` for push updates.
 - Static dashboard bundle from `dashboard/dist/`.
+- Task views keep planning status separate from the latest execution outcome, scoped to the matching project and sprint; newer retries supersede stale failures, and completed or merged tasks suppress failure badges without requeueing.
 
 Detail: [Dashboard architecture](./dashboard-architecture.md).
 

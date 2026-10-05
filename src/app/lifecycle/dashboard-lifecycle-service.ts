@@ -43,6 +43,7 @@ import type { QaReviewRepository } from "../../repositories/qa-review-repository
 import type { AgentPresetRepository } from "../../repositories/agent-preset-repository.js";
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
+import type { TaskRunState } from "../../contracts/execution-types.js";
 import type { SprintMarkdownService } from "../../services/sprint-markdown-service.js";
 import type { SprintIssueService } from "../../services/sprint-issue-service.js";
 import type { ActivityCacheService } from "../../server/activity-cache-service.js";
@@ -536,6 +537,45 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       await detectOnboardingInstallerEnvironment(),
     ));
 
+  const withLatestTaskExecutionStatus = <T extends {
+    id: string;
+    projectId: string;
+    sprintId: string;
+    status: string;
+    isMerged: boolean;
+  }>(tasks: T[]): Array<T & { executionStatus: TaskRunState | null }> => {
+    const latestRunsByTaskId = new Map<string, TaskRunState>();
+    const tasksByScope = new Map<string, { projectId: string; sprintId: string; taskIds: string[] }>();
+
+    for (const task of tasks) {
+      const scopeKey = `${task.projectId}\u0000${task.sprintId}`;
+      const scope = tasksByScope.get(scopeKey) ?? {
+        projectId: task.projectId,
+        sprintId: task.sprintId,
+        taskIds: [],
+      };
+      scope.taskIds.push(task.id);
+      tasksByScope.set(scopeKey, scope);
+    }
+
+    for (const scope of tasksByScope.values()) {
+      const latestRuns = deps.executionRepository.listLatestTaskRuns(scope.taskIds, undefined, {
+        projectId: scope.projectId,
+        sprintId: scope.sprintId,
+      });
+      for (const [taskId, run] of latestRuns) {
+        latestRunsByTaskId.set(taskId, run.state);
+      }
+    }
+
+    return tasks.map((task) => ({
+      ...task,
+      executionStatus: task.status === "completed" || task.isMerged
+        ? null
+        : latestRunsByTaskId.get(task.id) ?? null,
+    }));
+  };
+
   const handle = await setupDashboardServer({
     app: deps.app,
     dashboardDir,
@@ -833,8 +873,14 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     createSprintRollback: (projectId, sprintId, input) => deps.sprintRollbackService.create(projectId, sprintId, input),
     importSprintFromMarkdown: (projectId, input) => deps.sprintMarkdownService.importSprint(projectId, input),
     exportSprintToMarkdown: (projectId, sprintId) => deps.sprintMarkdownService.exportSprint(projectId, sprintId),
-    listTasks: (projectId, sprintId) => deps.projectManagementRepository.listTasks(projectId, sprintId),
-    listTaskOverviews: (projectId) => deps.projectManagementRepository.listTaskOverviews(projectId),
+    listTasks: (projectId, sprintId) => {
+      const tasks = deps.projectManagementRepository.listTasks(projectId, sprintId);
+      return withLatestTaskExecutionStatus(tasks);
+    },
+    listTaskOverviews: (projectId) => {
+      const tasks = deps.projectManagementRepository.listTaskOverviews(projectId);
+      return withLatestTaskExecutionStatus(tasks);
+    },
     getTask: (taskId) => deps.projectManagementRepository.getTask(taskId),
     createTask: (projectId, input) => deps.projectManagementRepository.createTask(projectId, input),
     createImportedTasks: (projectId, sprintId, inputs) => {
