@@ -113,7 +113,7 @@
     "ajv": "^8.20.0",
     "axios": "^1.18.1",
     "colord": "^2.9.3",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.5",
     "escape-html": "^1.0.3",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
